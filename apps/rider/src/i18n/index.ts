@@ -2,6 +2,7 @@
 // fallback, dotted-path lookup and {{var}} interpolation. Device language is
 // auto-detected (expo-localization, guarded); user can override in Profile.
 import { create } from 'zustand';
+import { useBrand } from '../brand';
 import { en, type Dict } from './en';
 import { el } from './el';
 import { pl } from './pl';
@@ -69,9 +70,21 @@ export function translate(lang: Lang, key: string, vars?: Vars): string {
   return interpolate(hit, vars);
 }
 
-/** Hook: returns a `t` bound to the active language (re-renders on change). */
+/**
+ * Hook: returns a `t` bound to the active language (re-renders on change).
+ *
+ * `{{brand}}` and `{{brandEmoji}}` are injected implicitly from the active
+ * brand, so product copy never hardcodes an operator name. An explicit var of
+ * the same name still wins.
+ */
 export function useT() {
   const lang = useI18n((s) => s.lang);
-  const t = (key: string, vars?: Vars) => translate(lang, key, vars);
+  const { brand } = useBrand();
+  const t = (key: string, vars?: Vars) =>
+    translate(lang, key, {
+      brand: brand.name,
+      brandEmoji: brand.assets.emoji ?? '',
+      ...(vars ?? {}),
+    });
   return { t, lang };
 }

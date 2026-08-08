@@ -9,7 +9,7 @@ import { allowedTransitions, STOLEN_CONFIRM_EFFECTS, type Transition, type OpsRo
 import { changeStatus } from '../../../offline/actions';
 import { getCurrentPos } from '../../../lib/geoloc';
 import { useOps } from '../../../lib/store';
-import { colorForStatus, c, space, font } from '../../../lib/theme';
+import { useTheme, makeStyles } from '../../../brand';
 import type { OpsVehicle } from '../../../lib/types';
 
 export default function StatusScreen() {
@@ -22,6 +22,9 @@ export default function StatusScreen() {
 
 function StatusBody({ v }: { v: OpsVehicle }) {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space, colorForStatus } = theme;
   const role = (useOps((s) => s.session?.role) ?? 'ops') as OpsRole;
   const transitions = allowedTransitions(v.status, role);
   const [selected, setSelected] = useState<Transition | null>(null);
@@ -72,9 +75,9 @@ function StatusBody({ v }: { v: OpsVehicle }) {
                 <Text style={st.tLabel}>{t.label}</Text>
               </Row>
               <Row gap={4}>
-                {t.requiresPhoto && <Badge label="photo" color={c.warning} textColor="#1a1200" />}
+                {t.requiresPhoto && <Badge label="photo" color={c.warning} textColor={c.onWarning} />}
                 {t.requiresReason && <Badge label="reason" color={c.surfaceAlt} />}
-                {t.adminReview && <Badge label="admin review" color={c.danger} textColor="#fff" />}
+                {t.adminReview && <Badge label="admin review" color={c.danger} textColor={c.onDanger} />}
               </Row>
             </Row>
             {t.sideEffects && t.sideEffects.map((e, i) => <Muted key={i}>• {e}</Muted>)}
@@ -118,8 +121,8 @@ function StatusBody({ v }: { v: OpsVehicle }) {
   );
 }
 
-const st = StyleSheet.create({
-  tLabel: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-  effect: { color: c.textMuted, fontSize: font.size.sm },
-  missing: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-});
+const useStyles = makeStyles((t) => ({
+  tLabel: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+  effect: { color: t.c.textMuted, fontSize: t.font.size.sm },
+  missing: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+}));

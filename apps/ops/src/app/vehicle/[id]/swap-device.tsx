@@ -5,7 +5,7 @@ import { Screen, H1, H2, Muted, Body, Button, Card, Row, Badge, Field, Empty } f
 import { useMirror } from '../../../lib/useMirror';
 import { getVehicle } from '../../../offline/repo';
 import { swapDevice } from '../../../offline/actions';
-import { c, space, font } from '../../../lib/theme';
+import { useTheme, makeStyles } from '../../../brand';
 import type { OpsVehicle } from '../../../lib/types';
 
 type TestKey = 'online' | 'gps' | 'unlock';
@@ -25,6 +25,9 @@ export default function SwapDevice() {
 
 function Wizard({ v }: { v: OpsVehicle }) {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [newImei, setNewImei] = useState('');
   const [tests, setTests] = useState<Record<TestKey, boolean>>({ online: false, gps: false, unlock: false });
@@ -119,9 +122,9 @@ function Wizard({ v }: { v: OpsVehicle }) {
   );
 }
 
-const st = StyleSheet.create({
-  step: { flex: 1, height: 6, borderRadius: 3, backgroundColor: c.border, alignItems: 'center' },
-  stepOn: { backgroundColor: c.primary },
+const useStyles = makeStyles((t) => ({
+  step: { flex: 1, height: 6, borderRadius: 3, backgroundColor: t.c.border, alignItems: 'center' },
+  stepOn: { backgroundColor: t.c.primary },
   stepText: { display: 'none' },
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-});
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+}));

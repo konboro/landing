@@ -7,12 +7,9 @@ import { useMirror } from '../../lib/useMirror';
 import { getDamageReport, getVehicle } from '../../offline/repo';
 import { updateDamage } from '../../offline/actions';
 import { formatDateTime } from '@penny/ui';
-import { c, space, font } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import type { DamageReport } from '@penny/db-types';
 import type { OpsVehicle } from '../../lib/types';
-
-const STATUS_COLOR: Record<string, string> = { new: c.warning, confirmed: c.primary, fixed: c.success, rejected: c.textFaint };
-const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
 
 export default function DamageDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -24,6 +21,9 @@ export default function DamageDetail() {
 
 function DamageBody({ d }: { d: DamageReport }) {
   const router = useRouter();
+  const { c } = useTheme();
+  const STATUS_COLOR: Record<string, string> = { new: c.warning, confirmed: c.primary, fixed: c.success, rejected: c.textFaint };
+  const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
   const vehicle = useMirror<OpsVehicle | null>(() => getVehicle(d.vehicle_id), null);
   const [resolvePhotos, setResolvePhotos] = useState<string[]>([]);
   const [penalty, setPenalty] = useState('');
@@ -47,8 +47,8 @@ function DamageBody({ d }: { d: DamageReport }) {
       <Row style={{ justifyContent: 'space-between' }}>
         <H1>{vehicle.data?.code ?? 'Vehicle'}</H1>
         <Row gap={6}>
-          <Badge label={d.severity} color={SEV_COLOR[d.severity]} textColor={d.severity === 'low' ? c.text : '#fff'} />
-          <Badge label={d.status} color={STATUS_COLOR[d.status]} textColor={d.status === 'new' ? '#1a1200' : '#fff'} />
+          <Badge label={d.severity} color={SEV_COLOR[d.severity]} textColor={d.severity === 'low' ? c.text : c.onDanger} />
+          <Badge label={d.status} color={STATUS_COLOR[d.status]} textColor={d.status === 'new' ? c.onWarning : c.onPrimary} />
         </Row>
       </Row>
       <Muted>Reported by {d.reporter} · {formatDateTime(d.created_at)}</Muted>
@@ -94,7 +94,7 @@ function DamageBody({ d }: { d: DamageReport }) {
 
       {d.penalty_payment_id ? (
         <Card style={{ borderColor: c.danger }}>
-          <Badge label="penalty sent to admin review" color={c.danger} textColor="#fff" />
+          <Badge label="penalty sent to admin review" color={c.danger} textColor={c.onDanger} />
         </Card>
       ) : null}
     </Screen>

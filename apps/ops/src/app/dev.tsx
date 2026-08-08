@@ -8,14 +8,17 @@ import { resetAndReseed } from '../offline/bootstrap';
 import { net } from '../lib/net';
 import { useOps } from '../lib/store';
 import { relativeTime } from '@penny/ui';
-import { c, space, radius, font } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
+import { BrandSwitcher } from '../components/BrandSwitcher';
 import type { OutboxRow } from '../lib/types';
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: c.warning, syncing: c.primary, done: c.success, error: c.danger,
-};
-
 export default function DevScreen() {
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c } = theme;
+  const STATUS_COLOR: Record<string, string> = {
+    pending: c.warning, syncing: c.primary, done: c.success, error: c.danger,
+  };
   const online = useOps((s) => s.online);
   const override = useOps((s) => s.overrideOnline);
   const setOverride = useOps((s) => s.setOverrideOnline);
@@ -46,6 +49,8 @@ export default function DevScreen() {
 
   return (
     <Screen scroll>
+      <BrandSwitcher />
+
       <Card style={{ borderColor: online ? c.success : c.warning }}>
         <Row style={{ justifyContent: 'space-between' }}>
           <H2>{online ? '🟢 Online' : '🟠 Offline'}</H2>
@@ -83,7 +88,7 @@ export default function DevScreen() {
           <Card key={row.id} style={{ gap: 4 }}>
             <Row style={{ justifyContent: 'space-between' }}>
               <Text style={st.kind}>{row.kind}</Text>
-              <Badge label={row.status} color={STATUS_COLOR[row.status] ?? c.surfaceAlt} textColor={row.status === 'pending' ? '#1a1200' : '#fff'} />
+              <Badge label={row.status} color={STATUS_COLOR[row.status] ?? c.surfaceAlt} textColor={row.status === 'pending' ? c.onWarning : c.onPrimary} />
             </Row>
             <Text style={st.id} numberOfLines={1}>id {row.id}</Text>
             <Muted>{relativeTime(row.created_at)} · attempts {row.attempts}</Muted>
@@ -95,9 +100,9 @@ export default function DevScreen() {
   );
 }
 
-const st = StyleSheet.create({
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-  rowErr: { color: c.danger, fontSize: font.size.xs },
-  kind: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-  id: { color: c.textFaint, fontSize: font.size.xs, fontFamily: font.family.mono },
-});
+const useStyles = makeStyles((t) => ({
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+  rowErr: { color: t.c.danger, fontSize: t.font.size.xs },
+  kind: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+  id: { color: t.c.textFaint, fontSize: t.font.size.xs, fontFamily: t.font.family.mono },
+}));

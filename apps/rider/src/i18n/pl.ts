@@ -62,7 +62,7 @@ export const pl: Dict = {
     manualPlaceholder: 'np. PNY-4821',
     flashlight: 'Latarka',
     permissionTitle: 'Dostęp do aparatu',
-    permissionBody: 'Penny potrzebuje aparatu do skanowania QR.',
+    permissionBody: '{{brand}} potrzebuje aparatu do skanowania QR.',
     grant: 'Zezwól na aparat',
     notFound: 'Nie znaleziono pojazdu {{code}}',
     simulate: 'Symuluj skanowanie',
@@ -264,7 +264,7 @@ export const pl: Dict = {
     converted: 'Przejechali z Twoim kodem',
     earned: 'Zdobyte środki',
     shareRecap: 'Udostępnij podsumowanie',
-    recapLine: 'W {{year}} przejechałem {{rides}} razy, {{distance}} i oszczędziłem {{co2}} kg CO₂ z Penny 🛴',
+    recapLine: 'W {{year}} przejechałem {{rides}} razy, {{distance}} i oszczędziłem {{co2}} kg CO₂ z {{brand}} {{brandEmoji}}',
   },
   kycCard: {
     title: 'Weryfikacja tożsamości',
@@ -342,7 +342,7 @@ export const pl: Dict = {
     parkingSchool: 'Szkoła parkowania',
   },
   onboarding: {
-    welcome: 'Witaj w Penny',
+    welcome: 'Witaj w {{brand}}',
     tagline: 'Odblokuj hulajnogę. Jedź gdziekolwiek.',
     slide1Title: 'Znajdź i odblokuj',
     slide1Body: 'Hulajnogi obok Ciebie, jedno skanowanie.',

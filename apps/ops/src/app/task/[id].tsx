@@ -10,7 +10,7 @@ import { claimTask, startTask, completeTask } from '../../offline/actions';
 import { navigateTo } from '../../lib/nav';
 import { getCurrentPos } from '../../lib/geoloc';
 import { useOps } from '../../lib/store';
-import { c, space, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import type { OpsTask } from '@penny/db-types';
 import type { OpsVehicle } from '../../lib/types';
 
@@ -33,6 +33,9 @@ export default function TaskDetail() {
 
 function TaskBody({ task, staffId, onDone }: { task: OpsTask; staffId?: string; onDone: () => void }) {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
   const vehicle = useMirror<OpsVehicle | null>(() => (task.vehicle_id ? getVehicle(task.vehicle_id) : Promise.resolve(null)), null);
   const [checklist, setChecklist] = useState<ChecklistState[]>(() => buildChecklist(task.kind));
   const [notes, setNotes] = useState(task.notes ?? '');
@@ -90,8 +93,8 @@ function TaskBody({ task, staffId, onDone }: { task: OpsTask; staffId?: string; 
       <Row style={{ justifyContent: 'space-between' }}>
         <H1>{task.kind.replace('_', ' ')}</H1>
         <Row gap={6}>
-          {task.created_by === 'system_rule' && <Badge label="Auto" color={c.primaryDeep} textColor="#fff" />}
-          <Badge label={task.status.replace('_', ' ')} color={isDone ? c.success : c.primary} textColor="#fff" />
+          {task.created_by === 'system_rule' && <Badge label="Auto" color={c.primaryDeep} textColor={c.onPrimary} />}
+          <Badge label={task.status.replace('_', ' ')} color={isDone ? c.success : c.primary} textColor={isDone ? c.onSuccess : c.onPrimary} />
         </Row>
       </Row>
 
@@ -195,8 +198,8 @@ function TaskBody({ task, staffId, onDone }: { task: OpsTask; staffId?: string; 
   );
 }
 
-const st = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   check: { width: 48, minHeight: 48, paddingHorizontal: 0 },
-  itemLabel: { color: c.text, fontSize: font.size.md, fontWeight: '600', flex: 1 },
-  blocker: { color: c.textMuted, fontSize: font.size.sm },
-});
+  itemLabel: { color: t.c.text, fontSize: t.font.size.md, fontWeight: '600', flex: 1 },
+  blocker: { color: t.c.textMuted, fontSize: t.font.size.sm },
+}));

@@ -62,7 +62,7 @@ export const el: Dict = {
     manualPlaceholder: 'π.χ. PNY-4821',
     flashlight: 'Φακός',
     permissionTitle: 'Πρόσβαση κάμερας',
-    permissionBody: 'Η Penny χρειάζεται την κάμερα για σκανάρισμα QR.',
+    permissionBody: 'Η {{brand}} χρειάζεται την κάμερα για σκανάρισμα QR.',
     grant: 'Επιτρέψτε την κάμερα',
     notFound: 'Το όχημα {{code}} δεν βρέθηκε',
     simulate: 'Προσομοίωση σκαναρίσματος',
@@ -264,7 +264,7 @@ export const el: Dict = {
     converted: 'Οδήγησαν με τον κωδικό σας',
     earned: 'Πίστωση που κερδίσατε',
     shareRecap: 'Μοιραστείτε την ανασκόπηση',
-    recapLine: 'Το {{year}} έκανα {{rides}} διαδρομές, {{distance}} και εξοικονόμησα {{co2}} kg CO₂ με την Penny 🛴',
+    recapLine: 'Το {{year}} έκανα {{rides}} διαδρομές, {{distance}} και εξοικονόμησα {{co2}} kg CO₂ με την {{brand}} {{brandEmoji}}',
   },
   kycCard: {
     title: 'Επαλήθευση ταυτότητας',
@@ -342,7 +342,7 @@ export const el: Dict = {
     parkingSchool: 'Σχολή παρκαρίσματος',
   },
   onboarding: {
-    welcome: 'Καλώς ήρθατε στην Penny',
+    welcome: 'Καλώς ήρθατε στην {{brand}}',
     tagline: 'Ξεκλειδώστε ένα σκούτερ. Πηγαίνετε παντού.',
     slide1Title: 'Βρες & ξεκλείδωσε',
     slide1Body: 'Σκούτερ κοντά σας, με ένα σκανάρισμα.',

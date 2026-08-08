@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { formatMoney, formatDistance, formatDuration, relativeTime, formatDateTime } from '@penny/ui';
-import { c as color, space, radius, font } from '../../../lib/theme';
+import { useBrand, useTheme } from '../../../brand';
 import * as repo from '../../../offline/repo';
 import { useOps } from '../../../lib/store';
 import type {
@@ -35,6 +35,7 @@ const KIND_LABEL: Record<Event['kind'], string> = {
 };
 
 function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  const { space, font } = useTheme();
   return (
     <View style={{ flexBasis: '31%', flexGrow: 1, minWidth: 100, marginBottom: space.sm }}>
       <Muted>{label}</Muted>
@@ -44,16 +45,20 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
-function reviewBadge(review: string | null) {
+function ReviewBadge({ review }: { review: string | null }) {
+  const { c } = useTheme();
   if (!review) return null;
-  if (review === 'rejected') return <Badge label="Photo rejected" color={color.danger} textColor="#fff" />;
-  if (review === 'pending') return <Badge label="In review" color={color.warning} textColor="#fff" />;
-  return <Badge label="Photo OK" color={color.success} textColor="#fff" />;
+  if (review === 'rejected') return <Badge label="Photo rejected" color={c.danger} textColor={c.onDanger} />;
+  if (review === 'pending') return <Badge label="In review" color={c.warning} textColor={c.onWarning} />;
+  return <Badge label="Photo OK" color={c.success} textColor={c.onSuccess} />;
 }
 
 export default function VehicleHistoryScreen() {
   const { id = '' } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const theme = useTheme();
+  const { c: color, space, radius } = theme;
+  const { brand } = useBrand();
   const online = useOps((s) => s.online);
   const lastSyncAt = useOps((s) => s.lastSyncAt);
 
@@ -152,7 +157,7 @@ export default function VehicleHistoryScreen() {
         kind: 'maintenance' as const,
         icon: '🔧',
         title: `Service · ${m.kind}`,
-        detail: `${formatMoney(m.cost_cents)}${m.notes ? ` · ${m.notes}` : ''}`,
+        detail: `${formatMoney(m.cost_cents, brand.currency)}${m.notes ? ` · ${m.notes}` : ''}`,
       })),
       ...damage.map((d) => ({
         id: d.id,
@@ -202,7 +207,7 @@ export default function VehicleHistoryScreen() {
             }}
             accessibilityRole="button"
           >
-            <Body style={{ color: tab === k ? '#fff' : color.text, fontWeight: '700' }}>
+            <Body style={{ color: tab === k ? color.onPrimary : color.text, fontWeight: '700' }}>
               {k === 'rides' ? `Rides (${stats.total})` : `Timeline (${events.length})`}
             </Body>
           </Pressable>
@@ -216,7 +221,7 @@ export default function VehicleHistoryScreen() {
             <Row style={{ flexWrap: 'wrap', marginTop: space.sm }}>
               <Tile label="Total rides" value={String(stats.total)} />
               <Tile label="7d / 30d" value={`${stats.d7} / ${stats.d30}`} />
-              <Tile label="Revenue" value={formatMoney(stats.revenue)} />
+              <Tile label="Revenue" value={formatMoney(stats.revenue, brand.currency)} />
               <Tile label="Distance" value={formatDistance(stats.distance)} />
               <Tile
                 label="Avg ride"
@@ -242,10 +247,10 @@ export default function VehicleHistoryScreen() {
                   {formatDistance(r.distance_m)} · {formatDuration(r.duration_s)} · {r.rider_masked}
                 </Muted>
                 <Row style={{ marginTop: space.xs, flexWrap: 'wrap' }}>
-                  {reviewBadge(r.photo_review)}
+                  <ReviewBadge review={r.photo_review} />
                   {r.end_zone_name ? <Pill label={r.end_zone_name} /> : null}
                   {r.status === 'disputed' ? (
-                    <Badge label="Disputed" color={color.warning} textColor="#fff" />
+                    <Badge label="Disputed" color={color.warning} textColor={color.onWarning} />
                   ) : null}
                 </Row>
               </Card>

@@ -10,7 +10,7 @@ import { sendCommand, toggleVisibility, addVehicleNote, decommission } from '../
 import { navigateTo } from '../../../lib/nav';
 import { useOps } from '../../../lib/store';
 import { formatSoc, relativeTime, formatDateTime } from '@penny/ui';
-import { colorForStatus, c, space, font, radius } from '../../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../../brand';
 import { hasAlarm } from '../../../components/FleetMap';
 import type { OpsVehicle, StatusLogEntry, BatterySwap, MaintenanceEntry } from '../../../lib/types';
 
@@ -24,6 +24,10 @@ export default function VehicleSheet() {
 
 function Sheet({ v }: { v: OpsVehicle }) {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, colorForStatus } = theme;
+  const { isEnabled } = useBrand();
   const role = useOps((s) => s.session?.role ?? 'ops');
   const isAdmin = role === 'admin' || role === 'ops_manager';
   const statusLog = useMirror<StatusLogEntry[]>(() => getStatusLog(v.id), []);
@@ -65,7 +69,7 @@ function Sheet({ v }: { v: OpsVehicle }) {
             <H1>{v.code}</H1>
           </Row>
           <Row gap={6}>
-            {hasAlarm(v) && <Badge label="alarm" color={c.danger} textColor="#fff" />}
+            {hasAlarm(v) && <Badge label="alarm" color={c.danger} textColor={c.onDanger} />}
             {!v.visible && <Badge label="hidden" color={c.surfaceAlt} />}
           </Row>
         </Row>
@@ -83,9 +87,9 @@ function Sheet({ v }: { v: OpsVehicle }) {
         </Row>
         {(v.fall || v.power_cut || v.moved_while_locked) && (
           <Row gap={6} style={{ flexWrap: 'wrap' }}>
-            {v.fall && <Badge label="fall" color={c.danger} textColor="#fff" />}
-            {v.power_cut && <Badge label="power cut" color={c.danger} textColor="#fff" />}
-            {v.moved_while_locked && <Badge label="moved while locked" color={c.danger} textColor="#fff" />}
+            {v.fall && <Badge label="fall" color={c.danger} textColor={c.onDanger} />}
+            {v.power_cut && <Badge label="power cut" color={c.danger} textColor={c.onDanger} />}
+            {v.moved_while_locked && <Badge label="moved while locked" color={c.danger} textColor={c.onDanger} />}
           </Row>
         )}
         {v.pos && <Button title="Navigate to vehicle" icon="🧭" variant="secondary" onPress={() => navigateTo(v.pos!, v.code)} />}
@@ -107,7 +111,7 @@ function Sheet({ v }: { v: OpsVehicle }) {
       {/* Commands */}
       <Card>
         <H2>Commands (service mode — no billing)</H2>
-        {pulse && <Badge label={`Queued: ${pulse}`} color={c.primaryDeep} textColor="#fff" />}
+        {pulse && <Badge label={`Queued: ${pulse}`} color={c.primaryDeep} textColor={c.onPrimary} />}
         <Row style={{ flexWrap: 'wrap' }}>
           <Cmd label={v.locked ? 'Service unlock' : 'Service lock'} onPress={() => cmd(v.locked ? 'unlock' : 'lock', v.locked ? 'unlock' : 'lock')} />
           <Cmd label="Locate / beep" onPress={() => cmd('locate', 'locate')} />
@@ -133,8 +137,10 @@ function Sheet({ v }: { v: OpsVehicle }) {
           onPress={() => toggleVisibility(v, !v.visible, v.visible ? 'staged' : 'unstaged')}
         />
         <Button title="Report damage" icon="⚠" variant="secondary" onPress={() => router.push({ pathname: '/damage/new', params: { vehicleId: v.id } })} />
-        <Button title="Swap IoT device" icon="🔁" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/swap-device`)} />
-        {v.status === 'transport' && <Button title="Deploy here (available)" icon="📍" variant="success" onPress={() => router.push('/deploy')} />}
+        {isEnabled('opsDeviceSwap') ? (
+          <Button title="Swap IoT device" icon="🔁" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/swap-device`)} />
+        ) : null}
+        {v.status === 'transport' && isEnabled('opsDeployMode') && <Button title="Deploy here (available)" icon="📍" variant="success" onPress={() => router.push('/deploy')} />}
         {isAdmin && <Button title="Decommission" variant="danger" onPress={confirmDecommission} />}
       </Card>
 
@@ -193,6 +199,7 @@ function Sheet({ v }: { v: OpsVehicle }) {
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
+  const st = useStyles(useTheme());
   return (
     <View style={st.metric}>
       <Text style={st.metricValue}>{value}</Text>
@@ -201,15 +208,16 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 function Cmd({ label, onPress, danger }: { label: string; onPress: () => void; danger?: boolean }) {
+  const st = useStyles(useTheme());
   return (
     <Button title={label} variant={danger ? 'danger' : 'secondary'} onPress={onPress} style={st.cmd} />
   );
 }
 
-const st = StyleSheet.create({
-  metric: { width: '25%', paddingVertical: space.xs },
-  metricValue: { color: c.text, fontSize: font.size.lg, fontWeight: '800' },
-  metricLabel: { color: c.textMuted, fontSize: font.size.xs },
+const useStyles = makeStyles((t) => ({
+  metric: { width: '25%', paddingVertical: t.space.xs },
+  metricValue: { color: t.c.text, fontSize: t.font.size.lg, fontWeight: '800' },
+  metricLabel: { color: t.c.textMuted, fontSize: t.font.size.xs },
   cmd: { flexGrow: 1, minWidth: '46%' },
-  histRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center', paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.border },
-});
+  histRow: { flexDirection: 'row', gap: t.space.sm, alignItems: 'center', paddingVertical: t.space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.c.border },
+}));

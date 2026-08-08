@@ -60,7 +60,7 @@ export const en = {
     manualPlaceholder: 'e.g. PNY-4821',
     flashlight: 'Flashlight',
     permissionTitle: 'Camera access',
-    permissionBody: 'Penny needs the camera to scan the scooter QR code.',
+    permissionBody: '{{brand}} needs the camera to scan the scooter QR code.',
     grant: 'Allow camera',
     notFound: 'Vehicle {{code}} not found',
     simulate: 'Simulate scan (mock)',
@@ -262,7 +262,7 @@ export const en = {
     converted: 'Rode with your code',
     earned: 'Credit earned',
     shareRecap: 'Share my recap',
-    recapLine: 'In {{year}} I rode {{rides}} times, {{distance}} and saved {{co2}} kg CO₂ with Penny 🛴',
+    recapLine: 'In {{year}} I rode {{rides}} times, {{distance}} and saved {{co2}} kg CO₂ with {{brand}} {{brandEmoji}}',
   },
   kycCard: {
     title: 'Identity verification',
@@ -340,7 +340,7 @@ export const en = {
     parkingSchool: 'Parking school',
   },
   onboarding: {
-    welcome: 'Welcome to Penny',
+    welcome: 'Welcome to {{brand}}',
     tagline: 'Unlock a scooter. Go anywhere.',
     slide1Title: 'Find & unlock',
     slide1Body: 'Scooters near you, one scan away.',
