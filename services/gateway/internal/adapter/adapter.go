@@ -63,6 +63,22 @@ type NormalizedState struct {
 	HasAccelerometer  bool
 }
 
+// DoutExpectation describes the DOUT state a command should produce, letting a
+// subsequent AVL telemetry record serve as an ACK (docs/03: "ACK sources: Codec
+// 12 response OR next AVL record showing expected DOUT state").
+type DoutExpectation struct {
+	Applicable bool // false => only a Codec 12 response can ACK this command
+	Which      int  // which DOUT (1 or 2) the command drives
+	Dout1High  bool // expected DOUT1 level (when Which==1)
+	Dout2High  bool // expected DOUT2 level (when Which==2)
+}
+
+// AckExpecter is an optional capability: adapters that drive DOUTs implement it
+// so the command layer can accept an AVL record as an ACK.
+type AckExpecter interface {
+	ExpectedDout(kind CommandKind, args Args) DoutExpectation
+}
+
 // DeviceAdapter is the single seam between the device-agnostic core and any
 // Teltonika (or future) hardware. Its shape is fixed by docs/03.
 type DeviceAdapter interface {

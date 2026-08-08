@@ -162,6 +162,29 @@ func (d *FMB930) BuildCommand(kind CommandKind, args Args) ([]byte, string, erro
 	return wire, ascii, nil
 }
 
+// ExpectedDout reports the DOUT state a command should produce, so the command
+// layer can accept the next AVL record as an ACK. All semantics come from the
+// profile — DOUT positions and polarity are never hardcoded elsewhere.
+func (d *FMB930) ExpectedDout(kind CommandKind, _ Args) DoutExpectation {
+	unlockHigh := true
+	if d.Profile.LockedWhenDoutHigh {
+		unlockHigh = false
+	}
+	switch kind {
+	case CmdUnlock:
+		return DoutExpectation{Applicable: true, Which: d.Profile.LockDoutPos, Dout1High: unlockHigh}
+	case CmdLock:
+		return DoutExpectation{Applicable: true, Which: d.Profile.LockDoutPos, Dout1High: !unlockHigh}
+	case CmdRing, CmdAlarmOn:
+		return DoutExpectation{Applicable: true, Which: d.Profile.SirenDoutPos, Dout2High: true}
+	case CmdAlarmOff:
+		return DoutExpectation{Applicable: true, Which: d.Profile.SirenDoutPos, Dout2High: false}
+	default:
+		// getinfo/cpureset/setparam: only a Codec 12 response can ACK.
+		return DoutExpectation{}
+	}
+}
+
 // InterpretIO normalizes a raw IO map. Movement/fall/theft rules read from the
 // returned NormalizedState in the ingest layer.
 func (d *FMB930) InterpretIO(io map[uint16]int64) NormalizedState {
