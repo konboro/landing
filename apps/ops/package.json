@@ -1,0 +1,44 @@
+{
+  "name": "@penny/ops",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penny.rent — Ops (field service) app. OFFLINE-FIRST. Expo + React Native.",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "start:go": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf .expo dist node_modules/.cache"
+  },
+  "dependencies": {
+    "@penny/api-client": "workspace:*",
+    "@penny/db-types": "workspace:*",
+    "@penny/geo": "workspace:*",
+    "@penny/ui": "workspace:*",
+    "@react-native-community/netinfo": "11.4.1",
+    "@rnmapbox/maps": "^10.1.33",
+    "expo": "~54.0.0",
+    "expo-camera": "~17.0.7",
+    "expo-constants": "~18.0.8",
+    "expo-crypto": "~15.0.7",
+    "expo-linking": "~8.0.8",
+    "expo-location": "~19.0.7",
+    "expo-router": "~6.0.7",
+    "expo-sqlite": "~16.0.8",
+    "expo-status-bar": "~3.0.8",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0",
+    "typescript": "^5.7.3"
+  }
+}

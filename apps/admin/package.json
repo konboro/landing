@@ -1,0 +1,37 @@
+{
+  "name": "@penny/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Penny Platform — Admin panel (Vite + React + Mapbox GL). Full Atom parity + upgrades.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist node_modules/.vite"
+  },
+  "dependencies": {
+    "@penny/api-client": "workspace:*",
+    "@penny/db-types": "workspace:*",
+    "@penny/geo": "workspace:*",
+    "@penny/ui": "workspace:*",
+    "@mapbox/mapbox-gl-draw": "^1.4.3",
+    "@tanstack/react-query": "^5.62.0",
+    "mapbox-gl": "^3.9.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/mapbox-gl": "^3.4.0",
+    "@types/mapbox__mapbox-gl-draw": "^1.4.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.11"
+  }
+}

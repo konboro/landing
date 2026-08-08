@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@penny/db-types": ["../../packages/db-types/src/index.ts"],
+      "@penny/api-client": ["../../packages/api-client/src/index.ts"],
+      "@penny/geo": ["../../packages/geo/src/index.ts"],
+      "@penny/ui": ["../../packages/ui/src/index.ts"],
+      "@penny/ui/tokens": ["../../packages/ui/src/tokens.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "app.config.ts",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ],
+  "exclude": ["node_modules"]
+}
