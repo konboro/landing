@@ -32,7 +32,9 @@ do $$
 declare r record;
 begin
   for r in
-    select tablename from pg_tables where schemaname = 'public'
+    select tablename from pg_tables
+    where schemaname = 'public'
+      and tablename <> 'spatial_ref_sys'   -- PostGIS system table: leave readable
   loop
     execute format('alter table public.%I enable row level security;', r.tablename);
   end loop;

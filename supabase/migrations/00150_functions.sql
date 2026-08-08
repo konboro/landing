@@ -32,11 +32,11 @@ begin
   insert into ledger_entries (txn_id, account_id, delta_cents, currency, memo)
   select
     txn,
-    (leg->>'account_id')::uuid,
-    (leg->>'delta_cents')::bigint,
-    coalesce(leg->>'currency', 'EUR'),
-    leg->>'memo'
-  from jsonb_array_elements(entries) as leg;
+    (elem->>'account_id')::uuid,
+    (elem->>'delta_cents')::bigint,
+    coalesce(elem->>'currency', 'EUR'),
+    elem->>'memo'
+  from jsonb_array_elements(entries) as elem;
 
   return txn;
 end $$;
