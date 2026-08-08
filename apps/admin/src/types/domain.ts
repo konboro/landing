@@ -13,7 +13,16 @@ import type {
   User,
 } from '@penny/db-types';
 
-export type { UUID, ISOTimestamp, Debt, AuditLogEntry, Payment } from '@penny/db-types';
+export type {
+  UUID,
+  ISOTimestamp,
+  Debt,
+  AuditLogEntry,
+  Payment,
+  DamageReport,
+  OpsTask,
+  ChecklistItem,
+} from '@penny/db-types';
 
 /* ---------- Battery curves ---------- */
 export interface BatteryCurve {

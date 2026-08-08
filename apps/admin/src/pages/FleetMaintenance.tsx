@@ -180,9 +180,11 @@ function AddDeviceWizard({ open, onClose, onDone }: { open: boolean; onClose: ()
 
 function IotLogTab({ db }: { db: DB }) {
   const vehCode = (id: string) => db.vehicles.find((v) => v.id === id)?.code ?? id;
-  const merged = db.commands.slice(0, 30).map((c) => ({ kind: 'command' as const, at: c.sent_at ?? c.created_at, text: `${titleCase(c.kind)} → ${c.status}`, veh: vehCode(c.vehicle_id) }))
-    .concat(db.alerts.slice(0, 20).map((a) => ({ kind: 'telemetry' as const, at: a.created_at, text: `Alert: ${titleCase(a.kind)}`, veh: vehCode(a.vehicle_id) })))
-    .sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
+  type LogRow = { kind: 'command' | 'telemetry'; at: string; text: string; veh: string };
+  const merged: LogRow[] = [
+    ...db.commands.slice(0, 30).map((c): LogRow => ({ kind: 'command', at: c.sent_at ?? c.created_at, text: `${titleCase(c.kind)} → ${c.status}`, veh: vehCode(c.vehicle_id) })),
+    ...db.alerts.slice(0, 20).map((a): LogRow => ({ kind: 'telemetry', at: a.created_at, text: `Alert: ${titleCase(a.kind)}`, veh: vehCode(a.vehicle_id) })),
+  ].sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
   return (
     <div className="grid" style={{ gridTemplateColumns: '1fr 1.3fr' }}>
       <Card>

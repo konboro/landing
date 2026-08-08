@@ -7,15 +7,17 @@ let instance: OpsApi | null = null;
 
 export function getOpsApi(): OpsApi {
   if (instance) return instance;
+  let created: OpsApi;
   if (env.dataSource === 'supabase') {
     // Lazy require keeps supabase-js out of the mock bundle path.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { SupabaseOpsApi } = require('./SupabaseOpsApi');
-    instance = new SupabaseOpsApi();
+    created = new SupabaseOpsApi();
   } else {
-    instance = new MockOpsApi();
+    created = new MockOpsApi();
   }
-  return instance;
+  instance = created;
+  return created;
 }
 
 export type { OpsApi, PullDelta } from './OpsApi';

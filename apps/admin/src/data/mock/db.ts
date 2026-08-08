@@ -169,7 +169,7 @@ function build(): MockDb {
       code: `ATH-${String(1000 + i)}`,
       model_id: model.id,
       status,
-      visible: status !== 'decommissioned',
+      visible: (status as string) !== 'decommissioned',
       plate: null,
       vin: `VIN${rng.int(100000, 999999)}`,
       city_id: city.id,

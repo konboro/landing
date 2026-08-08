@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json --emitDeclarationOnly false || true",
+    "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "gen": "supabase gen types typescript --local > src/database.types.ts",
     "clean": "rm -rf dist"

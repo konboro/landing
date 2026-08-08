@@ -283,4 +283,9 @@ export const en = {
   },
 } as const;
 
-export type Dict = typeof en;
+// Widen every string leaf to `string` so el/pl can hold real translations
+// while still being required to mirror en's exact key structure.
+type DeepString<T> = {
+  [K in keyof T]: T[K] extends string ? string : DeepString<T[K]>;
+};
+export type Dict = DeepString<typeof en>;

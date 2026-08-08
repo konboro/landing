@@ -25,26 +25,24 @@ export class PennyEdgeError extends Error {
 async function invoke<T>(
   client: SupabaseClient,
   fn: string,
-  body: Record<string, unknown>,
+  body: object,
 ): Promise<T> {
   const { data, error } = await client.functions.invoke(fn, { body });
   if (error) {
-    // supabase-js wraps non-2xx; try to surface our structured error shape.
-    let payload: any = undefined;
-    // @ts-expect-error context is present on FunctionsHttpError
-    if (typeof error.context?.json === 'function') {
+    // supabase-js wraps non-2xx as FunctionsHttpError; `context` is the Response.
+    let payload: { code?: string; message?: string } | undefined;
+    const ctx = (error as { context?: { status?: number; json?: () => Promise<{ code?: string; message?: string }> } }).context;
+    if (ctx && typeof ctx.json === 'function') {
       try {
-        // @ts-expect-error runtime
-        payload = await error.context.json();
+        payload = await ctx.json();
       } catch {
-        /* ignore */
+        /* body wasn't JSON */
       }
     }
     throw new PennyEdgeError({
       code: payload?.code ?? 'edge_error',
       message: payload?.message ?? error.message,
-      // @ts-expect-error runtime
-      status: error.context?.status ?? 500,
+      status: ctx?.status ?? 500,
     });
   }
   return data as T;
