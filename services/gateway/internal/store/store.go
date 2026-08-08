@@ -207,3 +207,18 @@ func (f *FakeStore) Status(id string) string {
 	defer f.mu.Unlock()
 	return f.CmdStatus[id]
 }
+
+// TelemetryLen returns the number of stored telemetry rows (thread-safe helper).
+func (f *FakeStore) TelemetryLen() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.Telemetry)
+}
+
+// HasState reports whether a vehicle_state row exists (thread-safe helper).
+func (f *FakeStore) HasState(vehicleID string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	_, ok := f.States[vehicleID]
+	return ok
+}

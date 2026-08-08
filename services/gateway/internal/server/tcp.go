@@ -37,14 +37,19 @@ func New(cfg config.Config, st store.Store, reg *session.Registry, adp adapter.D
 	return &Server{cfg: cfg, store: st, reg: reg, adapter: adp, ingest: ing, metrics: m}
 }
 
-// ListenAndServe runs the TCP accept loop until ctx is cancelled.
+// ListenAndServe binds addr and serves until ctx is cancelled.
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	var lc net.ListenConfig
 	ln, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return err
 	}
-	log.Printf("[server] listening on %s", addr)
+	return s.Serve(ctx, ln)
+}
+
+// Serve runs the TCP accept loop on ln until ctx is cancelled.
+func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
+	log.Printf("[server] listening on %s", ln.Addr())
 	go func() {
 		<-ctx.Done()
 		_ = ln.Close()
