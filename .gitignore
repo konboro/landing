@@ -49,3 +49,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Provisioning output (contains service_role key + DB password)
+.env.provisioned

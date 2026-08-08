@@ -17,6 +17,8 @@
     "admin:dev": "pnpm --filter @penny/admin dev",
     "rider:start": "pnpm --filter @penny/rider start",
     "ops:start": "pnpm --filter @penny/ops start",
+    "supabase:provision": "node scripts/provision-supabase.mjs",
+    "db:local": "./scripts/db-local.sh",
     "gateway:run": "cd services/gateway && go run ./cmd/gateway",
     "gateway:test": "cd services/gateway && go test ./...",
     "gateway:sim": "cd services/gateway && go run ./cmd/simdevice"
