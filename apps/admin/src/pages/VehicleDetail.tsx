@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
 import { useToast } from '@/components/ui/Toast';
@@ -13,9 +13,24 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/feedback';
 import { Qr } from '@/components/ui/Qr';
-import { formatSoc, formatDateTime, relativeTime, titleCase, formatDistance, formatDuration } from '@/lib/format';
+import { TimelineFeed } from '@/components/ui/Timeline';
+import { VehicleRideHistoryTable } from '@/components/rides/RideHistoryTable';
+import { useTableState } from '@/hooks/useTableState';
+import { formatSoc, formatDateTime, relativeTime, titleCase, formatDistance, formatDuration, formatMoney } from '@/lib/format';
 import { colors, vehicleStatusColor } from '@penny/ui';
 import type { Command } from '@penny/db-types';
+
+function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <Card>
+      <div className="card-pad" style={{ padding: 'var(--space-md) var(--space-lg)' }}>
+        <div className="muted" style={{ fontSize: 12 }}>{label}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2 }}>{value}</div>
+        {sub ? <div className="muted" style={{ fontSize: 12 }}>{sub}</div> : null}
+      </div>
+    </Card>
+  );
+}
 
 const CMD_BUTTONS: Array<{ kind: string; label: string; danger?: boolean }> = [
   { kind: 'unlock', label: 'Unlock' },
@@ -33,8 +48,28 @@ export function VehicleDetailPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const { can } = useAuth();
+  const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ['vehicle', id], queryFn: () => ds.getVehicle(id) });
   const [tab, setTab] = useState('overview');
+
+  // Exhaustive per-vehicle history (docs/08 Vehicles → detail).
+  const vehicleRidesState = useTableState({ pageSize: 25, sort: [{ field: 'started_at', dir: 'desc' }] });
+  const vehicleHistoryQ = useQuery({
+    queryKey: ['vehicle-history', id],
+    queryFn: () => ds.getVehicleHistory(id, { page: 1, pageSize: 1 }),
+    enabled: tab === 'rides' || tab === 'timeline',
+  });
+  const vehicleRidesQ = useQuery({
+    queryKey: ['vehicle-rides', id, vehicleRidesState.params],
+    queryFn: () => ds.getVehicleRides(id, vehicleRidesState.params),
+    enabled: tab === 'rides',
+  });
+  const vehicleTimelineQ = useQuery({
+    queryKey: ['vehicle-timeline', id],
+    queryFn: () => ds.getVehicleTimeline(id, { page: 1, pageSize: 500 }),
+    enabled: tab === 'timeline',
+  });
+  const vstats = vehicleHistoryQ.data?.stats;
   const [rawOpen, setRawOpen] = useState(false);
   const [swapOpen, setSwapOpen] = useState(false);
   const [confirmCmd, setConfirmCmd] = useState<string | null>(null);
@@ -84,7 +119,8 @@ export function VehicleDetailPage() {
           { key: 'telemetry', label: 'Telemetry' },
           { key: 'console', label: 'Command console' },
           { key: 'iot', label: 'IoT log' },
-          { key: 'rides', label: `Rides (${data.rides.length})` },
+          { key: 'rides', label: `Rides (${vstats?.total_rides ?? data.rides.length})` },
+          { key: 'timeline', label: 'Timeline' },
           { key: 'damage', label: `Damage (${data.damage.length})` },
         ]}
       />
@@ -165,22 +201,48 @@ export function VehicleDetailPage() {
       ) : null}
 
       {tab === 'rides' ? (
+        <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--space-md)' }}>
+            <StatTile label="Total rides" value={String(vstats?.total_rides ?? 0)} />
+            <StatTile label="Rides 7d / 30d" value={`${vstats?.rides_7d ?? 0} / ${vstats?.rides_30d ?? 0}`} />
+            <StatTile label="Revenue" value={formatMoney(vstats?.revenue_cents ?? 0)} />
+            <StatTile label="Distance" value={formatDistance(vstats?.total_distance_m ?? 0)} />
+            <StatTile label="Avg trip" value={formatDistance(vstats?.avg_distance_m ?? 0)} sub={formatDuration(vstats?.avg_duration_s ?? 0)} />
+            <StatTile label="Utilization" value={`${(vstats?.utilization_rides_per_day ?? 0).toFixed(1)}/day`} />
+            <StatTile label="Unique riders" value={String(vstats?.unique_riders ?? 0)} />
+            <StatTile label="Last ride" value={vstats?.last_ride_at ? relativeTime(vstats.last_ride_at) : '—'} />
+          </div>
+          <Card>
+            <CardHeader
+              title="Ride history"
+              sub="Every trip on this vehicle · rider phone masked (PII minimization)"
+            />
+            <VehicleRideHistoryTable
+              data={vehicleRidesQ.data}
+              state={vehicleRidesState}
+              loading={vehicleRidesQ.isLoading}
+              csvName={`vehicle-${vehicle.code}-rides`}
+              emptyTitle="No rides on this vehicle yet"
+              onRowClick={(r) => navigate(`/rides/${r.id}`)}
+            />
+          </Card>
+        </div>
+      ) : null}
+
+      {tab === 'timeline' ? (
         <Card>
-          <CardHeader title="Rides history" />
-          <div className="table-wrap">
-            {data.rides.length === 0 ? <EmptyState title="No rides" /> : (
-              <table className="data">
-                <thead><tr><th>Trip</th><th>Rider</th><th>Status</th><th>Distance</th><th>Duration</th><th>Started</th></tr></thead>
-                <tbody>
-                  {data.rides.map((r) => (
-                    <tr key={r.id} className="clickable" onClick={() => window.location.assign(`/rides/${r.id}`)}>
-                      <td className="mono">{r.id}</td><td>{r.user_name}</td><td><TripStatusBadge status={r.status} /></td>
-                      <td>{formatDistance(r.distance_m)}</td><td>{formatDuration(r.duration_s)}</td><td>{formatDateTime(r.started_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <CardHeader
+            title="Full vehicle timeline"
+            sub="Rides, commands, status changes, alerts, damage, battery swaps and maintenance"
+          />
+          <div className="card-pad">
+            {/* TimelineFeed brings its own per-kind filter chips with counts. */}
+            <TimelineFeed
+              events={vehicleTimelineQ.data?.rows ?? []}
+              loading={vehicleTimelineQ.isLoading}
+              emptyTitle="Nothing recorded for this vehicle yet"
+              maxHeight={620}
+            />
           </div>
         </Card>
       ) : null}
