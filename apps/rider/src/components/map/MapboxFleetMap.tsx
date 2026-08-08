@@ -73,6 +73,27 @@ export function MapboxFleetMap(props: FleetMapProps) {
       />
       {props.userPos ? <Mapbox.UserLocation visible /> : null}
 
+      {props.route && props.route.length > 1 ? (
+        <Mapbox.ShapeSource
+          id="trip-route"
+          shape={{
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: props.route },
+          } as any}
+        >
+          <Mapbox.LineLayer
+            id="trip-route-line"
+            style={{
+              lineColor: theme.color.primary,
+              lineWidth: 4,
+              lineCap: 'round',
+              lineJoin: 'round',
+            } as any}
+          />
+        </Mapbox.ShapeSource>
+      ) : null}
+
       <Mapbox.ShapeSource id="zones" shape={zoneFeatures as any}>
         <Mapbox.FillLayer id="zones-fill" style={{ fillColor: ['get', 'color'], fillOpacity: 0.6 } as any} />
         <Mapbox.LineLayer id="zones-line" style={{ lineColor: ['get', 'color'], lineWidth: 1.5 } as any} />

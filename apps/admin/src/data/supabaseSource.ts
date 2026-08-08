@@ -7,6 +7,7 @@ import type {
   DataSource,
   RideDetail,
   VehicleDetail,
+  VehicleHistory,
   CustomerDetail,
   AdminChargeInput,
   AuditInput,
@@ -15,7 +16,19 @@ import type {
 import type { Page, QueryParams } from './query';
 import type { MockDb } from './mock/db';
 import type { Command, VehicleAlert, Zone } from '@penny/db-types';
-import type { KpiSnapshot, RideRow, VehicleRow, CustomerRow, VerificationItem, AuditLogEntry } from '@/types/domain';
+import type {
+  KpiSnapshot,
+  RideRow,
+  VehicleRow,
+  CustomerRow,
+  VerificationItem,
+  AuditLogEntry,
+  UserProfileFull,
+  UserRideHistoryRow,
+  VehicleRideHistoryRow,
+  SumsubProfileBundle,
+  TimelineEvent,
+} from '@/types/domain';
 
 function notImpl(method: string): never {
   throw new Error(
@@ -61,6 +74,70 @@ export class SupabaseDataSource implements DataSource {
     return (data ?? []) as Zone[];
   }
   async getPanelData(): Promise<MockDb> { return notImpl('getPanelData'); }
+
+  /* ---- Rich profile / history / KYC (dedicated edge functions) ----
+     These three edge fns are service_role-side: they join the admin-only
+     views, mask PII per docs/10 and proxy Sumsub with the app token so no
+     Sumsub secret ever reaches the browser. */
+
+  private async invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> {
+    const { data, error } = await this.client.supabase.functions.invoke(fn, { body });
+    if (error) throw error;
+    if (data == null) throw new Error(`${fn} returned an empty payload`);
+    return data as T;
+  }
+
+  /** Pagination is passed through verbatim; the edge fn returns a Page<T>. */
+  private static pageBody(params: QueryParams): Record<string, unknown> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = params.pageSize ?? 25;
+    return {
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sort: params.sort ?? [],
+      search: params.search ?? '',
+      filters: params.filters ?? {},
+    };
+  }
+
+  async getUserProfile(userId: string): Promise<UserProfileFull | null> {
+    const res = await this.invoke<{ profile: UserProfileFull | null }>('admin-user-profile', { user_id: userId });
+    return res.profile ?? null;
+  }
+
+  async getUserRides(userId: string, params: QueryParams): Promise<Page<UserRideHistoryRow>> {
+    return this.invoke<Page<UserRideHistoryRow>>('admin-user-profile', {
+      user_id: userId, section: 'rides', ...SupabaseDataSource.pageBody(params),
+    });
+  }
+
+  async getUserTimeline(userId: string, params: QueryParams): Promise<Page<TimelineEvent>> {
+    return this.invoke<Page<TimelineEvent>>('admin-user-profile', {
+      user_id: userId, section: 'timeline', ...SupabaseDataSource.pageBody(params),
+    });
+  }
+
+  async getSumsubProfile(userId: string, opts?: { refresh?: boolean }): Promise<SumsubProfileBundle> {
+    return this.invoke<SumsubProfileBundle>('sumsub-applicant', { user_id: userId, refresh: Boolean(opts?.refresh) });
+  }
+
+  async getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory> {
+    return this.invoke<VehicleHistory>('admin-vehicle-history', {
+      vehicle_id: vehicleId, ...SupabaseDataSource.pageBody(params),
+    });
+  }
+
+  async getVehicleRides(vehicleId: string, params: QueryParams): Promise<Page<VehicleRideHistoryRow>> {
+    return this.invoke<Page<VehicleRideHistoryRow>>('admin-vehicle-history', {
+      vehicle_id: vehicleId, section: 'rides', ...SupabaseDataSource.pageBody(params),
+    });
+  }
+
+  async getVehicleTimeline(vehicleId: string, params: QueryParams): Promise<Page<TimelineEvent>> {
+    return this.invoke<Page<TimelineEvent>>('admin-vehicle-history', {
+      vehicle_id: vehicleId, section: 'timeline', ...SupabaseDataSource.pageBody(params),
+    });
+  }
   async search(_q: string): Promise<SearchResult[]> { return notImpl('search'); }
   async listAudit(_params: QueryParams): Promise<Page<AuditLogEntry>> { return notImpl('listAudit'); }
 

@@ -716,6 +716,9 @@ export interface UserProfileFull {
   referrals_qualified: number;
   referral_code: string;
   wallet_balance_cents: number;
+  /** Pre-migration Atom history — counted in CustomerRow.rides, not in stats. */
+  legacy_rides: number;
+  legacy_spend_cents: number;
   emergency_contact_name: string | null;
   consents: UserConsents;
   notification_prefs: UserNotificationPrefs;

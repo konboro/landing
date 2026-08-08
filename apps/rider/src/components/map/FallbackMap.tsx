@@ -3,7 +3,7 @@
 // canvas with tappable vehicle pins and a zone legend — fully interactive.
 import React, { useState } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
-import Svg, { Polygon as SvgPolygon, Circle, Line } from 'react-native-svg';
+import Svg, { Polygon as SvgPolygon, Circle, Line, Polyline } from 'react-native-svg';
 import { colors as zoneColors } from '@penny/ui/tokens';
 import { theme } from '../../lib/theme';
 import { T, Row, Badge } from '../ui';
@@ -31,13 +31,18 @@ export function FallbackMap(props: FleetMapProps) {
     setSize({ w: width, h: height });
   };
 
-  // Bounds from everything visible so the whole city fits.
-  const pts: LngLat[] = [
-    props.center,
-    ...vehicles.map((v) => [v.lng, v.lat] as LngLat),
-    ...zones.flatMap((z) => z.geom.coordinates.flat() as LngLat[]),
-  ];
-  const b = boundsOf(pts, 0.08);
+  const route = props.route ?? [];
+  // Bounds from everything visible so the whole city (or the whole route) fits.
+  // A route on its own gets tighter padding so the trip fills the card.
+  const pts: LngLat[] =
+    route.length > 1
+      ? route
+      : [
+          props.center,
+          ...vehicles.map((v) => [v.lng, v.lat] as LngLat),
+          ...zones.flatMap((z) => z.geom.coordinates.flat() as LngLat[]),
+        ];
+  const b = boundsOf(pts, route.length > 1 ? 0.15 : 0.08);
   const project = makeProjector(b, size.w, size.h);
 
   const ready = size.w > 0 && size.h > 0;
@@ -96,6 +101,30 @@ export function FallbackMap(props: FleetMapProps) {
         </Svg>
       ) : null}
 
+      {/* trip route */}
+      {ready && route.length > 1 ? (
+        <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Polyline
+            points={route.map((c) => { const p = project(c); return `${p.x},${p.y}`; }).join(' ')}
+            fill="none"
+            stroke={theme.color.primary}
+            strokeWidth={4}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {(() => {
+            const a = project(route[0]!);
+            const z = project(route[route.length - 1]!);
+            return (
+              <>
+                <Circle cx={a.x} cy={a.y} r={6} fill={theme.color.success} stroke="#fff" strokeWidth={2} />
+                <Circle cx={z.x} cy={z.y} r={6} fill={theme.color.danger} stroke="#fff" strokeWidth={2} />
+              </>
+            );
+          })()}
+        </Svg>
+      ) : null}
+
       {/* POIs */}
       {ready && showPois
         ? pois.map((p) => {
@@ -145,9 +174,11 @@ export function FallbackMap(props: FleetMapProps) {
         : null}
 
       {/* header hint */}
-      <View style={styles.hint} pointerEvents="none">
-        <Badge label="Mock map" tone="primary" icon="map" />
-      </View>
+      {props.static ? null : (
+        <View style={styles.hint} pointerEvents="none">
+          <Badge label="Mock map" tone="primary" icon="map" />
+        </View>
+      )}
     </Pressable>
   );
 }

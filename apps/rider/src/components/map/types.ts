@@ -14,6 +14,13 @@ export interface FleetMapProps {
   onMapPress?: () => void;
   /** programmatic camera target (e.g. recenter / deep-link focus). */
   focus?: LngLat | null;
+  /**
+   * A trip polyline to draw (ride history). Both the native and the fallback
+   * renderer support it, so the ride-detail map degrades like every other map.
+   */
+  route?: LngLat[];
+  /** Hide the "mock map" hint + interactions for read-only route views. */
+  static?: boolean;
 }
 
 /** Whether the native Mapbox token is configured. */

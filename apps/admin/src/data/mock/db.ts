@@ -1,7 +1,10 @@
 // Central mock "database" for the Admin panel. Deterministically generated
 // so the panel behaves like a real operating Athens fleet without Supabase.
 import { Rng } from '@/lib/rng';
-import { ATHENS_CENTER, jitterPoint, boxPolygon } from './geoutil';
+import { ATHENS_CENTER, jitterPoint, boxPolygon, buildRoute } from './geoutil';
+import { ATHENS_AREAS, RATING_TAGS, type RideExtra } from './history';
+import { buildSumsubBundle } from './sumsub';
+import { buildUserProfile, buildUserTimeline, buildVehicleTimeline, type ProfileCtx } from './profiles';
 import type { LngLat } from '@penny/db-types';
 import type {
   City,
@@ -53,6 +56,9 @@ import type {
   Payment,
   Debt,
   AuditLogEntry,
+  SumsubProfileBundle,
+  TimelineEvent,
+  UserProfileFull,
 } from '@/types/domain';
 
 export interface MockDb {
@@ -63,6 +69,15 @@ export interface MockDb {
   devices: Device[];
   customers: CustomerRow[];
   rides: RideRow[];
+  /** Per-ride detail behind the exhaustive user/vehicle ride tables. */
+  rideExtras: Record<string, RideExtra>;
+  /** Rich customer profiles ("dokładne dane"), keyed by user id. */
+  userProfiles: Record<string, UserProfileFull>;
+  /** Sumsub applicant bundles, keyed by user id. */
+  sumsub: Record<string, SumsubProfileBundle>;
+  /** Merged activity timelines, keyed by user id / vehicle id. */
+  userTimelines: Record<string, TimelineEvent[]>;
+  vehicleTimelines: Record<string, TimelineEvent[]>;
   tripEvents: Record<string, TripEvent[]>;
   payments: Payment[];
   debts: Debt[];
@@ -221,7 +236,7 @@ function build(): MockDb {
   for (let i = 0; i < 60; i++) {
     const useGreek = rng.bool(0.8);
     const name = useGreek ? `${rng.pick(GREEK_FIRST)} ${rng.pick(GREEK_LAST)}` : rng.pick(INTL);
-    const kyc = rng.pick(['approved', 'approved', 'approved', 'pending', 'rejected', 'none'] as const);
+    const kyc = rng.pick(['approved', 'approved', 'approved', 'approved', 'pending', 'pending', 'rejected', 'rejected', 'expired', 'none'] as const);
     const status = rng.bool(0.9) ? 'active' : rng.pick(['blocked', 'shadow_banned'] as const);
     const rides = rng.int(0, 140);
     const debt = rng.bool(0.18) ? rng.int(200, 4500) : 0;
@@ -251,29 +266,45 @@ function build(): MockDb {
     });
   }
 
-  /* ---------- Rides ---------- */
-  const rideStatuses = ['charged', 'charged', 'charged', 'charged', 'ended', 'active', 'disputed', 'aborted'] as const;
+  /* ---------- Rides ----------
+     340 rides across 90 days. Every ride carries a full cost breakdown, a
+     rating, start/end zone names and a polyline so the per-user and
+     per-vehicle history tables + maps have real data to render. */
+  const rideStatuses = ['charged', 'charged', 'charged', 'charged', 'charged', 'ended', 'disputed', 'aborted'] as const;
+  const RIDE_COUNT = 340;
   const rides: RideRow[] = [];
+  const rideExtras: Record<string, RideExtra> = {};
   const tripEvents: Record<string, TripEvent[]> = {};
   const payments: Payment[] = [];
-  for (let i = 0; i < 200; i++) {
-    const cust = rng.pick(customers);
+  // Power users get most of the volume so at least a few profiles are deep.
+  const heavyRiders = customers.slice(0, 15);
+  for (let i = 0; i < RIDE_COUNT; i++) {
+    const cust = rng.bool(0.55) ? rng.pick(heavyRiders) : rng.pick(customers);
     const veh = rng.pick(vehicles);
     const status = i < 5 ? 'active' : rng.pick(rideStatuses);
-    const startedAt = isoDaysAgo(rng.int(0, 30), rng);
+    const startedAt = isoDaysAgo(rng.int(0, 90), rng);
     const durationS = rng.int(180, 2400);
     const distance = Math.round(durationS * rng.float(2.2, 4.4));
-    const endedAt = status === 'active' ? null : new Date(new Date(startedAt).getTime() + durationS * 1000).toISOString();
+    const pauseS = rng.bool(0.22) ? rng.int(30, 400) : 0;
+    const endedAt = status === 'active' ? null : new Date(new Date(startedAt).getTime() + (durationS + pauseS) * 1000).toISOString();
     const city = cities.find((c) => c.name === veh.city_name)!;
     const startPos = jitterPoint(city.center.coordinates, 2400, rng);
     const endPos = jitterPoint(city.center.coordinates, 2400, rng);
-    const perMin = 15;
+    const model = models.find((m) => m.id === veh.model_id);
+    const perMin = model?.kind === 'ebike' ? 18 : 15;
     const unlock = 100;
-    const cost = status === 'aborted' ? 0 : unlock + Math.round((durationS / 60) * perMin);
+    const multiplier = rng.bool(0.2) ? 1.2 : 1;
+    const aborted = status === 'aborted';
+    const minutesCents = aborted ? 0 : Math.round((durationS / 60) * perMin * multiplier);
+    const pauseCents = aborted ? 0 : Math.round((pauseS / 60) * 8);
+    const paidParkingCents = !aborted && rng.bool(0.1) ? 200 : 0;
+    const cost = aborted ? 0 : unlock + minutesCents + pauseCents + paidParkingCents;
     const penalty = rng.bool(0.08) ? rng.pick([500, 1000]) : 0;
-    const photoReview = status === 'active' || status === 'aborted' ? null : rng.pick(['auto_ok', 'auto_ok', 'approved', 'pending', 'rejected'] as const);
+    const photoReview = status === 'active' || aborted ? null : rng.pick(['auto_ok', 'auto_ok', 'auto_ok', 'approved', 'pending', 'rejected'] as const);
     const id = `trip-${String(i + 1).padStart(4, '0')}`;
     const hasDispute = status === 'disputed';
+    const discount = rng.bool(0.15) ? rng.pick([50, 100]) : 0;
+    const bonus = rng.bool(0.12) ? 100 : 0;
     rides.push({
       id,
       user_id: cust.id,
@@ -285,16 +316,16 @@ function build(): MockDb {
       ended_at: endedAt,
       start_pos: { type: 'Point', coordinates: startPos },
       end_pos: endedAt ? { type: 'Point', coordinates: endPos } : null,
-      distance_m: status === 'aborted' ? 0 : distance,
-      duration_s: status === 'aborted' ? 0 : durationS,
-      pause_s: rng.bool(0.2) ? rng.int(30, 400) : 0,
+      distance_m: aborted ? 0 : distance,
+      duration_s: aborted ? 0 : durationS,
+      pause_s: pauseS,
       pricing_snapshot: {
         unlock_cents: unlock, per_min_cents: perMin, pause_per_min_cents: 8,
-        day_cap_cents: 2500, currency: 'EUR', multiplier: rng.bool(0.2) ? 1.2 : 1,
+        day_cap_cents: 2500, currency: 'EUR', multiplier,
       },
       cost_cents: cost,
-      discount_cents: rng.bool(0.15) ? rng.pick([50, 100]) : 0,
-      bonus_cents: rng.bool(0.12) ? 100 : 0,
+      discount_cents: discount,
+      bonus_cents: bonus,
       penalty_cents: penalty,
       currency: 'EUR',
       end_photo_url: photoReview ? `photo:${id}` : null,
@@ -310,6 +341,20 @@ function build(): MockDb {
       has_dispute: hasDispute,
       has_penalty: penalty > 0,
     });
+
+    const rated = !aborted && rng.bool(0.55);
+    rideExtras[id] = {
+      vehicle_model: veh.model_name,
+      rating: rated ? rng.int(2, 5) : null,
+      rating_tags: rated ? Array.from(new Set([rng.pick(RATING_TAGS), rng.pick(RATING_TAGS)])).slice(0, rng.int(1, 2)) : [],
+      start_zone_name: rng.pick(ATHENS_AREAS),
+      end_zone_name: endedAt ? rng.pick(ATHENS_AREAS) : null,
+      minutes_cents: minutesCents,
+      pause_cents: pauseCents,
+      paid_parking_cents: paidParkingCents,
+      payment_status: status === 'active' || aborted ? null : status === 'disputed' ? 'succeeded' : rng.bool(0.94) ? 'succeeded' : 'failed',
+      route: endedAt ? buildRoute(startPos, endPos, id, 22) : [startPos],
+    };
 
     // events
     const evs: TripEvent[] = [
@@ -328,8 +373,10 @@ function build(): MockDb {
     if (status === 'charged' || status === 'disputed') {
       payments.push({
         id: `pay-${id}`, user_id: cust.id, trip_id: id, stripe_pi_id: `pi_${rng.int(100000, 999999)}`,
-        amount_cents: cost, kind: 'trip', status: status === 'disputed' ? 'succeeded' : rng.bool(0.95) ? 'succeeded' : 'failed',
-        failure_code: null, initiated_by: 'system', admin_reason: null, created_at: endedAt ?? startedAt,
+        amount_cents: cost, kind: 'trip',
+        status: rideExtras[id]!.payment_status === 'failed' ? 'failed' : 'succeeded',
+        failure_code: rideExtras[id]!.payment_status === 'failed' ? 'card_declined' : null,
+        initiated_by: 'system', admin_reason: null, created_at: endedAt ?? startedAt,
       });
     }
     if (penalty > 0) {
@@ -340,6 +387,20 @@ function build(): MockDb {
       });
     }
   }
+  /* Reconcile the customer roll-ups with the rides we actually generated.
+     `rides` / `spend_cents` on CustomerRow are *lifetime* figures: Penny rides
+     plus the pre-migration Atom history (only for migrated accounts). The
+     Penny-only numbers live in UserProfileFull.stats. */
+  const legacyRides: Record<string, number> = {};
+  for (const c of customers) {
+    const own = rides.filter((r) => r.user_id === c.id && r.status !== 'aborted');
+    const pennySpend = own.reduce((s, r) => s + r.cost_cents + r.penalty_cents - r.discount_cents - r.bonus_cents, 0);
+    const legacy = c.legacy_atom_user_id ? rng.int(4, 120) : 0;
+    legacyRides[c.id] = legacy;
+    c.rides = own.length + legacy;
+    c.spend_cents = pennySpend + legacy * rng.int(180, 520);
+  }
+
   // extra topups / package / subscription payments
   for (let i = 0; i < 40; i++) {
     const cust = rng.pick(customers);
@@ -713,7 +774,32 @@ function build(): MockDb {
     auditLog.push({ id: `audit-${i}`, staff_id: s.id, action: a.action, entity: a.entity, entity_id: rng.uuid().slice(0, 8), before: null, after: {}, reason: a.reason, ip: `10.0.${rng.int(0, 255)}.${rng.int(1, 255)}`, at: isoMinutesAgo(rng.int(1, 20000)) });
   }
 
+  /* ---------- Rich profiles, Sumsub bundles and merged timelines ----------
+     Built last: they read from every other collection above. */
+  const profileCtx: ProfileCtx = {
+    customers, vehicles, rides, rideExtras, payments, debts, referrals, corporate, groups,
+    alerts, commands, damage: damageReports, batterySwaps, maintenance: maintenanceLog,
+    notifications: notificationLog, scans: scanLog, legacyRides,
+  };
+  const userProfiles: Record<string, UserProfileFull> = {};
+  const sumsub: Record<string, SumsubProfileBundle> = {};
+  const userTimelines: Record<string, TimelineEvent[]> = {};
+  for (const c of customers) {
+    const profile = buildUserProfile(c, profileCtx);
+    userProfiles[c.id] = profile;
+    sumsub[c.id] = buildSumsubBundle(c, {
+      nationality: profile.nationality,
+      dob: profile.date_of_birth,
+      gender: profile.gender,
+      city: profile.address.city,
+    });
+    userTimelines[c.id] = buildUserTimeline(profile, profileCtx);
+  }
+  const vehicleTimelines: Record<string, TimelineEvent[]> = {};
+  for (const v of vehicles) vehicleTimelines[v.id] = buildVehicleTimeline(v, profileCtx);
+
   return {
+    rideExtras, userProfiles, sumsub, userTimelines, vehicleTimelines,
     cities, models, batteryCurves, vehicles, devices, customers, rides, tripEvents, payments, debts,
     zones, zoneVersions, alerts, commands, opsTasks, damageReports, staff, kpis, ledgerAccounts, ledgerEntries,
     invoices, corporate, notificationRules, notificationLog, promos, groups, campaigns, loyalty, referrals, pois,

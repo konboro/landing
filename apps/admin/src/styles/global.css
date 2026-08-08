@@ -228,6 +228,106 @@ table.data tr:last-child td { border-bottom: none; }
 .scroll-x { overflow-x: auto; }
 .pill-tag { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--color-surface-alt); font-size: var(--fs-xs); margin: 2px; }
 
+/* ---------- Section label ---------- */
+.section-label {
+  margin: 0 0 var(--space-sm); font-size: var(--fs-xs); font-weight: var(--fw-bold);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--color-text-muted);
+}
+
+/* ---------- Banner (KYC review status, warnings) ---------- */
+.banner {
+  display: flex; gap: var(--space-md); align-items: stretch;
+  border: 1px solid; border-radius: var(--radius-md); padding: var(--space-md) var(--space-lg);
+  overflow: hidden;
+}
+.banner-bar { width: 4px; border-radius: 999px; flex: 0 0 4px; }
+.quote {
+  margin: 10px 0 0; padding: 8px 12px; border-left: 3px solid var(--color-border);
+  background: var(--color-surface); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: var(--fs-sm); color: var(--color-text);
+}
+
+/* ---------- Profile hero ---------- */
+.profile-hero { display: flex; gap: var(--space-lg); align-items: flex-start; flex-wrap: wrap; }
+.avatar-lg {
+  width: 84px; height: 84px; border-radius: 50%; flex: 0 0 84px;
+  border: 2px solid var(--color-surface); box-shadow: var(--shadow-card); object-fit: cover; background: var(--color-surface-alt);
+}
+.avatar-sm { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; flex: 0 0 30px; }
+.hero-name { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+.hero-name h2 { margin: 0; font-size: var(--fs-xl); }
+.hero-facts { display: flex; gap: var(--space-md); flex-wrap: wrap; font-size: var(--fs-sm); color: var(--color-text-muted); margin-top: 6px; }
+.hero-facts b { color: var(--color-text); font-weight: var(--fw-semibold); }
+.verified { color: var(--color-success); font-weight: 700; }
+.unverified { color: var(--color-text-muted); }
+
+/* ---------- Compact stat tiles ---------- */
+.tile-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: var(--space-md); }
+.tile {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: var(--space-md); display: flex; flex-direction: column; gap: 2px;
+}
+.tile .tile-label { font-size: var(--fs-xs); color: var(--color-text-muted); font-weight: var(--fw-medium); text-transform: uppercase; letter-spacing: .04em; }
+.tile .tile-value { font-size: var(--fs-lg); font-weight: var(--fw-bold); line-height: 1.2; }
+.tile .tile-hint { font-size: var(--fs-xs); color: var(--color-text-muted); }
+
+/* ---------- Meter (score bars) ---------- */
+.meter { height: 6px; border-radius: 999px; background: var(--color-surface-alt); overflow: hidden; }
+.meter > span { display: block; height: 100%; border-radius: 999px; }
+
+/* ---------- Sumsub document gallery ---------- */
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: var(--space-md); }
+.doc-card {
+  display: flex; flex-direction: column; text-align: left; padding: 0; cursor: pointer;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); overflow: hidden; transition: border-color .12s, box-shadow .12s, transform .12s;
+  font: inherit; color: inherit;
+}
+.doc-card:hover { border-color: var(--color-primary); box-shadow: var(--shadow-card); transform: translateY(-1px); }
+.doc-thumb { position: relative; aspect-ratio: 16 / 11; background: var(--color-surface-alt); overflow: hidden; }
+.doc-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.doc-flag {
+  position: absolute; top: 8px; right: 8px; color: #fff; font-size: 10px; font-weight: 700;
+  padding: 2px 7px; border-radius: 999px; letter-spacing: .05em;
+}
+.doc-meta { padding: var(--space-sm) var(--space-md) var(--space-md); font-size: var(--fs-sm); }
+.lightbox-stage {
+  background: var(--pal-ink100); border-radius: var(--radius-md); padding: var(--space-md);
+  max-height: 52vh; overflow: auto; text-align: center;
+}
+.lightbox-stage img { max-width: 100%; display: inline-block; transition: transform .12s ease-out; }
+
+/* ---------- Activity timeline feed ---------- */
+.tl-group { margin-bottom: var(--space-lg); }
+.tl-day {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm);
+  font-size: var(--fs-xs); font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: .06em;
+  color: var(--color-text-muted); padding-bottom: 6px; border-bottom: 1px solid var(--color-border); margin-bottom: 6px;
+  position: sticky; top: 0; background: var(--color-surface); z-index: 1;
+}
+.tl-row { display: flex; gap: var(--space-md); align-items: flex-start; padding: 8px 0; border-bottom: 1px dashed var(--color-border); }
+.tl-row:last-child { border-bottom: none; }
+.tl-icon {
+  width: 28px; height: 28px; border-radius: 999px; flex: 0 0 28px; display: grid; place-items: center;
+  background: var(--color-surface-alt); border: 1.5px solid var(--color-border); font-size: 13px;
+}
+.tl-title { font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+.tl-detail { font-size: var(--fs-xs); color: var(--color-text-muted); margin-top: 2px; word-break: break-word; }
+.tl-meta { text-align: right; font-size: var(--fs-xs); color: var(--color-text-muted); flex: 0 0 auto; }
+
+/* ---------- Tag editor ---------- */
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px 3px 10px; border-radius: 999px;
+  background: var(--color-primary-soft); color: var(--color-primary-dark); font-size: var(--fs-xs); font-weight: var(--fw-semibold);
+}
+.tag-chip button {
+  border: none; background: transparent; cursor: pointer; color: inherit; opacity: .6; font-size: 13px; line-height: 1; padding: 0 2px;
+}
+.tag-chip button:hover { opacity: 1; }
+
+/* ---------- Notes ---------- */
+.note-item { border-left: 3px solid var(--color-primary-soft); padding: 6px 0 6px var(--space-md); }
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: fixed; z-index: 50; width: 248px; transform: translateX(-100%); transition: transform .2s; }

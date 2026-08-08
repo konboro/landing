@@ -22,6 +22,12 @@ import type {
   AuditLogEntry,
   TelemetrySample,
   UUID,
+  UserProfileFull,
+  UserRideHistoryRow,
+  VehicleRideHistoryRow,
+  VehicleStats,
+  SumsubProfileBundle,
+  TimelineEvent,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -50,6 +56,13 @@ export interface CustomerDetail {
   debts: Debt[];
   ledger: LedgerEntry[];
   referrals: Referral[];
+}
+
+/** Summary + first page of a vehicle's exhaustive history. */
+export interface VehicleHistory {
+  stats: VehicleStats;
+  rides: Page<VehicleRideHistoryRow>;
+  timeline: TimelineEvent[];
 }
 
 export interface AdminChargeInput {
@@ -91,9 +104,21 @@ export interface DataSource {
   sendCommand(vehicleId: string, kind: string, payload?: Record<string, unknown>): Promise<Command>;
   setVehicleStatus(vehicleId: string, status: string, reason: string): Promise<void>;
 
+  // Vehicle — exhaustive history (edge fn `admin-vehicle-history`)
+  getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory>;
+  getVehicleRides(vehicleId: string, params: QueryParams): Promise<Page<VehicleRideHistoryRow>>;
+  getVehicleTimeline(vehicleId: string, params: QueryParams): Promise<Page<TimelineEvent>>;
+
   // Customers
   listCustomers(params: QueryParams): Promise<Page<CustomerRow>>;
   getCustomer(id: string): Promise<CustomerDetail | null>;
+
+  // Customer — rich profile, history, KYC (edge fns `admin-user-profile`,
+  // `sumsub-applicant`)
+  getUserProfile(userId: string): Promise<UserProfileFull | null>;
+  getUserRides(userId: string, params: QueryParams): Promise<Page<UserRideHistoryRow>>;
+  getUserTimeline(userId: string, params: QueryParams): Promise<Page<TimelineEvent>>;
+  getSumsubProfile(userId: string, opts?: { refresh?: boolean }): Promise<SumsubProfileBundle>;
   adminCharge(input: AdminChargeInput): Promise<void>;
   refund(paymentId: string, amountCents: number, reason: string): Promise<void>;
   setUserBlocked(userId: string, blocked: boolean, reason: string): Promise<void>;

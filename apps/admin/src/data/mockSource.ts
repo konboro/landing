@@ -2,6 +2,7 @@ import type {
   DataSource,
   RideDetail,
   VehicleDetail,
+  VehicleHistory,
   CustomerDetail,
   AdminChargeInput,
   AuditInput,
@@ -10,6 +11,7 @@ import type {
 import { runQuery, delay, type Page, type QueryParams } from './query';
 import { getMockDb } from './mock/db';
 import { buildRoute, buildTelemetry, jitterPoint } from './mock/geoutil';
+import { toUserRideRow, toVehicleRideRow, computeVehicleStats } from './mock/history';
 import { Rng, uuid } from '@/lib/rng';
 import type { Command, VehicleAlert, Zone } from '@penny/db-types';
 import type {
@@ -19,9 +21,35 @@ import type {
   CustomerRow,
   VerificationItem,
   AuditLogEntry,
+  UserProfileFull,
+  UserRideHistoryRow,
+  VehicleRideHistoryRow,
+  SumsubProfileBundle,
+  TimelineEvent,
 } from '@/types/domain';
 
 const LATENCY = 180;
+
+/** Newest-first unless the table asked for something else. */
+function withDefaultSort(params: QueryParams): QueryParams {
+  return params.sort?.length ? params : { ...params, sort: [{ field: 'started_at', dir: 'desc' }] };
+}
+
+type HistoryLike = {
+  has_dispute: boolean;
+  has_penalty: boolean;
+  rating: number | null;
+  photo_review: string | null;
+  status: string;
+};
+
+/** Shared filter predicates for the user + vehicle ride-history tables. */
+const RIDE_FILTERS: Record<string, (row: HistoryLike, v: string | number | boolean) => boolean> = {
+  has_dispute: (r, v) => r.has_dispute === (v === true || v === 'true'),
+  has_penalty: (r, v) => r.has_penalty === (v === true || v === 'true'),
+  rated: (r, v) => (v === true || v === 'true' ? r.rating != null : r.rating == null),
+  photo_review: (r, v) => (v === 'none' ? r.photo_review == null : r.photo_review === v),
+};
 
 export class MockDataSource implements DataSource {
   readonly kind = 'mock' as const;
@@ -136,6 +164,104 @@ export class MockDataSource implements DataSource {
     if (v) v.status = status as VehicleRow['status'];
     await this.logAudit({ action: 'vehicle_status', entity: 'vehicle', entity_id: vehicleId, reason });
     return delay(undefined, 160);
+  }
+
+  /* ---------- Vehicle: exhaustive history ---------- */
+
+  private vehicleRideRows(vehicleId: string): VehicleRideHistoryRow[] {
+    return this.db.rides
+      .filter((r) => r.vehicle_id === vehicleId)
+      .map((r) => {
+        const extra = this.db.rideExtras[r.id];
+        return extra ? toVehicleRideRow(r, extra) : null;
+      })
+      .filter((r): r is VehicleRideHistoryRow => r !== null);
+  }
+
+  async getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory> {
+    const vehicle = this.db.vehicles.find((v) => v.id === vehicleId) ?? null;
+    const rows = this.vehicleRideRows(vehicleId);
+    const stats = computeVehicleStats(rows, {
+      damage_count: this.db.damageReports.filter((d) => d.vehicle_id === vehicleId).length,
+      battery_swaps: this.db.batterySwaps.filter((b) => b.vehicle_id === vehicleId).length,
+      maintenance_cost_cents: this.db.maintenanceLog.filter((m) => m.vehicle_id === vehicleId).reduce((s, m) => s + m.cost_cents, 0),
+      deployed_at: vehicle?.created_at ?? null,
+    });
+    const rides = await this.getVehicleRides(vehicleId, params);
+    return delay({ stats, rides, timeline: this.db.vehicleTimelines[vehicleId] ?? [] }, LATENCY);
+  }
+
+  async getVehicleRides(vehicleId: string, params: QueryParams): Promise<Page<VehicleRideHistoryRow>> {
+    const rows = this.vehicleRideRows(vehicleId);
+    return delay(
+      runQuery(rows as unknown as Record<string, unknown>[], withDefaultSort(params), {
+        searchFields: ['id', 'user_name', 'user_phone_masked', 'end_zone_name', 'start_zone_name', 'status'],
+        filterFns: RIDE_FILTERS as never,
+      }) as unknown as Page<VehicleRideHistoryRow>,
+      LATENCY,
+    );
+  }
+
+  async getVehicleTimeline(vehicleId: string, params: QueryParams): Promise<Page<TimelineEvent>> {
+    const rows = this.db.vehicleTimelines[vehicleId] ?? [];
+    return delay(
+      runQuery(rows as unknown as Record<string, unknown>[], { pageSize: 100, ...params }, {
+        searchFields: ['title', 'detail', 'ref_id'],
+      }) as unknown as Page<TimelineEvent>,
+      LATENCY,
+    );
+  }
+
+  /* ---------- Customer: rich profile, history, KYC ---------- */
+
+  async getUserProfile(userId: string): Promise<UserProfileFull | null> {
+    return delay(this.db.userProfiles[userId] ?? null, LATENCY);
+  }
+
+  async getUserRides(userId: string, params: QueryParams): Promise<Page<UserRideHistoryRow>> {
+    const rows = this.db.rides
+      .filter((r) => r.user_id === userId)
+      .map((r) => {
+        const extra = this.db.rideExtras[r.id];
+        return extra ? toUserRideRow(r, extra) : null;
+      })
+      .filter((r): r is UserRideHistoryRow => r !== null);
+    return delay(
+      runQuery(rows as unknown as Record<string, unknown>[], withDefaultSort(params), {
+        searchFields: ['id', 'vehicle_code', 'vehicle_model', 'end_zone_name', 'start_zone_name', 'status'],
+        filterFns: RIDE_FILTERS as never,
+      }) as unknown as Page<UserRideHistoryRow>,
+      LATENCY,
+    );
+  }
+
+  async getUserTimeline(userId: string, params: QueryParams): Promise<Page<TimelineEvent>> {
+    const rows = this.db.userTimelines[userId] ?? [];
+    return delay(
+      runQuery(rows as unknown as Record<string, unknown>[], { pageSize: 100, ...params }, {
+        searchFields: ['title', 'detail', 'ref_id'],
+      }) as unknown as Page<TimelineEvent>,
+      LATENCY,
+    );
+  }
+
+  async getSumsubProfile(userId: string, opts?: { refresh?: boolean }): Promise<SumsubProfileBundle> {
+    const bundle = this.db.sumsub[userId];
+    if (!bundle) {
+      return delay({ applicant: null, documents: [], history: [], fetched_at: new Date().toISOString(), source: 'live' as const }, LATENCY);
+    }
+    // A refresh models a live provider call; otherwise we serve the cache.
+    const next: SumsubProfileBundle = {
+      ...bundle,
+      fetched_at: new Date().toISOString(),
+      source: opts?.refresh ? 'live' : 'cache',
+      applicant: bundle.applicant ? { ...bundle.applicant, live: Boolean(opts?.refresh) } : null,
+    };
+    this.db.sumsub[userId] = next;
+    if (opts?.refresh) {
+      await this.logAudit({ action: 'sumsub_resync', entity: 'user', entity_id: userId, reason: 'Manual re-sync from Sumsub' });
+    }
+    return delay(next, opts?.refresh ? 700 : LATENCY);
   }
 
   async listCustomers(params: QueryParams): Promise<Page<CustomerRow>> {

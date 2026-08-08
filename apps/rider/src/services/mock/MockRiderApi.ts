@@ -33,12 +33,24 @@ import {
   type FaqEntry,
   type InboxItem,
   type LngLat,
+  type TripDetail,
+  type CostBreakdown,
+  type HistoryQuery,
+  type HistoryPage,
+  type HistoryMonthGroup,
+  type RiderCity,
+  type RiderStatsDetail,
+  type MonthBucket,
+  type KycDetail,
 } from '../types';
 import {
   ATHENS,
   makeVehicles,
   makeZones,
   makePois,
+  makeHistory,
+  makeKycDetail,
+  RIDE_TAGS,
   PACKAGES,
   SUBSCRIPTIONS,
   ADDONS,
@@ -79,24 +91,13 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
-function jitterRoute(start: LngLat, points = 24): LngLat[] {
-  const route: LngLat[] = [start];
-  let [lng, lat] = start;
-  for (let i = 0; i < points; i++) {
-    lng += (Math.random() - 0.45) * 0.0009;
-    lat += (Math.random() - 0.45) * 0.0009;
-    route.push([lng, lat]);
-  }
-  return route;
-}
-
 interface MockState {
   user: RiderUser | null;
   onboarding: OnboardingProgress;
   otp: string | null;
   vehicles: MapVehicle[];
   activeTrip: TripView | null;
-  history: TripView[];
+  history: TripDetail[];
   wallet: Wallet;
   cards: Card[];
   packages: PackageProduct[];
@@ -109,45 +110,99 @@ interface MockState {
   listeners: Set<(v: MapVehicle[]) => void>;
 }
 
-function seedHistory(): TripView[] {
-  const mk = (daysAgo: number, code: string, dur: number, dist: number): TripView => {
-    const start: LngLat = [23.7275 + Math.random() * 0.01, 37.98 + Math.random() * 0.01];
-    const pricing = { ...BASE_PRICING };
-    const cost = computeCost(pricing, dur, 0);
-    const startedAt = new Date(Date.now() - daysAgo * 86400_000).toISOString();
-    return {
-      id: `trip-${code}-${daysAgo}`,
-      vehicle_id: `veh-${code}`,
-      vehicle_code: code,
-      status: 'charged',
-      started_at: startedAt,
-      ended_at: new Date(Date.now() - daysAgo * 86400_000 + dur * 1000).toISOString(),
-      duration_s: dur,
-      pause_s: 0,
-      distance_m: dist,
-      soc_pct: 40 + Math.floor(Math.random() * 40),
-      pricing,
-      cost_cents: cost,
-      bonus_cents: 0,
-      penalty_cents: 0,
-      discount_cents: 0,
-      currency: 'EUR',
-      start_pos: start,
-      end_pos: [start[0] + 0.004, start[1] + 0.003],
-      route: jitterRoute(start),
-      end_photo_url: 'mock://photo/parked.jpg',
-      photo_review: 'auto_ok',
-      rating: 5,
-      tags: ['smooth', 'clean'],
-      group_id: null,
-      addon_insurance: false,
-    };
-  };
-  return [mk(2, 'PNY-1130', 640, 2100), mk(6, 'PNY-6620', 420, 1500), mk(11, 'PNY-9004', 1180, 4300)];
-}
-
 function freshOnboarding(): OnboardingProgress {
   return { step: 'value', completed: [] };
+}
+
+/** Month key + human label for grouping/bucketing (stable, locale-light). */
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+function monthKey(iso: string | null): string {
+  if (!iso) return '0000-00';
+  return iso.slice(0, 7);
+}
+function monthLabel(key: string, short = false): string {
+  const [y, m] = key.split('-');
+  const idx = Number(m ?? '1') - 1;
+  const name = MONTH_NAMES[idx] ?? '—';
+  return short ? `${name.slice(0, 3)} ${(y ?? '').slice(2)}` : `${name} ${y}`;
+}
+
+/** Reconstruct a receipt breakdown for a trip that doesn't carry one. */
+function breakdownFor(t: TripView, extra: Partial<CostBreakdown> = {}): CostBreakdown {
+  const moving = Math.max(0, t.duration_s - t.pause_s);
+  const ride_cents = Math.round(
+    Math.ceil(moving / 60) * t.pricing.per_min_cents * (t.pricing.multiplier || 1),
+  );
+  const pause_cents = Math.ceil(t.pause_s / 60) * t.pricing.pause_per_min_cents;
+  const base: CostBreakdown = {
+    unlock_cents: t.pricing.unlock_cents,
+    ride_cents,
+    pause_cents,
+    paid_parking_cents: 0,
+    addon_cents: t.addon_insurance ? 99 : 0,
+    bonus_cents: t.bonus_cents,
+    discount_cents: t.discount_cents,
+    promo_cents: 0,
+    penalty_cents: t.penalty_cents,
+    total_cents: t.cost_cents,
+    currency: t.currency,
+  };
+  return { ...base, ...extra };
+}
+
+/** Promote a plain TripView (e.g. a just-ended trip) to a full TripDetail. */
+function toDetail(t: TripView): TripDetail {
+  const moving = Math.max(1, t.duration_s - t.pause_s);
+  return {
+    ...t,
+    avg_speed_kmh: +((t.distance_m / 1000 / (moving / 3600)) || 0).toFixed(1),
+    top_speed_kmh: 20,
+    breakdown: breakdownFor(t),
+    photo_review_info: {
+      outcome: t.photo_review,
+      reason: null,
+      reviewed_at: t.photo_review && t.photo_review !== 'pending' ? nowISO() : null,
+      penalty_cents: t.penalty_cents,
+    },
+    promo_code: null,
+    dispute: null,
+    rating_editable: t.rating === null,
+    available_tags: RIDE_TAGS,
+    start_address: null,
+    end_address: null,
+  };
+}
+
+/** The demo rider's profile — rich enough to exercise every profile field. */
+function seedUser(phone: string): RiderUser {
+  return {
+    id: uuid(),
+    phone,
+    email: null,
+    full_name: null,
+    kyc_status: 'none',
+    marketing_push: false,
+    marketing_email: false,
+    tos_accepted: false,
+    privacy_accepted: false,
+    emergency_contact: null,
+    referral_code: `PENNY-${shortCode(5)}`,
+    score: 720,
+    date_of_birth: null,
+    address: null,
+    nationality: null,
+    gender: null,
+    address_struct: { line: null, city: null, postcode: null, country: 'GR' },
+    preferred_lang: null,
+    email_verified: false,
+    phone_verified: true,
+    emergency_contact_name: null,
+    tags: ['new_rider'],
+    created_at: nowISO(),
+  };
 }
 
 export class MockRiderApi implements RiderApi {
@@ -161,7 +216,7 @@ export class MockRiderApi implements RiderApi {
       otp: null,
       vehicles: makeVehicles(),
       activeTrip: null,
-      history: seedHistory(),
+      history: makeHistory(),
       wallet: { balance_cents: 500, currency: 'EUR' },
       cards: [],
       packages: PACKAGES.map((p) => ({ ...p })),
@@ -174,6 +229,11 @@ export class MockRiderApi implements RiderApi {
         push_marketing: false,
         email_receipts: true,
         email_marketing: false,
+        push_ride_updates: true,
+        push_parking_reminders: true,
+        push_low_battery: true,
+        email_monthly_summary: false,
+        sms_safety: true,
       },
       vehicleTimer: null,
       listeners: new Set(),
@@ -200,22 +260,7 @@ export class MockRiderApi implements RiderApi {
       throw new RiderApiError('otp_invalid', 'That code is not correct. Try again.');
     }
     if (!this.s.user) {
-      this.s.user = {
-        id: uuid(),
-        phone,
-        email: null,
-        full_name: null,
-        kyc_status: 'none',
-        marketing_push: false,
-        marketing_email: false,
-        tos_accepted: false,
-        privacy_accepted: false,
-        emergency_contact: null,
-        referral_code: `PENNY-${shortCode(5)}`,
-        score: 720,
-        date_of_birth: null,
-        address: null,
-      };
+      this.s.user = seedUser(phone);
       this.s.onboarding = { step: 'name', completed: ['value', 'phone', 'otp'] };
     }
     return { user: this.s.user, onboarding: this.s.onboarding };
@@ -224,7 +269,17 @@ export class MockRiderApi implements RiderApi {
   async updateProfile(patch: Partial<RiderUser>): Promise<RiderUser> {
     await wait(200);
     if (!this.s.user) throw new RiderApiError('no_session', 'Please sign in first.');
-    this.s.user = { ...this.s.user, ...patch };
+    const emailChanged = patch.email !== undefined && patch.email !== this.s.user.email;
+    this.s.user = {
+      ...this.s.user,
+      ...patch,
+      // A new address is merged field-by-field so a partial patch is safe.
+      address_struct: { ...this.s.user.address_struct, ...(patch.address_struct ?? {}) },
+      // Changing the email always re-arms verification.
+      email_verified: emailChanged ? false : (patch.email_verified ?? this.s.user.email_verified),
+      // `tags` are ops/admin-owned — the rider app can never write them.
+      tags: this.s.user.tags,
+    };
     return this.s.user;
   }
 
@@ -250,6 +305,11 @@ export class MockRiderApi implements RiderApi {
   async getKycStatus() {
     await wait(80);
     return this.s.user?.kyc_status ?? 'none';
+  }
+
+  async getKycDetail(): Promise<KycDetail> {
+    await wait(160);
+    return makeKycDetail(this.s.user?.kyc_status ?? 'none');
   }
 
   async logout(): Promise<void> {
@@ -445,6 +505,8 @@ export class MockRiderApi implements RiderApi {
       tags: [],
       group_id: input.group ? `grp-${uuid()}` : null,
       addon_insurance: !!input.addon_insurance,
+      city_id: ATHENS.id,
+      city_name: ATHENS.name,
     };
     v.reserved_by_me = false;
     this.s.activeTrip = trip;
@@ -552,7 +614,7 @@ export class MockRiderApi implements RiderApi {
     }
 
     this.s.activeTrip = null;
-    this.s.history = [ended, ...this.s.history];
+    this.s.history = [toDetail(ended), ...this.s.history];
     return { ...ended };
   }
 
@@ -679,15 +741,106 @@ export class MockRiderApi implements RiderApi {
     return this.s.history.map((t) => ({ ...t }));
   }
 
+  /** Apply the history filter to the in-memory trip list. */
+  private filtered(q: HistoryQuery): TripDetail[] {
+    const needle = (q.search ?? '').trim().toLowerCase();
+    const fromMs = q.from ? Date.parse(q.from) : null;
+    // `to` is inclusive: extend to the end of that day.
+    const toMs = q.to ? Date.parse(q.to) + 86400_000 - 1 : null;
+    return this.s.history.filter((t) => {
+      const started = t.started_at ? Date.parse(t.started_at) : 0;
+      if (fromMs !== null && started < fromMs) return false;
+      if (toMs !== null && started > toMs) return false;
+      if (q.city_id && t.city_id !== q.city_id) return false;
+      if (q.has_dispute && !t.dispute && t.status !== 'disputed') return false;
+      if (q.has_penalty && t.penalty_cents <= 0) return false;
+      if (needle) {
+        const hay = `${t.vehicle_code} ${t.city_name} ${t.tags.join(' ')}`.toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }
+
+  async getHistoryPage(q: HistoryQuery): Promise<HistoryPage> {
+    await wait(220);
+    const all = this.filtered(q);
+    const slice = all.slice(q.offset, q.offset + q.limit);
+    const groups: HistoryMonthGroup[] = [];
+    for (const t of slice) {
+      const key = monthKey(t.started_at);
+      let g = groups.find((x) => x.key === key);
+      if (!g) {
+        g = { key, label: monthLabel(key), rides: 0, distance_m: 0, spent_cents: 0, trips: [] };
+        groups.push(g);
+      }
+      g.rides += 1;
+      g.distance_m += t.distance_m;
+      g.spent_cents += t.cost_cents;
+      g.trips.push({ ...t });
+    }
+    const next_offset = q.offset + slice.length;
+    return {
+      groups,
+      total: all.length,
+      has_more: next_offset < all.length,
+      next_offset,
+      currency: 'EUR',
+    };
+  }
+
+  async getRiderCities(): Promise<RiderCity[]> {
+    await wait(90);
+    const counts = new Map<string, RiderCity>();
+    for (const t of this.s.history) {
+      const cur = counts.get(t.city_id);
+      if (cur) cur.rides += 1;
+      else counts.set(t.city_id, { id: t.city_id, name: t.city_name, rides: 1 });
+    }
+    return [...counts.values()].sort((a, b) => b.rides - a.rides);
+  }
+
+  async getTripDetail(trip_id: string): Promise<TripDetail> {
+    await wait(180);
+    const t = this.s.history.find((x) => x.id === trip_id);
+    if (t) return { ...t, route: [...t.route] };
+    if (this.s.activeTrip?.id === trip_id) return toDetail(this.recalc(this.s.activeTrip));
+    throw new RiderApiError('trip_not_found', 'Trip not found.');
+  }
+
+  async rateTrip(trip_id: string, rating: number, tags: string[]): Promise<TripDetail> {
+    await wait(300);
+    const t = this.s.history.find((x) => x.id === trip_id);
+    if (!t) throw new RiderApiError('trip_not_found', 'Trip not found.');
+    if (!t.rating_editable) {
+      throw new RiderApiError('rating_locked', 'This ride has already been rated.');
+    }
+    const next: TripDetail = { ...t, rating, tags, rating_editable: false };
+    this.s.history = this.s.history.map((x) => (x.id === trip_id ? next : x));
+    return { ...next };
+  }
+
   async getReceiptUrl(trip_id: string): Promise<string> {
     await wait(200);
     return `https://receipts.penny.rent/${trip_id.slice(-8)}.pdf`;
   }
 
-  async disputeTrip(trip_id: string, _reason: string, _photos: string[]): Promise<TripView> {
+  async disputeTrip(trip_id: string, reason: string, _photos: string[]): Promise<TripView> {
     await wait(500);
     this.s.history = this.s.history.map((t) =>
-      t.id === trip_id ? { ...t, status: 'disputed' } : t,
+      t.id === trip_id
+        ? {
+            ...t,
+            status: 'disputed' as const,
+            dispute: {
+              status: 'open' as const,
+              reason,
+              created_at: nowISO(),
+              resolution: null,
+              refund_cents: 0,
+            },
+          }
+        : t,
     );
     const t = this.s.history.find((x) => x.id === trip_id);
     if (!t) throw new RiderApiError('trip_not_found', 'Trip not found.');
@@ -696,8 +849,7 @@ export class MockRiderApi implements RiderApi {
 
   /* --------------------------------- profile ------------------------------ */
 
-  async getStats(): Promise<LifetimeStats> {
-    await wait(120);
+  private lifetime(): LifetimeStats {
     const all = this.s.history;
     const distance_m = all.reduce((a, t) => a + t.distance_m, 0);
     const duration_s = all.reduce((a, t) => a + t.duration_s, 0);
@@ -709,8 +861,135 @@ export class MockRiderApi implements RiderApi {
       co2_kg: +((distance_m / 1000) * 0.12).toFixed(1),
       spent_cents,
       loyalty_points: 340 + all.length * 20,
-      parking_streak: 7,
+      parking_streak: this.parkingStreak(),
       year: new Date().getFullYear(),
+    };
+  }
+
+  /** Consecutive most-recent rides whose parking photo was accepted. */
+  private parkingStreak(): number {
+    let n = 0;
+    for (const t of this.s.history) {
+      if (t.photo_review === 'rejected') break;
+      if (t.photo_review === 'pending') continue;
+      n += 1;
+    }
+    return n;
+  }
+
+  private longestParkingStreak(): number {
+    let best = 0;
+    let cur = 0;
+    for (const t of this.s.history) {
+      if (t.photo_review === 'rejected') {
+        cur = 0;
+        continue;
+      }
+      cur += 1;
+      if (cur > best) best = cur;
+    }
+    return best;
+  }
+
+  async getStats(): Promise<LifetimeStats> {
+    await wait(120);
+    return this.lifetime();
+  }
+
+  async getStatsDetail(): Promise<RiderStatsDetail> {
+    await wait(220);
+    const base = this.lifetime();
+    const all = this.s.history;
+
+    // Month buckets, oldest -> newest, with empty months filled in so the
+    // chart shows real gaps instead of silently compressing them.
+    const byKey = new Map<string, MonthBucket>();
+    for (const t of all) {
+      const key = monthKey(t.started_at);
+      const b = byKey.get(key) ?? {
+        key,
+        label: monthLabel(key, true),
+        rides: 0,
+        distance_m: 0,
+        spent_cents: 0,
+      };
+      b.rides += 1;
+      b.distance_m += t.distance_m;
+      b.spent_cents += t.cost_cents;
+      byKey.set(key, b);
+    }
+    const keys = [...byKey.keys()].sort();
+    const months: MonthBucket[] = [];
+    if (keys.length > 0) {
+      const first = keys[0]!;
+      const last = keys[keys.length - 1]!;
+      const cursor = new Date(`${first}-01T00:00:00Z`);
+      const end = new Date(`${last}-01T00:00:00Z`);
+      while (cursor <= end) {
+        const key = cursor.toISOString().slice(0, 7);
+        months.push(
+          byKey.get(key) ?? { key, label: monthLabel(key, true), rides: 0, distance_m: 0, spent_cents: 0 },
+        );
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+      }
+    }
+    const best_month = months.reduce<MonthBucket | null>(
+      (acc, m) => (acc === null || m.rides > acc.rides ? m : acc),
+      null,
+    );
+
+    // Favourite model is derived from the vehicle the trip ran on.
+    const modelCount = new Map<string, number>();
+    for (const t of all) {
+      const v = this.s.vehicles.find((x) => x.code === t.vehicle_code);
+      const name = v?.model_name ?? 'Penny One';
+      modelCount.set(name, (modelCount.get(name) ?? 0) + 1);
+    }
+    const favourite_model =
+      [...modelCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+    const cities = await this.getRiderCities();
+    const points = base.loyalty_points;
+    const TIERS: { name: string; at: number }[] = [
+      { name: 'Bronze', at: 0 },
+      { name: 'Silver', at: 750 },
+      { name: 'Gold', at: 1500 },
+      { name: 'Platinum', at: 3000 },
+    ];
+    let tierIdx = 0;
+    for (let i = 0; i < TIERS.length; i++) if (points >= TIERS[i]!.at) tierIdx = i;
+    const cur = TIERS[tierIdx]!;
+    const next = TIERS[tierIdx + 1] ?? null;
+    const progress = next ? Math.min(1, (points - cur.at) / (next.at - cur.at)) : 1;
+
+    const oldest = all[all.length - 1] ?? null;
+    const newest = all[0] ?? null;
+
+    return {
+      ...base,
+      months,
+      best_month,
+      longest_parking_streak: this.longestParkingStreak(),
+      favourite_model,
+      favourite_city: cities[0]?.name ?? null,
+      first_ride_at: oldest?.started_at ?? null,
+      last_ride_at: newest?.started_at ?? null,
+      avg_distance_m: all.length ? Math.round(base.distance_m / all.length) : 0,
+      avg_duration_s: all.length ? Math.round(base.duration_s / all.length) : 0,
+      tier: {
+        name: cur.name,
+        points,
+        next_name: next?.name ?? null,
+        next_at_points: next?.at ?? null,
+        progress,
+      },
+      referral: {
+        code: this.s.user?.referral_code ?? 'PENNY-DEMO',
+        invited: 6,
+        converted: 3,
+        earned_cents: 900,
+      },
+      cities,
     };
   }
 
