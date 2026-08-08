@@ -22,7 +22,7 @@ packages/
   db-types/  shared TS domain model + enums (matches SQL)
   api-client/ typed Supabase client + edge wrappers + repos
   geo/       zone checks, distance, snapping (tested)
-  ui/        design tokens + formatters (tested)
+  ui/        design tokens, white-label brand system, formatters (tested)
   emails/    transactional email templates (Resend), PL/EN/EL
 supabase/
   migrations/ full Postgres + PostGIS schema, RLS, views, seed
@@ -103,6 +103,24 @@ pnpm typecheck     # all packages
 pnpm test          # geo + ui unit tests, gateway go tests
 pnpm build         # build shared packages + admin
 ```
+
+## White-labelling
+
+The platform is multi-tenant by design: name, colours, deep-link scheme, support
+and legal details, and which product features exist all come from a **Brand**
+(`packages/ui/src/brand.ts`). A new operator is a `createBrand({...})` override
+plus an env var — no fork. Both apps and the panel carry a brand switcher for
+live demos, and the admin has a Branding editor with a WCAG contrast gate.
+
+See **`docs/16-white-label.md`**.
+
+## Connectivity (SIM cards)
+
+Every tracker carries an IoT SIM (Truphone / 1GLOBAL). The panel manages the SIM
+estate — inventory, data usage vs bundle, cost, activate/suspend/terminate,
+alerts for over-limit and silent SIMs — behind a swappable provider adapter.
+
+See **`docs/15-connectivity-sims.md`**.
 
 ## Status
 
