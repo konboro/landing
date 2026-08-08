@@ -389,3 +389,338 @@ export interface VerificationItem {
   photo_url: string;
   queued_at: ISOTimestamp;
 }
+
+/* =========================================================================
+   Sumsub KYC — admin-side view models.
+   Shapes mirror the Sumsub applicant API (`/resources/applicants/...`) as it
+   is proxied by the `sumsub-applicant` edge function. Declared locally on
+   purpose: @penny/db-types must not gain KYC PII columns (Hard Rule #11) —
+   nothing here is persisted in Penny tables, it is rendered straight from
+   the provider response (or its short-lived server-side cache).
+   ========================================================================= */
+
+export type SumsubReviewStatus = 'init' | 'pending' | 'prechecked' | 'queued' | 'completed' | 'onHold';
+export type SumsubReviewAnswer = 'GREEN' | 'RED' | null;
+export type SumsubRejectType = 'FINAL' | 'RETRY' | null;
+export type SumsubDocType = 'ID_CARD' | 'PASSPORT' | 'DRIVERS' | 'SELFIE' | 'RESIDENCE_PERMIT' | 'UTILITY_BILL';
+export type SumsubDocSubType = 'FRONT_SIDE' | 'BACK_SIDE' | null;
+
+export interface SumsubDocument {
+  image_id: string;
+  doc_type: SumsubDocType;
+  doc_sub_type: SumsubDocSubType;
+  country: string | null;
+  valid_until: string | null;
+  review_answer: SumsubReviewAnswer;
+  reject_labels: string[];
+  /** Data-URI in mock mode; short-lived signed URL from the edge fn in prod. */
+  url: string;
+  content_type: string;
+  added_at: ISOTimestamp | null;
+}
+
+export interface SumsubReviewEvent {
+  at: ISOTimestamp;
+  review_status: SumsubReviewStatus;
+  review_answer: SumsubReviewAnswer;
+  reject_labels: string[];
+  moderation_comment: string | null;
+}
+
+export interface SumsubProfile {
+  applicant_id: string;
+  level: string;
+  inspection_id: string | null;
+  external_user_id: string | null;
+
+  review_status: SumsubReviewStatus;
+  review_answer: SumsubReviewAnswer;
+  review_reject_type: SumsubRejectType;
+  reject_labels: string[];
+  moderation_comment: string | null;
+  client_comment: string | null;
+
+  first_name: string | null;
+  last_name: string | null;
+  middle_name: string | null;
+  dob: string | null;
+  nationality: string | null;
+  country: string | null;
+  place_of_birth: string | null;
+  gender: 'M' | 'F' | 'X' | null;
+
+  id_doc_type: SumsubDocType | null;
+  id_doc_number: string | null;
+  id_doc_expiry: string | null;
+  id_doc_country: string | null;
+
+  phone: string | null;
+  email: string | null;
+
+  applicant_created_at: ISOTimestamp | null;
+  reviewed_at: ISOTimestamp | null;
+
+  /** true = fetched live from Sumsub just now, false = served from cache. */
+  live: boolean;
+}
+
+/** What `getSumsubProfile()` returns. `applicant === null` ⇒ no applicant yet. */
+export interface SumsubProfileBundle {
+  applicant: SumsubProfile | null;
+  documents: SumsubDocument[];
+  history: SumsubReviewEvent[];
+  fetched_at: ISOTimestamp;
+  /** Where the payload came from — surfaced as a "live / cached" chip. */
+  source: 'live' | 'cache';
+}
+
+/* =========================================================================
+   Exhaustive ride history (user + vehicle views)
+   ========================================================================= */
+
+export interface RideCostBreakdown {
+  unlock_cents: number;
+  minutes_cents: number;
+  pause_cents: number;
+  paid_parking_cents: number;
+  bonus_cents: number;
+  discount_cents: number;
+  penalty_cents: number;
+  total_cents: number;
+  currency: string;
+}
+
+export interface RideHistoryBase {
+  id: UUID;
+  started_at: ISOTimestamp | null;
+  ended_at: ISOTimestamp | null;
+  status: string;
+  duration_s: number;
+  pause_s: number;
+  distance_m: number;
+  avg_speed_kmh: number;
+  cost: RideCostBreakdown;
+  cost_cents: number;
+  currency: string;
+  photo_review: string | null;
+  rating: number | null;
+  rating_tags: string[];
+  start_zone_name: string | null;
+  end_zone_name: string | null;
+  start_lng: number;
+  start_lat: number;
+  end_lng: number | null;
+  end_lat: number | null;
+  route: Array<[number, number]>;
+  payment_status: string | null;
+  has_dispute: boolean;
+  has_penalty: boolean;
+  city_name: string;
+}
+
+/** One row of a *user's* ride history (vehicle is the "other side"). */
+export interface UserRideHistoryRow extends RideHistoryBase {
+  vehicle_id: UUID;
+  vehicle_code: string;
+  vehicle_model: string;
+}
+
+/** One row of a *vehicle's* ride history (rider is the "other side"). */
+export interface VehicleRideHistoryRow extends RideHistoryBase {
+  user_id: UUID;
+  user_name: string;
+  /** Masked for support screens — full number only on the customer page. */
+  user_phone_masked: string;
+}
+
+/* =========================================================================
+   Aggregates
+   ========================================================================= */
+
+export interface UserStats {
+  total_rides: number;
+  rides_7d: number;
+  rides_30d: number;
+  total_distance_m: number;
+  total_duration_s: number;
+  total_spend_cents: number;
+  avg_ride_cost_cents: number;
+  avg_distance_m: number;
+  avg_duration_s: number;
+  avg_rating: number | null;
+  rating_count: number;
+  co2_saved_kg: number;
+  open_debt_cents: number;
+  penalties_count: number;
+  penalties_cents: number;
+  disputes_count: number;
+  refunds_cents: number;
+  first_ride_at: ISOTimestamp | null;
+  last_ride_at: ISOTimestamp | null;
+  favourite_vehicle_code: string | null;
+  favourite_end_zone: string | null;
+  photo_reject_rate_pct: number;
+}
+
+export interface VehicleStats {
+  total_rides: number;
+  rides_7d: number;
+  rides_30d: number;
+  revenue_cents: number;
+  revenue_30d_cents: number;
+  avg_distance_m: number;
+  avg_duration_s: number;
+  total_distance_m: number;
+  utilization_rides_per_day: number;
+  unique_riders: number;
+  avg_rating: number | null;
+  last_ride_at: ISOTimestamp | null;
+  first_ride_at: ISOTimestamp | null;
+  penalties_count: number;
+  damage_count: number;
+  battery_swaps: number;
+  maintenance_cost_cents: number;
+}
+
+/* =========================================================================
+   Unified timeline (rides, money, KYC, commands, ops, alerts…)
+   ========================================================================= */
+
+export type TimelineKind =
+  | 'ride'
+  | 'payment'
+  | 'refund'
+  | 'penalty'
+  | 'debt'
+  | 'kyc'
+  | 'command'
+  | 'status'
+  | 'alert'
+  | 'damage'
+  | 'battery_swap'
+  | 'maintenance'
+  | 'notification'
+  | 'support'
+  | 'loyalty'
+  | 'referral'
+  | 'account';
+
+export interface TimelineEvent {
+  id: string;
+  at: ISOTimestamp;
+  kind: TimelineKind;
+  title: string;
+  detail: string;
+  ref_id: string | null;
+  /** Optional in-panel deep link (e.g. `/rides/trip-0042`). */
+  link?: string | null;
+  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+}
+
+/* =========================================================================
+   Rich customer profile ("dokładne dane")
+   ========================================================================= */
+
+export interface UserAddress {
+  line1: string;
+  line2: string | null;
+  city: string;
+  postcode: string;
+  country: string;
+}
+
+export interface UserConsents {
+  tos_accepted_at: ISOTimestamp | null;
+  tos_version: string;
+  privacy_accepted_at: ISOTimestamp | null;
+  privacy_version: string;
+  marketing_consent: boolean;
+  marketing_consent_at: ISOTimestamp | null;
+  data_processing_at: ISOTimestamp | null;
+  age_confirmed: boolean;
+}
+
+export interface UserNotificationPrefs {
+  push_trip_receipts: boolean;
+  push_promotions: boolean;
+  email_receipts: boolean;
+  email_newsletter: boolean;
+  sms_critical: boolean;
+}
+
+export interface UserNote {
+  id: UUID;
+  at: ISOTimestamp;
+  author: string;
+  body: string;
+}
+
+export interface UserDevice {
+  id: string;
+  platform: 'ios' | 'android' | 'web';
+  model: string;
+  app_version: string;
+  os_version: string;
+  last_seen: ISOTimestamp;
+  push_token_masked: string;
+}
+
+export interface UserPaymentMethod {
+  id: UUID;
+  brand: string;
+  last4: string;
+  exp: string;
+  is_default: boolean;
+  status: 'valid' | 'expired' | 'requires_action';
+  added_at: ISOTimestamp;
+}
+
+export interface UserFormAnswer {
+  question: string;
+  answer: string;
+}
+
+export interface UserLoyaltyEvent {
+  id: string;
+  at: ISOTimestamp;
+  points: number;
+  reason: string;
+}
+
+/** Everything the customer detail page needs in one shot. */
+export interface UserProfileFull {
+  customer: CustomerRow;
+
+  avatar_url: string;
+  date_of_birth: string | null;
+  nationality: string;
+  gender: 'M' | 'F' | 'X' | null;
+  address: UserAddress;
+  preferred_lang: Lang;
+  email_verified: boolean;
+  phone_verified: boolean;
+  signup_source: 'ios' | 'android' | 'web' | 'referral';
+  signup_at: ISOTimestamp;
+  last_active_at: ISOTimestamp;
+  risk_score: number;
+  risk_reasons: string[];
+  tags: string[];
+  notes: UserNote[];
+  customer_group_name: string | null;
+  corporate_id: UUID | null;
+  corporate_name: string | null;
+  loyalty_tier: string;
+  loyalty_points: number;
+  loyalty_events: UserLoyaltyEvent[];
+  referrals_sent: number;
+  referrals_qualified: number;
+  referral_code: string;
+  wallet_balance_cents: number;
+  emergency_contact_name: string | null;
+  consents: UserConsents;
+  notification_prefs: UserNotificationPrefs;
+  payment_methods: UserPaymentMethod[];
+  devices: UserDevice[];
+  form_answers: UserFormAnswer[];
+  stats: UserStats;
+}

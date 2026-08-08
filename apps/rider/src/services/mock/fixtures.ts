@@ -1,4 +1,5 @@
 // Realistic Athens seed data for MockRiderApi. Coordinates are [lng, lat].
+import type { PricingSnapshot } from '@penny/db-types';
 import type {
   MapVehicle,
   MapZone,
@@ -9,6 +10,10 @@ import type {
   AddonProduct,
   FaqEntry,
   InboxItem,
+  LngLat,
+  TripDetail,
+  CostBreakdown,
+  KycDetail,
 } from '../types';
 
 export const ATHENS: City = {
