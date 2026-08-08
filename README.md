@@ -29,7 +29,8 @@ supabase/
 docs/        THE SPEC (00–13)
 ```
 
-Tooling: **pnpm** workspaces + **turborepo**. Node ≥ 20, Go ≥ 1.22.
+Tooling: **pnpm** workspaces + **turborepo**. Node ≥ 22 (unit tests use native
+TS type-stripping), Go ≥ 1.22.
 
 ## Running each piece (standalone, for testing)
 
