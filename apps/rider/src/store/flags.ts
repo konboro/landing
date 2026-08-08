@@ -51,7 +51,7 @@ export const useFlags = create<FlagsState>((set, get) => ({
   askedCamera: false,
   askedNotifications: false,
   setAsked(k) {
-    set({ [k]: true } as Pick<FlagsState, typeof k>);
+    set((s) => ({ ...s, [k]: true }));
   },
   reactionPassedAt: null,
   reactionBlockedUntil: null,

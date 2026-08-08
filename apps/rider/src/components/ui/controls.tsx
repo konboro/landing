@@ -83,14 +83,14 @@ export function Toggle({
   );
 }
 
-export function SegmentedControl<T extends string>({
+export function SegmentedControl<Opt extends string>({
   options,
   value,
   onChange,
 }: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
+  options: { value: Opt; label: string }[];
+  value: Opt;
+  onChange: (v: Opt) => void;
 }) {
   return (
     <View style={styles.segment}>

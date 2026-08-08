@@ -85,7 +85,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     ],
   ],
   experiments: {
-    typedRoutes: true,
+    // Kept off so router hrefs stay plain strings — enable once you've run the
+    // app once to generate .expo/types (typed routes then validate every href).
+    typedRoutes: false,
   },
   extra: {
     dataSource: process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'mock',

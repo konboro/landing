@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 
 /* ---------- Button ---------- */
 type Variant = 'default' | 'primary' | 'danger' | 'ghost';
@@ -18,7 +18,7 @@ export function Button({
 }
 
 /* ---------- Card ---------- */
-export function Card({ children, className = '', pad = false, style }: { children: ReactNode; className?: string; pad?: boolean; style?: React.CSSProperties }) {
+export function Card({ children, className = '', pad = false, style }: { children: ReactNode; className?: string; pad?: boolean; style?: CSSProperties }) {
   return <div className={`card ${pad ? 'card-pad' : ''} ${className}`.trim()} style={style}>{children}</div>;
 }
 export function CardHeader({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {

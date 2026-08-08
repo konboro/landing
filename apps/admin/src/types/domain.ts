@@ -11,10 +11,9 @@ import type {
   Vehicle,
   Trip,
   User,
-  Payment,
 } from '@penny/db-types';
 
-export type { UUID, ISOTimestamp } from '@penny/db-types';
+export type { UUID, ISOTimestamp, Debt, AuditLogEntry, Payment } from '@penny/db-types';
 
 /* ---------- Battery curves ---------- */
 export interface BatteryCurve {
@@ -381,5 +380,3 @@ export interface VerificationItem {
   photo_url: string;
   queued_at: ISOTimestamp;
 }
-
-export type { Payment };

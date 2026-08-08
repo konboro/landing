@@ -32,7 +32,7 @@ export default function EndRideScreen() {
 
   React.useEffect(() => { api.getZones().then(setZones); /* eslint-disable-next-line */ }, []);
 
-  const endPos = trip?.route[trip.route.length - 1] ?? trip?.start_pos ?? [23.7275, 37.9838];
+  const endPos: [number, number] = trip?.route[trip.route.length - 1] ?? trip?.start_pos ?? [23.7275, 37.9838];
   const ev = useMemo(() => evaluateZones(endPos, zones as unknown as ZoneLike[]), [endPos, zones]);
   const zoneCheck = canEndHere(ev);
 
@@ -75,9 +75,9 @@ export default function EndRideScreen() {
 
   if (phase === 'form') {
     return (
-      <Screen edges={['top']} scroll={false}>
+      <Screen edges={['top']} scroll={false} padded={false}>
         <Header title={t('endRide.title')} onBack={() => setPhase('photo')} />
-        <ScrollView contentContainerStyle={{ padding: theme.space.lg, gap: theme.space.md, paddingBottom: 140 }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: theme.space.lg, gap: theme.space.md, paddingBottom: 140 }}>
           <Card>
             <Row justify="space-between">
               <Row gap={8}><Icon name="camera" size={20} color={theme.color.success} /><T variant="body" style={{ fontWeight: '700' }}>{t('endRide.photoTitle')}</T></Row>

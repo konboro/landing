@@ -36,7 +36,7 @@ export default function ActiveRideScreen() {
   if (!trip) return <Screen><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
 
   const paused = trip.status === 'paused';
-  const pos = trip.route[trip.route.length - 1] ?? trip.start_pos ?? [23.7275, 37.9838];
+  const pos: [number, number] = trip.route[trip.route.length - 1] ?? trip.start_pos ?? [23.7275, 37.9838];
   const ev = evaluateZones(pos, zones as unknown as ZoneLike[]);
 
   const doShare = async () => {

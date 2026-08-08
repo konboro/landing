@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { usePanelData } from '@/hooks/usePanelData';
 import { useDS } from '@/context/DataContext';
@@ -245,6 +245,6 @@ function ReportBuilder() {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
+function MiniStat({ label, value }: { label: string; value: ReactNode }) {
   return <div className="card stat-card" style={{ minWidth: 160, flex: 1 }}><span className="stat-label">{label}</span><span style={{ fontSize: 20, fontWeight: 700 }}>{value}</span></div>;
 }

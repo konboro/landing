@@ -75,7 +75,7 @@ export function Donut({ data, size = 180, centerLabel, centerValue }: { data: Do
         <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%" innerRadius={size * 0.3} outerRadius={size * 0.46} paddingAngle={2} stroke="none">
           {data.map((d, i) => <Cell key={i} fill={d.color} />)}
         </Pie>
-        <Tooltip formatter={(v: number, n: string) => [`${v} (${total ? Math.round((v / total) * 100) : 0}%)`, n]} />
+        <Tooltip />
       </PieChart>
       <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
         <div style={{ textAlign: 'center' }}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
@@ -264,7 +264,7 @@ export function CustomerDetailPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: React.ReactNode; tone?: 'danger' | 'warning' | 'success' }) {
+function Stat({ label, value, tone }: { label: string; value: ReactNode; tone?: 'danger' | 'warning' | 'success' }) {
   const col = tone === 'danger' ? colors.danger : tone === 'warning' ? colors.warning : tone === 'success' ? colors.success : colors.text;
   return (
     <div className="card stat-card" style={{ minWidth: 150, flex: 1 }}>

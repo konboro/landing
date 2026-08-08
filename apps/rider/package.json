@@ -18,6 +18,7 @@
     "@penny/db-types": "workspace:*",
     "@penny/geo": "workspace:*",
     "@penny/ui": "workspace:*",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@rnmapbox/maps": "^10.1.33",
     "@stripe/stripe-react-native": "0.45.0",
     "@supabase/supabase-js": "^2.48.0",

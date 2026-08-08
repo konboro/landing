@@ -67,7 +67,7 @@ const GLYPH: Record<IconName, string> = {
   scan: '📷', qr: '⬛', flash: '🔦', battery: '🔋', range: '📍', walk: '🚶',
   reserve: '⏱️', bell: '🔔', ring: '📣', pause: '⏸️', play: '▶️', locate: '🎯',
   share: '🔗', camera: '📸', check: '✓', close: '✕', chevron: '›', back: '‹',
-  star: '★', card: '💳', applepay: '', package: '🎟️', crown: '👑', shield: '🛡️',
+  star: '★', card: '💳', applepay: '📲', package: '🎟️', crown: '👑', shield: '🛡️',
   promo: '🏷️', warning: '⚠️', danger: '🚨', info: 'ℹ️', lock: '🔒', unlock: '🔓',
   leaf: '🌿', fire: '🔥', points: '⭐', referral: '🎁', lang: '🌐', trash: '🗑️',
   phone: '📞', mail: '✉️', whatsapp: '💚', inbox: '📥', flag: '🚩', transit: '🚇',

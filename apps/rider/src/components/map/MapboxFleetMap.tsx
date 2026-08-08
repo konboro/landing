@@ -56,10 +56,10 @@ export function MapboxFleetMap(props: FleetMapProps) {
       style={StyleSheet.absoluteFill}
       styleURL={props.night ? mapStyles.night : mapStyles.day}
       onPress={props.onMapPress}
-      onCameraChanged={(e) => {
-        const b = e.properties.bounds;
+      onCameraChanged={(e: any) => {
+        const b = e?.properties?.bounds;
         if (b?.sw && b?.ne) setBbox([b.sw[0], b.sw[1], b.ne[0], b.ne[1]]);
-        setZoom(e.properties.zoom);
+        if (typeof e?.properties?.zoom === 'number') setZoom(e.properties.zoom);
       }}
       scaleBarEnabled={false}
       compassEnabled
@@ -73,9 +73,9 @@ export function MapboxFleetMap(props: FleetMapProps) {
       />
       {props.userPos ? <Mapbox.UserLocation visible /> : null}
 
-      <Mapbox.ShapeSource id="zones" shape={zoneFeatures}>
-        <Mapbox.FillLayer id="zones-fill" style={{ fillColor: ['get', 'color'], fillOpacity: 0.6 }} />
-        <Mapbox.LineLayer id="zones-line" style={{ lineColor: ['get', 'color'], lineWidth: 1.5 }} />
+      <Mapbox.ShapeSource id="zones" shape={zoneFeatures as any}>
+        <Mapbox.FillLayer id="zones-fill" style={{ fillColor: ['get', 'color'], fillOpacity: 0.6 } as any} />
+        <Mapbox.LineLayer id="zones-line" style={{ lineColor: ['get', 'color'], lineWidth: 1.5 } as any} />
       </Mapbox.ShapeSource>
 
       {clusters.map((c) =>

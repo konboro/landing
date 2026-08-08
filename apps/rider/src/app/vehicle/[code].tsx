@@ -77,9 +77,9 @@ export default function PreUnlockScreen() {
   const money = (c: number) => formatMoney(c, quote?.currency ?? 'EUR');
 
   return (
-    <Screen edges={['top']} scroll={false}>
+    <Screen edges={['top']} scroll={false} padded={false}>
       <Header title={t('preUnlock.title')} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: theme.space.lg, paddingBottom: 140, gap: theme.space.md }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: theme.space.lg, paddingBottom: 140, gap: theme.space.md }}>
         {vehicle ? (
           <Card>
             <Row justify="space-between">

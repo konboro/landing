@@ -11,7 +11,3 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
-
-// mapbox-gl-draw ships its own types via @types/mapbox__mapbox-gl-draw; this
-// keeps the CSS side-effect imports type-safe under strict mode.
-declare module '*.css';

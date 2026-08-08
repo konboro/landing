@@ -19,7 +19,15 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noUncheckedIndexedAccess": false,
-    "types": ["vite/client"]
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@penny/db-types": ["../../packages/db-types/src/index.ts"],
+      "@penny/api-client": ["../../packages/api-client/src/index.ts"],
+      "@penny/geo": ["../../packages/geo/src/index.ts"],
+      "@penny/ui": ["../../packages/ui/src/index.ts"]
+    }
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist"]

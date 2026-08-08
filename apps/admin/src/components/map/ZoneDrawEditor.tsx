@@ -35,6 +35,9 @@ export function ZoneDrawEditor({ zones, height = 460, onCreate, onUpdate, onDele
     const draw = new MapboxDraw({ displayControlsDefault: false, controls: { polygon: true, trash: true } });
     drawRef.current = draw;
     map.addControl(draw as unknown as mapboxgl.IControl);
+    // mapbox-gl-draw fires custom string events not in the typed Map event map.
+    type DrawFeature = { id?: string | number; geometry: { type: string; coordinates: unknown } };
+    const on = map.on.bind(map) as unknown as (type: string, listener: (e: { features: DrawFeature[] }) => void) => void;
     map.on('load', () => {
       for (const z of zones) {
         try {
@@ -42,15 +45,15 @@ export function ZoneDrawEditor({ zones, height = 460, onCreate, onUpdate, onDele
         } catch { /* ignore malformed */ }
       }
     });
-    map.on('draw.create', (e: { features: GeoJSON.Feature[] }) => {
+    on('draw.create', (e) => {
       const f = e.features[0];
       if (f && f.geometry.type === 'Polygon') onCreate?.(f.geometry.coordinates as LngLat[][]);
     });
-    map.on('draw.update', (e: { features: GeoJSON.Feature[] }) => {
+    on('draw.update', (e) => {
       const f = e.features[0];
       if (f && f.geometry.type === 'Polygon' && typeof f.id === 'string') onUpdate?.(f.id, f.geometry.coordinates as LngLat[][]);
     });
-    map.on('draw.delete', (e: { features: GeoJSON.Feature[] }) => {
+    on('draw.delete', (e) => {
       const f = e.features[0];
       if (f && typeof f.id === 'string') onDelete?.(f.id);
     });

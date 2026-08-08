@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { usePanelData } from '@/hooks/usePanelData';
 import { useToast } from '@/components/ui/Toast';
 import { useDS } from '@/context/DataContext';
@@ -239,6 +239,6 @@ function ErrorTab({ db }: { db: DB }) {
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: React.ReactNode }) {
+function MiniStat({ label, value }: { label: string; value: ReactNode }) {
   return <div className="card stat-card" style={{ minWidth: 150, flex: 1 }}><span className="stat-label">{label}</span><span style={{ fontSize: 22, fontWeight: 700, color: colors.text }}>{value}</span></div>;
 }
