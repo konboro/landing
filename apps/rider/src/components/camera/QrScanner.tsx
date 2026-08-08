@@ -3,7 +3,7 @@
 // always completable in Expo Go.
 import React, { useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { T, Button, Row } from '../ui';
 import { Icon } from '../ui/Icon';
@@ -42,6 +42,9 @@ function LiveScanner({
   const [permission, requestPermission] = mod.useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const locked = useRef(false);
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { brand } = useBrand();
   const { CameraView } = mod;
 
   if (!permission) return <View style={styles.fill} />;
@@ -51,7 +54,7 @@ function LiveScanner({
       <View style={[styles.fill, styles.center, { padding: theme.space.xl, gap: theme.space.lg }]}>
         <Icon name="camera" size={48} />
         <T variant="subtitle" center>Camera access</T>
-        <T variant="caption" center>Penny needs the camera to scan the scooter QR code.</T>
+        <T variant="caption" center>{brand.name} needs the camera to scan the scooter QR code.</T>
         <Button title="Allow camera" onPress={requestPermission} icon="camera" />
         <Button title="Enter code manually" variant="ghost" onPress={onManual} />
       </View>
@@ -69,7 +72,7 @@ function LiveScanner({
           if (locked.current) return;
           locked.current = true;
           Haptics.success();
-          // Accept a raw code or a penny://vehicle/{code} deep link.
+          // Accept a raw code or a <scheme>://vehicle/{code} deep link.
           const m = data.match(/vehicle\/(.+)$/);
           onScan((m ? m[1]! : data).trim());
         }}
@@ -93,6 +96,7 @@ function FallbackScanner({
   onManual: () => void;
   simulateCode: string;
 }) {
+  const styles = useStyles(useTheme());
   return (
     <View style={[styles.fill, styles.fallbackBg]}>
       <ScannerOverlay torch={false} onManual={onManual} onSimulate={() => onScan(simulateCode)} noTorch />
@@ -113,6 +117,8 @@ function ScannerOverlay({
   onSimulate: () => void;
   noTorch?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <View style={styles.overlay} pointerEvents="box-none">
       <View style={styles.reticle}>
@@ -139,22 +145,22 @@ function ScannerOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   fill: { flex: 1 },
-  center: { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.color.surface },
-  fallbackBg: { backgroundColor: theme.palette.ink900 },
-  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: theme.space.xl },
+  center: { alignItems: 'center', justifyContent: 'center', backgroundColor: t.color.surface },
+  fallbackBg: { backgroundColor: t.palette.ink900 },
+  overlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: t.space.xl },
   reticle: { width: 240, height: 240, position: 'relative' },
-  corner: { position: 'absolute', width: 40, height: 40, borderColor: theme.color.onPrimary },
+  corner: { position: 'absolute', width: 40, height: 40, borderColor: '#ffffff' },
   tl: { top: 0, left: 0, borderLeftWidth: 4, borderTopWidth: 4, borderTopLeftRadius: 12 },
   tr: { top: 0, right: 0, borderRightWidth: 4, borderTopWidth: 4, borderTopRightRadius: 12 },
   bl: { bottom: 0, left: 0, borderLeftWidth: 4, borderBottomWidth: 4, borderBottomLeftRadius: 12 },
   br: { bottom: 0, right: 0, borderRightWidth: 4, borderBottomWidth: 4, borderBottomRightRadius: 12 },
-  hint: { marginTop: theme.space.xl, textShadowColor: '#000', textShadowRadius: 6 },
-  controls: { position: 'absolute', bottom: 48, left: theme.space.xl, right: theme.space.xl, gap: theme.space.md },
+  hint: { marginTop: t.space.xl, textShadowColor: '#000', textShadowRadius: 6 },
+  controls: { position: 'absolute', bottom: 48, left: t.space.xl, right: t.space.xl, gap: t.space.md },
   round: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
   ghost: { backgroundColor: 'rgba(255,255,255,0.12)' },
-});
+}));

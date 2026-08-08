@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Share, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { formatMoney, formatDuration, formatDistance, formatDateTime } from '@penny/ui';
-import { theme } from '../lib/theme';
+import { useBrand, useTheme } from '../brand';
 import { getApi } from '../services';
 import type { RiderStatsDetail, MonthBucket } from '../services/types';
 import { useT } from '../i18n';
@@ -10,6 +10,7 @@ import { Screen, Header, T, Row, Card, Button, Badge, Icon, Divider, ProgressBar
 
 /** Dependency-free bar chart — plain Views, no chart library. */
 function MonthBars({ months }: { months: MonthBucket[] }) {
+  const theme = useTheme();
   const max = Math.max(1, ...months.map((m) => m.rides));
   return (
     <Row gap={6} align="flex-end" style={{ height: 120, marginTop: theme.space.sm }}>
@@ -47,6 +48,8 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
 
 export default function StatsScreen() {
   const { t } = useT();
+  const theme = useTheme();
+  const { brand, isEnabled } = useBrand();
   const api = getApi();
   const router = useRouter();
   const [stats, setStats] = useState<RiderStatsDetail | null>(null);
@@ -111,7 +114,7 @@ export default function StatsScreen() {
           <Tile label={t('rideDetail.distance')} value={formatDistance(stats.distance_m)} />
           <Tile label={t('rideDetail.duration')} value={formatDuration(stats.duration_s)} />
           <Tile label={t('rideDetail.co2')} value={`${stats.co2_kg} kg`} />
-          <Tile label={t('endRide.total')} value={formatMoney(stats.spent_cents, 'EUR')} />
+          <Tile label={t('endRide.total')} value={formatMoney(stats.spent_cents, brand.currency)} />
           <Tile
             label={t('stats.avgRide')}
             value={formatDistance(stats.avg_distance_m)}
@@ -153,6 +156,7 @@ export default function StatsScreen() {
       </Card>
 
       {/* ---- loyalty ---- */}
+      {isEnabled('loyalty') ? (
       <Card style={{ marginTop: theme.space.md }}>
         <Row justify="space-between" align="center">
           <Row gap={8} align="center">
@@ -173,8 +177,10 @@ export default function StatsScreen() {
             : t('stats.topTier')}
         </T>
       </Card>
+      ) : null}
 
       {/* ---- referrals ---- */}
+      {isEnabled('referrals') ? (
       <Card style={{ marginTop: theme.space.md }}>
         <Row gap={8} align="center">
           <Icon name="referral" size={18} color={theme.color.primary} />
@@ -183,10 +189,11 @@ export default function StatsScreen() {
         <Row gap={theme.space.md} style={{ flexWrap: 'wrap', marginTop: theme.space.sm }}>
           <Tile label={t('stats.invited')} value={String(stats.referral.invited)} />
           <Tile label={t('stats.converted')} value={String(stats.referral.converted)} />
-          <Tile label={t('stats.earned')} value={formatMoney(stats.referral.earned_cents, 'EUR')} />
+          <Tile label={t('stats.earned')} value={formatMoney(stats.referral.earned_cents, brand.currency)} />
         </Row>
         <Badge tone="neutral" label={stats.referral.code} style={{ alignSelf: 'flex-start', marginTop: theme.space.sm }} />
       </Card>
+      ) : null}
 
       <Button title={t('stats.shareRecap')} onPress={shareRecap} style={{ marginTop: theme.space.lg }} />
     </Screen>

@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { evaluateZones, canEndHere, type ZoneLike } from '@penny/geo';
 import { formatMoney, formatDuration, formatDistance, co2SavedKg } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import type { MapZone, TripView } from '../../services/types';
@@ -19,6 +19,9 @@ const TAGS = ['smooth', 'fast', 'clean', 'comfy', 'dirty', 'damaged'];
 export default function EndRideScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { isEnabled } = useBrand();
   const api = getApi();
   const { trip, setTrip } = useTrip();
 
@@ -93,7 +96,7 @@ export default function EndRideScreen() {
               icon="warning"
               title={t('endRide.zoneBad')}
               body={t(`ride.${zoneCheck.reason === 'no_parking_zone' ? 'noGo' : 'outside'}`)}
-              action={<Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} />}
+              action={isEnabled('parkingSchool') ? <Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} /> : undefined}
             />
           )}
 
@@ -162,6 +165,7 @@ export default function EndRideScreen() {
 }
 
 function Line({ label, value, tone, strong }: { label: string; value: string; tone?: 'success'; strong?: boolean }) {
+  const theme = useTheme();
   return (
     <Row justify="space-between">
       <T variant={strong ? 'subtitle' : 'body'} color={theme.color.textMuted}>{label}</T>
@@ -170,12 +174,12 @@ function Line({ label, value, tone, strong }: { label: string; value: string; to
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   photoHeader: { position: 'absolute', top: 0, left: 0, right: 0 },
   footer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, padding: theme.space.lg, paddingBottom: theme.space.xl,
-    backgroundColor: theme.color.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border,
+    position: 'absolute', bottom: 0, left: 0, right: 0, padding: t.space.lg, paddingBottom: t.space.xl,
+    backgroundColor: t.color.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.color.border,
   },
-  okCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: theme.color.success, alignItems: 'center', justifyContent: 'center' },
-});
+  okCircle: { width: 72, height: 72, borderRadius: 36, backgroundColor: t.color.success, alignItems: 'center', justifyContent: 'center' },
+}));

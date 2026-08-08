@@ -4,7 +4,7 @@
 // ride-detail screen never needs a token or a network connection.
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { theme } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { FleetMap } from './map/FleetMap';
 import type { LngLat } from '../services/types';
 import { T, Row } from './ui/primitives';
@@ -19,6 +19,8 @@ export function RouteMap({
   height?: number;
   emptyLabel: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   if (route.length < 2) {
     return (
       <View style={[styles.box, styles.empty, { height }]}>
@@ -50,13 +52,13 @@ export function RouteMap({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   box: {
-    borderRadius: theme.radius.lg,
+    borderRadius: t.radius.lg,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
-    backgroundColor: theme.color.surfaceAlt,
+    borderColor: t.color.border,
+    backgroundColor: t.color.surfaceAlt,
   },
   empty: { alignItems: 'center', justifyContent: 'center' },
-});
+}));

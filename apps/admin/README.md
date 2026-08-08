@@ -34,6 +34,7 @@ Copy `.env.example` → `.env.local`. All client vars are `VITE_`-prefixed.
 |---|---|---|
 | `VITE_DATA_SOURCE` | `mock` (standalone) or `supabase` (production) | `mock` |
 | `VITE_MAPBOX_TOKEN` | Mapbox GL token. **Optional** — without it, every map renders a graceful "map unavailable" fallback (with a schematic scatter) and the rest of the panel still works. | — |
+| `VITE_BRAND` | Pins the deployment to a built-in white-label brand (`penny`, `aegean`, `volta`). Empty ⇒ the brand stored in `app_config.brand` wins, falling back to `pennyBrand`. | — |
 | `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` / `VITE_EDGE_BASE_URL` | Only used when `VITE_DATA_SOURCE=supabase` | — |
 
 Nothing crashes if env is missing — the app boots on the mock source with a
@@ -76,12 +77,51 @@ check) · Pricing (plans, dynamic preview, packages, subs, add-ons, penalties) �
 Marketing (promos, groups rule builder, campaigns with device preview, loyalty,
 POIs, referrals) · Fleet maintenance (tasks, damage→penalty, Manage IoT +
 provisioning wizard, IoT log with **Codec 8E hex frame viewer**, scan log, error
-log) · Finance (transactions, ledger explorer, debt aging, invoices/myDATA,
+log) · **Connectivity** (SIM inventory, data-plan usage bars, cost MTD, alerts
+strip, provider sync, SIM detail drawer with 30-day usage chart and audited
+lifecycle actions) · Finance (transactions, ledger explorer, debt aging, invoices/myDATA,
 Stripe↔ledger reconciliation) · Subscriptions & Add-ons content + purchase
 history + FAQ editor · Team & accounts (staff, permission matrix, audit log,
 corporate, MDS/GBFS) · Settings (preferences, models + **battery curve editor**,
 customer form builder, reaction test, localization PL/EN/EL, personalization,
-tutorials, **alerts & notification rules** editor with test-fire).
+tutorials, **alerts & notification rules** editor with test-fire, **Branding**
+white-label editor).
+
+## Connectivity (SIM management)
+
+`Fleet → Connectivity` manages the SIM behind every IoT device. Provider is
+Truphone / 1GLOBAL behind a swappable adapter; the panel reads the `v_sim_*`
+views and mutates through the `sim-sync` / `sim-command` / `admin-sim-detail`
+edge functions. In mock mode the whole fleet is generated locally (one SIM per
+device + spares, 30 days of daily usage, deliberate over-limit / silent /
+unassigned / terminated-but-fitted outliers so the alerts strip is never empty).
+
+Why it matters operationally: per docs/03 the **MSISDN is the SMS-fallback
+address** the gateway uses when a device has no GPRS session, so a suspended or
+silent SIM means commands cannot reach that scooter — not just a billing issue.
+Outbound SMS volume feeds the SMS-budget alarm surfaced as a KPI tile.
+
+ICCID / IMSI / MSISDN / IMEI are always rendered monospace and **exactly as
+stored** (Hard Rule #10). Suspend and Terminate require a reason and write to
+the audit log.
+
+## White-label branding
+
+`@penny/ui`'s `brand.ts` is the single source of truth. `src/context/BrandContext.tsx`
+resolves the active brand — `VITE_BRAND` → `app_config.brand` (via
+`DataSource.getBrandConfig()`) → `pennyBrand` — and `src/lib/theme.ts` pushes it
+into `<html>` as the CSS custom properties the whole panel already used
+(`--color-*`, `--space-*`, `--radius-*`, `--fs-*`, `--font-*`), so re-theming is
+live and needs no component changes. Vehicle status colours come from
+`statusColor(brand, …)`, never a hardcoded hex.
+
+`Settings → Branding` is the editor: colour pickers (with a `readableOn`
+suggestion for `onPrimary`), typography/shape sliders, support + legal fields,
+feature-flag toggles, a live preview that re-renders on every keystroke,
+inline `validateBrand()` contrast warnings, a light/dark preview toggle,
+JSON import/export in the exact shape `brandFromConfig()` accepts, "Reset to
+Penny", and an audited Save. The top bar carries a brand switcher (Penny +
+two demo operators) and a light/dark toggle for instant demos.
 
 ## Conventions honored
 
@@ -92,8 +132,9 @@ tutorials, **alerts & notification rules** editor with test-fire).
 - Global ⌘K search: customer by phone, vehicle by code, trip by id.
 - Every table: server-style pagination, multi-column sort (shift-click),
   column picker, CSV export, saved-view chips.
-- Design system driven by `@penny/ui` tokens injected as CSS variables
-  (`src/lib/theme.ts` + `src/styles/global.css`). Light theme, Penny blue.
+- Design system driven by the **active brand** injected as CSS variables
+  (`src/lib/theme.ts` + `src/styles/global.css`). No component hardcodes a hex;
+  light and dark both come from the brand.
 
 ## Notes / TODO for reviewers
 

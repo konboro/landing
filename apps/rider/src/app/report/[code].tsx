@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import { useT } from '../../i18n';
@@ -13,6 +13,7 @@ export default function ReportProblemScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const hasCode = code && code !== 'none';
 

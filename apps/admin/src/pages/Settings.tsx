@@ -9,7 +9,9 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Modal } from '@/components/ui/Modal';
 import { LineTrend, chartPalette } from '@/components/charts/Charts';
 import { titleCase } from '@/lib/format';
-import { vehicleStatusColor } from '@penny/ui';
+import { useBrand } from '@/context/BrandContext';
+import { STATUS_KEYS } from '@/lib/theme';
+import { BrandingEditor } from '@/components/branding/BrandingEditor';
 import type { AppConfigItem, BatteryCurve, NotificationRule, Translation } from '@/types/domain';
 
 export function SettingsPage() {
@@ -25,6 +27,7 @@ export function SettingsPage() {
         { key: 'reaction', label: 'Reaction test' },
         { key: 'i18n', label: 'Localization' },
         { key: 'personalization', label: 'Map & personalization' },
+        { key: 'branding', label: 'Branding' },
         { key: 'tutorials', label: 'Tutorials' },
         { key: 'notifications', label: 'Alerts & notifications' },
       ]} />
@@ -36,6 +39,7 @@ export function SettingsPage() {
           {tab === 'reaction' ? <Reaction /> : null}
           {tab === 'i18n' ? <I18n db={db} /> : null}
           {tab === 'personalization' ? <Personalization /> : null}
+          {tab === 'branding' ? <BrandingEditor /> : null}
           {tab === 'tutorials' ? <Tutorials db={db} /> : null}
           {tab === 'notifications' ? <Notifications db={db} /> : null}
         </>
@@ -188,16 +192,20 @@ function I18n({ db }: { db: DB }) {
 }
 
 function Personalization() {
-  const toast = useToast();
-  const statuses = Object.keys(vehicleStatusColor);
+  // Vehicle status colours are brand tokens — edit them in Settings → Branding,
+  // this tab just shows what the active brand resolves to.
+  const { brand, mode, statusColor } = useBrand();
   return (
     <Card>
-      <CardHeader title="Map icons & personalization" sub="app_content" actions={<Button size="sm" variant="primary" onClick={() => toast.push('Saved', 'success')}>Save</Button>} />
+      <CardHeader
+        title="Map icons & personalization"
+        sub={`Resolved from the “${brand.name}” brand · ${mode} mode`}
+      />
       <div className="card-pad row-wrap">
-        {statuses.map((s) => (
+        {STATUS_KEYS.map((s) => (
           <div key={s} className="card" style={{ padding: 12, minWidth: 160, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 16, height: 16, borderRadius: 4, background: vehicleStatusColor[s] }} />
-            <div><div style={{ fontSize: 13, fontWeight: 600 }}>{titleCase(s)}</div><div className="muted" style={{ fontSize: 12 }}>{vehicleStatusColor[s]}</div></div>
+            <span style={{ width: 16, height: 16, borderRadius: 4, background: statusColor(s) }} />
+            <div><div style={{ fontSize: 13, fontWeight: 600 }}>{titleCase(s)}</div><div className="muted mono" style={{ fontSize: 12 }}>{statusColor(s)}</div></div>
           </div>
         ))}
       </div>

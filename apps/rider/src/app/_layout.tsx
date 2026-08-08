@@ -4,11 +4,20 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack } from 'expo-router';
-import { theme } from '../lib/theme';
+import { BrandProvider, useTheme } from '../brand';
 import { useSession } from '../store/session';
 import { useTrip } from '../store/trip';
 
 export default function RootLayout() {
+  return (
+    <BrandProvider>
+      <AppShell />
+    </BrandProvider>
+  );
+}
+
+function AppShell() {
+  const theme = useTheme();
   const load = useSession((s) => s.load);
   const hydrateTrip = useTrip((s) => s.hydrate);
 
@@ -20,7 +29,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="dark" />
+        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
         <Stack
           screenOptions={{
             headerShown: false,

@@ -1,49 +1,25 @@
-// Rider app theme — built on the shared @penny/ui design tokens.
-// Light theme is the product default (per docs/06). We add a `map` sub-theme
-// for day/night map styling and a handful of RN-specific derived values.
-import { palette, colors as base, space, radius, font } from '@penny/ui/tokens';
+// Rider app theme — the STATIC DEFAULT.
+//
+// This is now derived from `pennyBrand` (packages/ui/src/brand.ts) rather than
+// duplicating literals: one source of truth for the shipped brand.
+//
+// Use this only where a React hook isn't available (module-scope constants,
+// non-component helpers). Anything that renders should call `useTheme()` from
+// `src/brand` so it re-themes when the brand or light/dark mode changes.
+import { pennyBrand } from '@penny/ui';
+import { deriveTheme, type RiderTheme } from '../brand/deriveTheme';
 
-export const theme = {
-  palette,
-  color: {
-    ...base,
-    // RN-specific additions / clarifications
-    scrim: 'rgba(13,18,32,0.45)',
-    overlay: 'rgba(13,18,32,0.06)',
-    successSoft: 'rgba(31,170,89,0.12)',
-    warningSoft: 'rgba(232,163,23,0.14)',
-    dangerSoft: 'rgba(224,65,65,0.12)',
-    primarySoft: base.primarySoft,
-    tabInactive: palette.ink400,
-  },
-  space,
-  radius,
-  font,
-  // Native shadow presets (iOS shadow* + Android elevation).
-  shadow: {
-    card: {
-      shadowColor: '#0d1220',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 2,
-    },
-    pop: {
-      shadowColor: '#0d1220',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.16,
-      shadowRadius: 20,
-      elevation: 10,
-    },
-  },
-} as const;
+export const theme: RiderTheme = deriveTheme(pennyBrand, 'light');
 
-export type Theme = typeof theme;
+export type Theme = RiderTheme;
 
-// Mapbox style URLs (day/night). Used only when native Mapbox is active.
+/**
+ * Mapbox style URLs for the default brand. Brand-aware screens should read
+ * `useTheme().map` instead — this stays for non-component call sites.
+ */
 export const mapStyles = {
-  day: 'mapbox://styles/mapbox/light-v11',
-  night: 'mapbox://styles/mapbox/navigation-night-v1',
+  day: pennyBrand.maps.styleDay,
+  night: pennyBrand.maps.styleNight,
 } as const;
 
 export const MIN_TOUCH = 44; // accessibility — minimum tap target (pt)

@@ -8,7 +8,7 @@ import {
   formatDateTime,
   co2SavedKg,
 } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { getApi } from '../../services';
 import type { TripDetail, CostBreakdown } from '../../services/types';
 import { useT } from '../../i18n';
@@ -33,6 +33,7 @@ function CostLine({
   credit?: boolean;
   strong?: boolean;
 }) {
+  const theme = useTheme();
   if (!cents && !strong) return null;
   return (
     <Row justify="space-between" style={{ paddingVertical: 5 }}>
@@ -63,6 +64,8 @@ export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const { isEnabled } = useBrand();
   const api = getApi();
 
   const [trip, setTrip] = useState<TripDetail | null>(null);
@@ -229,7 +232,7 @@ export default function TripDetailScreen() {
               {t('rideDetail.reviewedAt', { when: formatDateTime(review.reviewed_at) })}
             </T>
           ) : null}
-          {review.outcome === 'rejected' ? (
+          {review.outcome === 'rejected' && isEnabled('parkingSchool') ? (
             <Button
               variant="ghost"
               title={t('rideDetail.parkingSchool')}

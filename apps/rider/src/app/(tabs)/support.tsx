@@ -1,21 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { View, Pressable, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { getApi } from '../../services';
 import type { FaqEntry } from '../../services/types';
 import { useT, useI18n } from '../../i18n';
 import { Screen, T, Row, Card, Button, Divider, ListRow, Icon } from '../../components/ui';
 
+/** `+30 210 000 0000` → `https://wa.me/302100000000` */
+function whatsappUrl(number: string): string {
+  return `https://wa.me/${number.replace(/[^\d]/g, '')}`;
+}
+
 export default function SupportScreen() {
   const { t } = useT();
   const { lang } = useI18n();
+  const theme = useTheme();
+  const { brand } = useBrand();
   const api = getApi();
   const router = useRouter();
   const [faq, setFaq] = useState<FaqEntry[]>([]);
   const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => { api.getFaq(lang).then(setFaq); }, [api, lang]);
+
+  const { email, phone, url, whatsapp } = brand.support;
 
   return (
     <Screen edges={['top']} scroll>
@@ -44,10 +53,48 @@ export default function SupportScreen() {
       </Card>
 
       <T variant="label" style={{ marginBottom: theme.space.sm }}>{t('support.contact')}</T>
-      <Row gap={theme.space.md}>
-        <Button title={t('support.email')} icon="mail" variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL('mailto:support@penny.rent')} />
-        <Button title={t('support.whatsapp')} icon="whatsapp" variant="secondary" style={{ flex: 1 }} onPress={() => Linking.openURL('https://wa.me/302100000000')} />
+      <Row gap={theme.space.md} wrap>
+        <Button
+          title={t('support.email')}
+          icon="mail"
+          variant="secondary"
+          style={{ flex: 1, minWidth: 140 }}
+          onPress={() => Linking.openURL(`mailto:${email}`).catch(() => undefined)}
+        />
+        {whatsapp ? (
+          <Button
+            title={t('support.whatsapp')}
+            icon="whatsapp"
+            variant="secondary"
+            style={{ flex: 1, minWidth: 140 }}
+            onPress={() => Linking.openURL(whatsappUrl(whatsapp)).catch(() => undefined)}
+          />
+        ) : null}
+        {phone ? (
+          <Button
+            title={phone}
+            icon="phone"
+            variant="secondary"
+            style={{ flex: 1, minWidth: 140 }}
+            onPress={() => Linking.openURL(`tel:${phone.replace(/\s/g, '')}`).catch(() => undefined)}
+          />
+        ) : null}
       </Row>
+
+      {url ? (
+        <Button
+          title={`${brand.name} help centre`}
+          icon="help"
+          variant="ghost"
+          style={{ marginTop: theme.space.md }}
+          onPress={() => Linking.openURL(url).catch(() => undefined)}
+        />
+      ) : null}
+
+      <T variant="caption" center style={{ marginTop: theme.space.lg }}>
+        {brand.legal.legalName}
+        {brand.legal.vatId ? ` · VAT ${brand.legal.vatId}` : ''}
+      </T>
     </Screen>
   );
 }

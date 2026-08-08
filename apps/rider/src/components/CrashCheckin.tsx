@@ -1,8 +1,8 @@
 // Crash check-in overlay (docs/06 2nd-pass): fall detected → full-screen prompt
 // → no response in 60 s → emergency SMS + support alert (placeholder in mock).
 import React, { useEffect, useState } from 'react';
-import { View, Modal, StyleSheet } from 'react-native';
-import { theme } from '../lib/theme';
+import { View, Modal } from 'react-native';
+import { useTheme, makeStyles } from '../brand';
 import { Haptics } from '../lib/native';
 import { getApi } from '../services';
 import { useT } from '../i18n';
@@ -12,6 +12,8 @@ const WINDOW_S = 60;
 
 export function CrashCheckin({ tripId, visible, onResolved }: { tripId: string; visible: boolean; onResolved: () => void }) {
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const api = getApi();
   const [remaining, setRemaining] = useState(WINDOW_S);
   const [alerted, setAlerted] = useState(false);
@@ -78,16 +80,16 @@ export function CrashCheckin({ tripId, visible, onResolved }: { tripId: string; 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   backdrop: {
     flex: 1,
-    backgroundColor: theme.color.danger,
+    backgroundColor: t.color.danger,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: theme.space.xl,
+    padding: t.space.xl,
   },
   iconWrap: {
     width: 88, height: 88, borderRadius: 44, backgroundColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center', justifyContent: 'center',
   },
-});
+}));

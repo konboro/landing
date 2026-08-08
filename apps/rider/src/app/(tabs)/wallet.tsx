@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { formatMoney } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import type { Wallet, Card as CardType, PackageProduct, SubscriptionProduct, AddonProduct, DebtView } from '../../services/types';
@@ -13,7 +13,14 @@ import {
 
 export default function WalletScreen() {
   const { t } = useT();
+  const theme = useTheme();
+  const { brand, isEnabled } = useBrand();
   const api = getApi();
+
+  const packagesOn = isEnabled('packages');
+  const subscriptionsOn = isEnabled('subscriptions');
+  const topUpOn = isEnabled('walletTopUp');
+
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [cards, setCards] = useState<CardType[]>([]);
   const [packages, setPackages] = useState<PackageProduct[]>([]);
@@ -32,7 +39,7 @@ export default function WalletScreen() {
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
-  const money = (c: number) => formatMoney(c, wallet?.currency ?? 'EUR');
+  const money = (c: number) => formatMoney(c, wallet?.currency ?? brand.currency);
   const debtTotal = debts.reduce((a, d) => a + d.amount_cents, 0);
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
@@ -56,10 +63,12 @@ export default function WalletScreen() {
 
       {/* balance */}
       <Card style={{ marginBottom: theme.space.md, backgroundColor: theme.color.primary }}>
-        <T variant="label" color="rgba(255,255,255,0.85)">{t('wallet.balance')}</T>
+        <T variant="label" color={theme.color.onPrimary} style={{ opacity: 0.85 }}>{t('wallet.balance')}</T>
         <Row justify="space-between" align="flex-end">
           <T variant="display" color={theme.color.onPrimary} style={{ fontSize: 40 }}>{money(wallet?.balance_cents ?? 0)}</T>
-          <Button title={t('wallet.topUp')} icon="wallet" variant="secondary" full={false} onPress={() => setTopUpOpen(true)} />
+          {topUpOn ? (
+            <Button title={t('wallet.topUp')} icon="wallet" variant="secondary" full={false} onPress={() => setTopUpOpen(true)} />
+          ) : null}
         </Row>
       </Card>
 
@@ -90,73 +99,82 @@ export default function WalletScreen() {
       </Section>
 
       {/* packages */}
-      <Section title={t('wallet.packages')}>
-        {packages.map((p) => (
-          <Card key={p.id} style={{ marginBottom: theme.space.sm }}>
-            <Row justify="space-between">
-              <Row gap={10}>
-                <Icon name="package" size={22} color={theme.color.primary} />
-                <View>
-                  <T variant="body" style={{ fontWeight: '700' }}>{p.name}</T>
-                  <T variant="caption">{t('wallet.minutes', { n: p.minutes })} · {p.validity_days}d{p.owned_minutes_left ? ` · ${p.owned_minutes_left} min left` : ''}</T>
-                </View>
+      {packagesOn && packages.length > 0 ? (
+        <Section title={t('wallet.packages')}>
+          {packages.map((p) => (
+            <Card key={p.id} style={{ marginBottom: theme.space.sm }}>
+              <Row justify="space-between">
+                <Row gap={10}>
+                  <Icon name="package" size={22} color={theme.color.primary} />
+                  <View>
+                    <T variant="body" style={{ fontWeight: '700' }}>{p.name}</T>
+                    <T variant="caption">{t('wallet.minutes', { n: p.minutes })} · {p.validity_days}d{p.owned_minutes_left ? ` · ${p.owned_minutes_left} min left` : ''}</T>
+                  </View>
+                </Row>
+                <Button title={money(p.price_cents)} size="sm" full={false} loading={busy === p.id} onPress={() => run(p.id, () => api.buyPackage(p.id))} />
               </Row>
-              <Button title={money(p.price_cents)} size="sm" full={false} loading={busy === p.id} onPress={() => run(p.id, () => api.buyPackage(p.id))} />
-            </Row>
-          </Card>
-        ))}
-      </Section>
+            </Card>
+          ))}
+        </Section>
+      ) : null}
 
       {/* subscriptions */}
-      <Section title={t('wallet.subscriptions')}>
-        {subs.map((s) => (
-          <Card key={s.id} style={{ marginBottom: theme.space.sm }}>
-            <Row justify="space-between">
-              <Row gap={10}>
-                <Icon name="crown" size={22} color={theme.color.warning} />
-                <View>
-                  <T variant="body" style={{ fontWeight: '700' }}>{s.name}</T>
-                  <T variant="caption">{s.perk}</T>
-                </View>
+      {subscriptionsOn && subs.length > 0 ? (
+        <Section title={t('wallet.subscriptions')}>
+          {subs.map((s) => (
+            <Card key={s.id} style={{ marginBottom: theme.space.sm }}>
+              <Row justify="space-between">
+                <Row gap={10}>
+                  <Icon name="crown" size={22} color={theme.color.warning} />
+                  <View>
+                    <T variant="body" style={{ fontWeight: '700' }}>{s.name}</T>
+                    <T variant="caption">{s.perk}</T>
+                  </View>
+                </Row>
+                {s.active ? <Badge tone="success" label={t('wallet.active')} /> : (
+                  <Button title={`${money(s.price_cents)}${t('wallet.perMonth')}`} size="sm" full={false} loading={busy === s.id} onPress={() => run(s.id, () => api.subscribe(s.id))} />
+                )}
               </Row>
-              {s.active ? <Badge tone="success" label={t('wallet.active')} /> : (
-                <Button title={`${money(s.price_cents)}${t('wallet.perMonth')}`} size="sm" full={false} loading={busy === s.id} onPress={() => run(s.id, () => api.subscribe(s.id))} />
-              )}
-            </Row>
-          </Card>
-        ))}
-      </Section>
+            </Card>
+          ))}
+        </Section>
+      ) : null}
 
       {/* add-ons */}
-      <Section title={t('wallet.addons')}>
-        {addons.map((a) => (
-          <Card key={a.id} style={{ marginBottom: theme.space.sm }}>
-            <Row justify="space-between">
-              <Row gap={10}>
-                <Icon name="shield" size={22} color={theme.color.success} />
-                <View style={{ flex: 1 }}>
-                  <T variant="body" style={{ fontWeight: '700' }}>{a.name}</T>
-                  <T variant="caption">{a.description} · {money(a.price_cents)}/{a.per}</T>
-                </View>
+      {addons.length > 0 ? (
+        <Section title={t('wallet.addons')}>
+          {addons.map((a) => (
+            <Card key={a.id} style={{ marginBottom: theme.space.sm }}>
+              <Row justify="space-between">
+                <Row gap={10}>
+                  <Icon name="shield" size={22} color={theme.color.success} />
+                  <View style={{ flex: 1 }}>
+                    <T variant="body" style={{ fontWeight: '700' }}>{a.name}</T>
+                    <T variant="caption">{a.description} · {money(a.price_cents)}/{a.per}</T>
+                  </View>
+                </Row>
+                <Button title={a.active ? t('wallet.active') : t('wallet.buy')} size="sm" variant={a.active ? 'success' : 'primary'} full={false} onPress={() => run(a.id, () => api.toggleAddon(a.id))} />
               </Row>
-              <Button title={a.active ? t('wallet.active') : t('wallet.buy')} size="sm" variant={a.active ? 'success' : 'primary'} full={false} onPress={() => run(a.id, () => api.toggleAddon(a.id))} />
-            </Row>
-          </Card>
-        ))}
-      </Section>
-
-      <Sheet visible={topUpOpen} onClose={() => setTopUpOpen(false)} title={t('wallet.topUp')}>
-        <Row wrap gap={theme.space.sm}>
-          {[500, 1000, 2000, 5000].map((amt) => (
-            <Button key={amt} title={money(amt)} variant="secondary" full={false} onPress={() => run('topup', async () => { await api.topUp(amt); setTopUpOpen(false); })} />
+            </Card>
           ))}
-        </Row>
-      </Sheet>
+        </Section>
+      ) : null}
+
+      {topUpOn ? (
+        <Sheet visible={topUpOpen} onClose={() => setTopUpOpen(false)} title={t('wallet.topUp')}>
+          <Row wrap gap={theme.space.sm}>
+            {[500, 1000, 2000, 5000].map((amt) => (
+              <Button key={amt} title={money(amt)} variant="secondary" full={false} onPress={() => run('topup', async () => { await api.topUp(amt); setTopUpOpen(false); })} />
+            ))}
+          </Row>
+        </Sheet>
+      ) : null}
     </Screen>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const theme = useTheme();
   return (
     <View style={{ marginBottom: theme.space.lg }}>
       <T variant="label" style={{ marginBottom: theme.space.sm }}>{title}</T>
@@ -164,5 +182,3 @@ function Section({ title, children }: { title: string; children: React.ReactNode
     </View>
   );
 }
-
-const styles = StyleSheet.create({});

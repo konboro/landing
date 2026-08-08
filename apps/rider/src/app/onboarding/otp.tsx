@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import { RiderApiError } from '../../services/types';
@@ -14,6 +14,7 @@ export default function OtpScreen() {
   const { phone } = useLocalSearchParams<{ phone: string }>();
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const setUser = useSession((s) => s.setUser);
   const setOnboarding = useSession((s) => s.setOnboarding);

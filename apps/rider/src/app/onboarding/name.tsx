@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import { getApi } from '../../services';
 import { useT } from '../../i18n';
 import { useSession } from '../../store/session';
@@ -11,6 +11,7 @@ import { StepDots } from '../../components/onboarding/StepDots';
 export default function NameScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const user = useSession((s) => s.user);
   const setUser = useSession((s) => s.setUser);

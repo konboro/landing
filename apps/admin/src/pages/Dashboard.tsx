@@ -9,22 +9,23 @@ import { Badge } from '@/components/ui/Badge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/feedback';
 import { formatMoney, formatNumber, relativeTime, titleCase } from '@/lib/format';
-import { vehicleStatusColor, colors } from '@penny/ui';
+import { useBrand } from '@/context/BrandContext';
 
 const deltaUp = (n: number) => ({ value: `${n}%`, up: true });
 
 export function DashboardPage() {
   const ds = useDS();
+  const { colors, statusColor } = useBrand();
   const kpis = useQuery({ queryKey: ['kpis'], queryFn: () => ds.getKpis() });
   const alerts = useQuery({ queryKey: ['alerts'], queryFn: () => ds.getAlerts() });
   const vehicles = useQuery({ queryKey: ['live-vehicles'], queryFn: () => ds.getLiveVehicles() });
 
   const k = kpis.data;
   const donut: DonutSlice[] = k
-    ? Object.entries(k.fleet_by_status).map(([status, count]) => ({ label: titleCase(status), value: count, color: vehicleStatusColor[status] ?? colors.textMuted }))
+    ? Object.entries(k.fleet_by_status).map(([status, count]) => ({ label: titleCase(status), value: count, color: statusColor(status) }))
     : [];
   const markers: MapMarker[] = (vehicles.data ?? []).map((v) => ({
-    id: v.id, lng: v.lng, lat: v.lat, color: vehicleStatusColor[v.status] ?? colors.textMuted, label: `${v.code} · ${v.status}`,
+    id: v.id, lng: v.lng, lat: v.lat, color: statusColor(v.status), label: `${v.code} · ${v.status}`,
   }));
 
   return (

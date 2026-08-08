@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { evaluateZones, type ZoneLike } from '@penny/geo';
 import { formatMoney, formatDuration, formatDistance } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import type { MapZone, ShareLink } from '../../services/types';
@@ -17,6 +17,9 @@ import { CrashCheckin } from '../../components/CrashCheckin';
 export default function ActiveRideScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { isEnabled } = useBrand();
   const api = getApi();
   const { trip, pause, resume } = useTrip();
   const [zones, setZones] = useState<MapZone[]>([]);
@@ -60,14 +63,16 @@ export default function ActiveRideScreen() {
       <View style={styles.top}>
         <Row justify="space-between">
           <Badge tone="neutral" label={trip.vehicle_code} icon="scooter" />
-          {trip.group_id ? <Badge tone="primary" icon="referral" label={t('ride.group', { n: 1 })} /> : null}
-          <Pressable onPress={() => setCrash(true)} hitSlop={10} accessibilityLabel="Safety">
-            <Icon name="shield" size={22} color={theme.color.onPrimary} />
-          </Pressable>
+          {trip.group_id && isEnabled('groupRides') ? <Badge tone="primary" icon="referral" label={t('ride.group', { n: 1 })} /> : null}
+          {isEnabled('crashCheckIn') ? (
+            <Pressable onPress={() => setCrash(true)} hitSlop={10} accessibilityLabel="Safety">
+              <Icon name="shield" size={22} color={theme.color.onPrimary} />
+            </Pressable>
+          ) : null}
         </Row>
 
         <View style={styles.hero}>
-          <T variant="label" color="rgba(255,255,255,0.8)">{paused ? t('ride.paused') : t('ride.time')}</T>
+          <T variant="label" color={theme.color.onPrimary} style={{ opacity: 0.8 }}>{paused ? t('ride.paused') : t('ride.time')}</T>
           <T variant="display" color={theme.color.onPrimary} style={styles.timer}>{formatDuration(trip.duration_s)}</T>
           <Row gap={theme.space.xl} justify="center" style={{ marginTop: theme.space.md }}>
             <HeroStat label={t('ride.cost')} value={formatMoney(trip.cost_cents, trip.currency)} />
@@ -91,7 +96,9 @@ export default function ActiveRideScreen() {
         </Row>
         <Row gap={theme.space.md} style={{ marginBottom: theme.space.lg }}>
           <Button title={t('ride.locate')} icon="locate" variant="secondary" onPress={() => api.ring(trip.vehicle_code)} style={{ flex: 1 }} />
-          <Button title={t('ride.share')} icon="share" variant="secondary" onPress={doShare} style={{ flex: 1 }} />
+          {isEnabled('shareMyRide') ? (
+            <Button title={t('ride.share')} icon="share" variant="secondary" onPress={doShare} style={{ flex: 1 }} />
+          ) : null}
         </Row>
 
         <SlideToConfirm label={t('ride.endSlide')} icon="check" tone="danger" onConfirm={() => router.push('/ride/end')} />
@@ -102,31 +109,34 @@ export default function ActiveRideScreen() {
         <Button title={t('common.done')} onPress={() => setShareOpen(false)} style={{ marginTop: theme.space.md }} />
       </Sheet>
 
-      <CrashCheckin tripId={trip.id} visible={crash} onResolved={() => setCrash(false)} />
+      {isEnabled('crashCheckIn') ? (
+        <CrashCheckin tripId={trip.id} visible={crash} onResolved={() => setCrash(false)} />
+      ) : null}
     </Screen>
   );
 }
 
 function HeroStat({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
   return (
     <View style={{ alignItems: 'center' }}>
       <T variant="subtitle" color={theme.color.onPrimary}>{value}</T>
-      <T variant="caption" color="rgba(255,255,255,0.8)">{label}</T>
+      <T variant="caption" color={theme.color.onPrimary} style={{ opacity: 0.8 }}>{label}</T>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  top: { paddingHorizontal: theme.space.lg, paddingTop: theme.space.sm },
-  hero: { alignItems: 'center', marginTop: theme.space.xl, marginBottom: theme.space.xl },
+  top: { paddingHorizontal: t.space.lg, paddingTop: t.space.sm },
+  hero: { alignItems: 'center', marginTop: t.space.xl, marginBottom: t.space.xl },
   timer: { fontSize: 64, fontVariant: ['tabular-nums'], marginTop: 4 },
   sheet: {
     flex: 1,
-    backgroundColor: theme.color.bg,
-    borderTopLeftRadius: theme.radius.xl,
-    borderTopRightRadius: theme.radius.xl,
-    padding: theme.space.lg,
-    marginTop: theme.space.md,
+    backgroundColor: t.color.bg,
+    borderTopLeftRadius: t.radius.xl,
+    borderTopRightRadius: t.radius.xl,
+    padding: t.space.lg,
+    marginTop: t.space.md,
   },
-});
+}));

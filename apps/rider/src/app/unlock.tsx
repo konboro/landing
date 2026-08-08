@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { theme } from '../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../brand';
 import { Haptics, Notifications } from '../lib/native';
 import { getApi } from '../services';
 import type { UnlockProgress } from '../services/types';
@@ -24,6 +24,9 @@ export default function UnlockScreen() {
   const params = useLocalSearchParams<{ code: string; insurance?: string; promo?: string; cmd?: string }>();
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { brand } = useBrand();
   const api = getApi();
   const setTrip = useTrip((s) => s.setTrip);
   const flags = useFlags();
@@ -53,7 +56,10 @@ export default function UnlockScreen() {
         if (!flags.askedNotifications) {
           flags.setAsked('askedNotifications');
           await Notifications.requestPermission();
-          Notifications.notify('Unlocked 🛴', 'Enjoy your ride! Your timer is running.');
+          Notifications.notify(
+            `Unlocked ${brand.assets.emoji ?? ''}`.trim(),
+            'Enjoy your ride! Your timer is running.',
+          );
         }
         setTimeout(() => router.replace('/ride'), 700);
       } catch (e) {
@@ -110,11 +116,11 @@ export default function UnlockScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: theme.space.xl },
-  footer: { padding: theme.space.lg, gap: theme.space.sm },
+const useStyles = makeStyles((t) => ({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.xl },
+  footer: { padding: t.space.lg, gap: t.space.sm },
   failIcon: {
-    width: 84, height: 84, borderRadius: 42, backgroundColor: theme.color.warningSoft,
+    width: 84, height: 84, borderRadius: 42, backgroundColor: t.color.warningSoft,
     alignItems: 'center', justifyContent: 'center',
   },
-});
+}));

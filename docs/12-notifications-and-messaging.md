@@ -24,6 +24,9 @@ user_notification_prefs(user_id pk, push_marketing bool, email_marketing bool,
 inbox_messages(id, user_id, title, body, deep_link, read_at, created_at)  -- in-app message center
 ```
 
+SIM/connectivity alerts (`sim_*`) mirror `v_sim_alerts`; the rule thresholds and that view
+must be changed together — see docs/15 §E.
+
 Rules editable in panel: **Settings → Alerts & notifications** (parity + upgrade): pick event, condition values, channels, recipients, test-fire button. Every rule change → audit_log.
 
 ## B. Fleet alert catalogue (staff: email + Telegram + panel; each rule pre-seeded, thresholds in condition jsonb)
@@ -42,7 +45,11 @@ Rules editable in panel: **Settings → Alerts & notifications** (parity + upgra
 | command_failure_spike | > 5% failed cmds 15 min | Telegram page |
 | stuck_trip (no lock ACK at end) | > 60 s in `ending` | Telegram + panel banner |
 | gateway_down / db_down | probe fail | phone page (Better Stack) |
-| sms_budget | > N SMS/day | email |
+| sms_budget | > N SMS/day (fleet-wide, `sim_usage_daily.sms_out`) | email |
+| **sim_over_limit** (docs/15) | SIM data ≥ 100% of its bundle this cycle | email + Telegram admin/ops_manager, throttled 24 h |
+| **sim_near_limit** (docs/15) | SIM data ≥ 80% of its bundle this cycle | email daily digest, admin/ops_manager |
+| **sim_silent** (docs/15) | active SIM with no network activity 7 d | email daily digest + auto ops task, ops_manager |
+| **sim_cost_spike** (docs/15) | month cost > 50% over the trailing-3-month baseline and > 20 € | email daily digest, owner/accountant/admin |
 | vandalism_pattern | ≥ 2 damage reports same vehicle 7 d | email |
 | photo_queue_sla | pending p95 > 6 h | email support lead |
 | chargeback_received | any | email owner + finance |

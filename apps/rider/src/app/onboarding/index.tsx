@@ -1,13 +1,16 @@
 import React, { useRef, useState } from 'react';
-import { View, ScrollView, useWindowDimensions, StyleSheet } from 'react-native';
+import { View, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { useT, useI18n, LANGS, LANG_LABEL, type Lang } from '../../i18n';
 import { Screen, T, Row, Button, Chip, Icon } from '../../components/ui';
 
 export default function ValueSlides() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { brand } = useBrand();
   const { lang, setLang } = useI18n();
   const { width } = useWindowDimensions();
   const scroller = useRef<ScrollView>(null);
@@ -30,7 +33,7 @@ export default function ValueSlides() {
   return (
     <Screen edges={['top', 'bottom']} scroll={false} padded={false}>
       <Row justify="space-between" style={{ paddingHorizontal: theme.space.lg, paddingTop: theme.space.sm }}>
-        <T variant="heading" color={theme.color.primary}>Penny</T>
+        <T variant="heading" color={theme.color.primary}>{brand.name}</T>
         <Row gap={6}>
           {LANGS.map((l: Lang) => <Chip key={l} label={LANG_LABEL[l]} active={lang === l} onPress={() => setLang(l)} />)}
         </Row>
@@ -65,7 +68,7 @@ export default function ValueSlides() {
   );
 }
 
-const styles = StyleSheet.create({
-  slide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: theme.space.xxl },
-  iconCircle: { width: 140, height: 140, borderRadius: 70, backgroundColor: theme.color.primarySoft, alignItems: 'center', justifyContent: 'center' },
-});
+const useStyles = makeStyles((t) => ({
+  slide: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.xxl },
+  iconCircle: { width: 140, height: 140, borderRadius: 70, backgroundColor: t.color.primarySoft, alignItems: 'center', justifyContent: 'center' },
+}));

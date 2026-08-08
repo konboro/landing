@@ -4,8 +4,12 @@
 // VITE_DATA_SOURCE=supabase is explicitly set.
 import { createPennyClient, type PennyClient } from '@penny/api-client';
 import type {
+  BrandConfig,
   DataSource,
   RideDetail,
+  SimCommandInput,
+  SimDetail,
+  SimSyncResult,
   VehicleDetail,
   VehicleHistory,
   CustomerDetail,
@@ -28,6 +32,9 @@ import type {
   VehicleRideHistoryRow,
   SumsubProfileBundle,
   TimelineEvent,
+  SimAlert,
+  SimCostSummary,
+  SimInventoryRow,
 } from '@/types/domain';
 
 function notImpl(method: string): never {
@@ -138,6 +145,101 @@ export class SupabaseDataSource implements DataSource {
       vehicle_id: vehicleId, section: 'timeline', ...SupabaseDataSource.pageBody(params),
     });
   }
+  /* ---- Connectivity / SIM cards ----
+     Reads come from the read-only `v_sim_*` views (anon key + RLS, same as
+     zones/alerts); every mutation goes through an edge function so the
+     provider credentials and audit write stay server-side. */
+
+  async getSims(params: QueryParams): Promise<Page<SimInventoryRow>> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = params.pageSize ?? 25;
+    const from = (page - 1) * pageSize;
+
+    let q = this.client.supabase.from('v_sim_inventory').select('*', { count: 'exact' });
+    for (const [key, value] of Object.entries(params.filters ?? {})) {
+      if (value === undefined || value === null || value === '' || value === 'all') continue;
+      if (key === 'linked') {
+        q = value === true || value === 'true' || value === 'yes' ? q.not('device_id', 'is', null) : q.is('device_id', null);
+      } else if (key === 'over_limit') {
+        q = q.gte('data_pct_used', 100);
+      } else {
+        q = q.eq(key, value);
+      }
+    }
+    const search = params.search?.trim();
+    if (search) {
+      // Identifiers are matched verbatim — never stripped or reformatted.
+      const like = `%${search}%`;
+      q = q.or(
+        ['iccid', 'imsi', 'msisdn', 'provider_sim_id', 'device_imei', 'vehicle_code', 'label', 'plan_name']
+          .map((c) => `${c}.ilike.${like}`)
+          .join(','),
+      );
+    }
+    for (const s of params.sort ?? []) q = q.order(s.field, { ascending: s.dir === 'asc' });
+    if (!params.sort?.length) q = q.order('data_pct_used', { ascending: false });
+
+    const { data, error, count } = await q.range(from, from + pageSize - 1);
+    if (error) throw error;
+    return { rows: (data ?? []) as SimInventoryRow[], total: count ?? 0, page, pageSize };
+  }
+
+  async getSimDetail(simId: string): Promise<SimDetail | null> {
+    const res = await this.invoke<SimDetail | { sim: null }>('admin-sim-detail', { sim_id: simId });
+    return 'sim' in res && res.sim ? (res as SimDetail) : null;
+  }
+
+  async getSimAlerts(): Promise<SimAlert[]> {
+    const { data, error } = await this.client.supabase.from('v_sim_alerts').select('*');
+    if (error) throw error;
+    return (data ?? []) as SimAlert[];
+  }
+
+  async getSimCostSummary(): Promise<SimCostSummary[]> {
+    const { data, error } = await this.client.supabase
+      .from('v_sim_cost_summary')
+      .select('*')
+      .order('month', { ascending: false })
+      .limit(12);
+    if (error) throw error;
+    return (data ?? []) as SimCostSummary[];
+  }
+
+  async syncSims(): Promise<SimSyncResult> {
+    return this.invoke<SimSyncResult>('sim-sync', {});
+  }
+
+  async simCommand(input: SimCommandInput): Promise<SimInventoryRow> {
+    const res = await this.invoke<{ sim: SimInventoryRow }>('sim-command', {
+      sim_id: input.sim_id,
+      action: input.action,
+      reason: input.reason,
+      ...(input.plan ? { plan: input.plan } : {}),
+    });
+    return res.sim;
+  }
+
+  /* ---- White-label branding (`app_config.brand`) ---- */
+
+  async getBrandConfig(): Promise<BrandConfig | null> {
+    const { data, error } = await this.client.supabase
+      .from('app_config')
+      .select('value')
+      .eq('key', 'brand')
+      .maybeSingle();
+    if (error) throw error;
+    const value = (data as { value?: unknown } | null)?.value;
+    return value && typeof value === 'object' ? (value as BrandConfig) : null;
+  }
+
+  async saveBrandConfig(config: BrandConfig, reason: string): Promise<void> {
+    // Writes go through an edge fn: app_config is service_role-only and the
+    // change has to land in audit_log with who/what/reason (Hard Rule #8).
+    await this.client.supabase.functions.invoke('admin-app-config', {
+      body: { key: 'brand', value: config, reason },
+    });
+  }
+
   async search(_q: string): Promise<SearchResult[]> { return notImpl('search'); }
   async listAudit(_params: QueryParams): Promise<Page<AuditLogEntry>> { return notImpl('listAudit'); }
 

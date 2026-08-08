@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { haversine, evaluateZones } from '@penny/geo';
+import { haversine } from '@penny/geo';
 import { formatDistance } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics, LocationSvc } from '../../lib/native';
 import { getApi } from '../../services';
 import type { MapVehicle, MapZone, MapPoi, City, LngLat, PricingQuote } from '../../services/types';
@@ -13,16 +13,21 @@ import { useTrip } from '../../store/trip';
 import { useFlags } from '../../store/flags';
 import { FleetMap } from '../../components/map/FleetMap';
 import {
-  T, Row, Card, Button, Badge, Sheet, Banner, Icon,
+  T, Row, Card, Button, Badge, Sheet, Banner, Icon, type IconName,
 } from '../../components/ui';
 
 export default function MapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { isEnabled } = useBrand();
   const api = getApi();
   const trip = useTrip((s) => s.trip);
   const flags = useFlags();
+
+  const reservationsOn = isEnabled('reservations');
 
   const [city, setCity] = useState<City | null>(null);
   const [vehicles, setVehicles] = useState<MapVehicle[]>([]);
@@ -132,6 +137,7 @@ export default function MapScreen() {
   };
 
   const surge = quote && quote.multiplier > 1;
+  const isReserved = reservationsOn && (!!reservedTripId || !!selected?.reserved_by_me);
 
   return (
     <View style={styles.fill}>
@@ -144,6 +150,7 @@ export default function MapScreen() {
         selectedCode={selected?.code ?? null}
         showZones={showLayers}
         showPois={showLayers}
+        night={theme.mode === 'dark'}
         onSelectVehicle={openVehicle}
         onMapPress={closeSheet}
         focus={focus}
@@ -233,7 +240,7 @@ export default function MapScreen() {
               <Banner tone="warning" icon="battery" title={t('ride.lowBattery')} />
             ) : null}
 
-            {reservedTripId || selected.reserved_by_me ? (
+            {isReserved ? (
               <Banner
                 tone="primary"
                 icon="reserve"
@@ -245,7 +252,7 @@ export default function MapScreen() {
 
             <Button title={t('vehicle.scanToUnlock')} icon="unlock" size="lg" onPress={onUnlock} />
             <Row gap={theme.space.md}>
-              {!(reservedTripId || selected.reserved_by_me) ? (
+              {reservationsOn && !isReserved ? (
                 <Button title={t('vehicle.reserve')} icon="reserve" variant="secondary" onPress={onReserve} loading={reserving} style={{ flex: 1 }} />
               ) : null}
               <Button title={t('vehicle.ring')} icon="ring" variant="secondary" onPress={onRing} style={{ flex: 1 }} />
@@ -263,7 +270,8 @@ export default function MapScreen() {
   );
 }
 
-function Stat({ icon, label, value }: { icon: any; label: string; value: string }) {
+function Stat({ icon, label, value }: { icon: IconName; label: string; value: string }) {
+  const theme = useTheme();
   return (
     <View style={{ flex: 1, gap: 2 }}>
       <Row gap={5}>
@@ -275,22 +283,22 @@ function Stat({ icon, label, value }: { icon: any; label: string; value: string 
   );
 }
 
-const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: theme.color.bg },
-  topBar: { position: 'absolute', left: theme.space.lg, right: theme.space.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cityPill: { borderRadius: theme.radius.pill },
+const useStyles = makeStyles((t) => ({
+  fill: { flex: 1, backgroundColor: t.color.bg },
+  topBar: { position: 'absolute', left: t.space.lg, right: t.space.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cityPill: { borderRadius: t.radius.pill },
   iconPill: {
-    width: 44, height: 44, borderRadius: 22, backgroundColor: theme.color.surface,
-    alignItems: 'center', justifyContent: 'center', ...theme.shadow.card,
+    width: 44, height: 44, borderRadius: 22, backgroundColor: t.color.surface,
+    alignItems: 'center', justifyContent: 'center', ...t.shadow.card,
   },
   dot: {
     position: 'absolute', top: -2, right: -2, minWidth: 18, height: 18, borderRadius: 9,
-    backgroundColor: theme.color.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+    backgroundColor: t.color.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   dotTxt: { fontWeight: '700', fontSize: 10 },
   loading: { position: 'absolute', top: 120, alignSelf: 'center' },
-  sideControls: { position: 'absolute', right: theme.space.lg, gap: theme.space.md },
-  round: { width: 46, height: 46, borderRadius: 23, backgroundColor: theme.color.surface, alignItems: 'center', justifyContent: 'center', ...theme.shadow.card },
-  bottomWrap: { position: 'absolute', left: theme.space.lg, right: theme.space.lg },
-  fabWrap: { position: 'absolute', left: theme.space.lg, right: theme.space.lg },
-});
+  sideControls: { position: 'absolute', right: t.space.lg, gap: t.space.md },
+  round: { width: 46, height: 46, borderRadius: 23, backgroundColor: t.color.surface, alignItems: 'center', justifyContent: 'center', ...t.shadow.card },
+  bottomWrap: { position: 'absolute', left: t.space.lg, right: t.space.lg },
+  fabWrap: { position: 'absolute', left: t.space.lg, right: t.space.lg },
+}));

@@ -1,6 +1,10 @@
 import type {
+  BrandConfig,
   DataSource,
   RideDetail,
+  SimCommandInput,
+  SimDetail,
+  SimSyncResult,
   VehicleDetail,
   VehicleHistory,
   CustomerDetail,
@@ -12,6 +16,8 @@ import { runQuery, delay, type Page, type QueryParams } from './query';
 import { getMockDb } from './mock/db';
 import { buildRoute, buildTelemetry, jitterPoint } from './mock/geoutil';
 import { toUserRideRow, toVehicleRideRow, computeVehicleStats } from './mock/history';
+import { buildSimAlerts, refreshSimDerived } from './mock/sims';
+import { SIM_PLANS } from '@/lib/simPlans';
 import { Rng, uuid } from '@/lib/rng';
 import type { Command, VehicleAlert, Zone } from '@penny/db-types';
 import type {
@@ -26,6 +32,9 @@ import type {
   VehicleRideHistoryRow,
   SumsubProfileBundle,
   TimelineEvent,
+  SimAlert,
+  SimCostSummary,
+  SimInventoryRow,
 } from '@/types/domain';
 
 const LATENCY = 180;
@@ -314,6 +323,151 @@ export class MockDataSource implements DataSource {
   async creditWallet(userId: string, amountCents: number, reason: string): Promise<void> {
     await this.logAudit({ action: 'credit_wallet', entity: 'user', entity_id: userId, reason, after: { amount_cents: amountCents } });
     return delay(undefined, 250);
+  }
+
+  /* ---------- Connectivity / SIM cards ---------- */
+
+  /** `v_sim_inventory` ordered worst-health-first unless the table sorts. */
+  private static readonly HEALTH_RANK: Record<string, number> = {
+    over_limit: 0, silent: 1, unassigned: 2, near_limit: 3, no_usage: 4, ok: 5,
+  };
+
+  async getSims(params: QueryParams): Promise<Page<SimInventoryRow>> {
+    const rows = this.db.sims.slice().sort(
+      (a, b) => (MockDataSource.HEALTH_RANK[a.health] ?? 9) - (MockDataSource.HEALTH_RANK[b.health] ?? 9),
+    );
+    return delay(
+      runQuery(rows as unknown as Record<string, unknown>[], params, {
+        // ICCID/IMSI/MSISDN/IMEI are searched as stored — no normalization.
+        searchFields: ['iccid', 'imsi', 'msisdn', 'provider_sim_id', 'device_imei', 'vehicle_code', 'label', 'plan_name'],
+        filterFns: {
+          linked: (r, v) => {
+            const row = r as unknown as SimInventoryRow;
+            return (v === true || v === 'true' || v === 'yes') ? row.device_id !== null : row.device_id === null;
+          },
+          over_limit: (r) => (r as unknown as SimInventoryRow).data_pct_used >= 100,
+        },
+      }) as unknown as Page<SimInventoryRow>,
+      LATENCY,
+    );
+  }
+
+  async getSimDetail(simId: string): Promise<SimDetail | null> {
+    const sim = this.db.sims.find((s) => s.id === simId);
+    if (!sim) return delay(null, LATENCY);
+    return delay(
+      {
+        sim,
+        usage: this.db.simUsage[simId] ?? [],
+        events: this.db.simEvents[simId] ?? [],
+        source: this.db.simLastSyncAt ? ('live' as const) : ('cache' as const),
+        fetched_at: this.db.simLastSyncAt ?? new Date().toISOString(),
+      },
+      LATENCY,
+    );
+  }
+
+  async getSimAlerts(): Promise<SimAlert[]> {
+    return delay(this.db.simAlerts, LATENCY);
+  }
+
+  async getSimCostSummary(): Promise<SimCostSummary[]> {
+    return delay(this.db.simCostSummary, LATENCY);
+  }
+
+  /** Models a `sim-sync` run: re-pull the provider snapshot and re-derive. */
+  async syncSims(): Promise<SimSyncResult> {
+    const now = Date.now();
+    let updated = 0;
+    for (const sim of this.db.sims) {
+      const days = this.db.simUsage[sim.id] ?? [];
+      const cycleFirst = new Date(`${sim.cycle_start}T00:00:00Z`).getTime();
+      const inCycle = days.filter((u) => new Date(`${u.day}T00:00:00Z`).getTime() >= cycleFirst);
+      const used = +inCycle.reduce((s, u) => s + u.data_mb, 0).toFixed(2);
+      if (used !== sim.data_used_mb_cycle) updated += 1;
+      sim.data_used_mb_cycle = used;
+      refreshSimDerived(sim, now);
+    }
+    this.db.simAlerts = buildSimAlerts(this.db.sims);
+    this.db.simLastSyncAt = new Date().toISOString();
+    await this.logAudit({ action: 'sim_sync', entity: 'sim', entity_id: 'all', reason: 'Manual sync from provider' });
+    return delay(
+      {
+        fetched: this.db.sims.length,
+        updated,
+        discovered: 0,
+        synced_at: this.db.simLastSyncAt,
+        provider: this.db.sims[0]?.provider ?? 'Truphone / 1GLOBAL',
+      },
+      750,
+    );
+  }
+
+  async simCommand(input: SimCommandInput): Promise<SimInventoryRow> {
+    const sim = this.db.sims.find((s) => s.id === input.sim_id);
+    if (!sim) throw new Error(`Unknown SIM ${input.sim_id}`);
+    // Mirrors the server-side guard: destructive lifecycle changes are audited
+    // and cannot be issued without an explanation.
+    if ((input.action === 'suspend' || input.action === 'terminate') && input.reason.trim().length < 3) {
+      throw new Error(`A reason is mandatory to ${input.action} a SIM.`);
+    }
+    const before = { status: sim.status, plan_name: sim.plan_name };
+
+    if (input.action === 'activate' || input.action === 'resume') sim.status = 'active';
+    if (input.action === 'suspend') sim.status = 'suspended';
+    if (input.action === 'terminate') sim.status = 'terminated';
+    if (input.action === 'set_plan') {
+      const plan = SIM_PLANS.find((p) => p.name === input.plan);
+      if (!plan) throw new Error(`Unknown plan ${input.plan ?? '—'}`);
+      sim.plan_name = plan.name;
+      sim.plan_data_mb = plan.data_mb;
+      sim.monthly_cost_cents = plan.cost_cents;
+    }
+
+    const detail =
+      input.action === 'set_plan'
+        ? `Plan changed ${before.plan_name} → ${sim.plan_name}`
+        : `Status ${before.status} → ${sim.status}`;
+    const log = this.db.simEvents[sim.id] ?? (this.db.simEvents[sim.id] = []);
+    log.unshift({
+      at: new Date().toISOString(),
+      kind: input.action,
+      detail,
+      staff_id: 'staff-owner',
+      reason: input.reason.trim() || null,
+    });
+
+    refreshSimDerived(sim);
+    this.db.simAlerts = buildSimAlerts(this.db.sims);
+    await this.logAudit({
+      action: `sim_${input.action}`,
+      entity: 'sim',
+      entity_id: sim.id,
+      reason: input.reason.trim() || null,
+      before,
+      after: { status: sim.status, plan_name: sim.plan_name },
+    });
+    return delay(sim, 420);
+  }
+
+  /* ---------- White-label branding ---------- */
+
+  async getBrandConfig(): Promise<BrandConfig | null> {
+    return delay(this.db.brandConfig, 80);
+  }
+
+  async saveBrandConfig(config: BrandConfig, reason: string): Promise<void> {
+    const before = this.db.brandConfig;
+    this.db.brandConfig = config;
+    await this.logAudit({
+      action: 'brand_config_save',
+      entity: 'app_config',
+      entity_id: 'brand',
+      reason,
+      before: before ?? null,
+      after: config,
+    });
+    return delay(undefined, 260);
   }
 
   async listZones(): Promise<Zone[]> {

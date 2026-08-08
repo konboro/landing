@@ -8,7 +8,7 @@ import {
   StyleSheet,
   type LayoutChangeEvent,
 } from 'react-native';
-import { theme } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { T } from './primitives';
 import { Icon, type IconName } from './Icon';
@@ -28,6 +28,8 @@ export function SlideToConfirm({
   tone?: 'primary' | 'danger' | 'success';
   disabled?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const [width, setWidth] = useState(0);
   const x = useRef(new Animated.Value(0)).current;
   const confirmed = useRef(false);
@@ -81,13 +83,13 @@ export function SlideToConfirm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   track: {
     height: THUMB + 8,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.color.surfaceAlt,
+    borderRadius: t.radius.pill,
+    backgroundColor: t.color.surfaceAlt,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
+    borderColor: t.color.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -100,4 +102,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

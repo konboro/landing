@@ -1,10 +1,11 @@
 import React from 'react';
 import { View } from 'react-native';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 
 const STEPS = ['phone', 'otp', 'name', 'consents', 'kyc', 'card', 'tutorial'] as const;
 
 export function StepDots({ current }: { current: (typeof STEPS)[number] }) {
+  const theme = useTheme();
   const idx = STEPS.indexOf(current);
   return (
     <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', paddingVertical: theme.space.md }}>

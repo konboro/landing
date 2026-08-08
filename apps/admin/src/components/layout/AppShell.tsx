@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { CmdK } from './CmdK';
 import { NAV } from './nav';
 import { useAuth } from '@/context/AuthContext';
+import { BUILT_IN_BRANDS, useBrand } from '@/context/BrandContext';
 import type { StaffRole } from '@penny/db-types';
 
 const ROLES: StaffRole[] = ['owner', 'admin', 'support', 'ops_manager', 'ops', 'accountant', 'readonly'];
@@ -11,6 +12,7 @@ const ROLES: StaffRole[] = ['owner', 'admin', 'support', 'ops_manager', 'ops', '
 export function AppShell() {
   const loc = useLocation();
   const { staff, setRole } = useAuth();
+  const { brand, setBrand, mode, setMode } = useBrand();
   const [cmdkOpen, setCmdkOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -39,6 +41,29 @@ export function AppShell() {
             <span>Search…</span>
             <kbd>⌘K</kbd>
           </button>
+          {/* White-label switcher: re-themes the whole panel instantly. A brand
+              edited in Settings → Branding is kept as an extra option. */}
+          <select
+            className="select"
+            style={{ width: 'auto' }}
+            value={BUILT_IN_BRANDS.some((b) => b.id === brand.id) ? brand.id : '__custom'}
+            onChange={(e) => {
+              const next = BUILT_IN_BRANDS.find((b) => b.id === e.target.value);
+              if (next) setBrand(next);
+            }}
+            title="Demo: switch operator brand"
+          >
+            {BUILT_IN_BRANDS.map((b) => <option key={b.id} value={b.id}>{b.assets.emoji ?? '🎨'} {b.name}</option>)}
+            {BUILT_IN_BRANDS.some((b) => b.id === brand.id) ? null : <option value="__custom">🎨 {brand.name} (custom)</option>}
+          </select>
+          <button
+            className="btn btn-ghost btn-icon"
+            onClick={() => setMode(mode === 'dark' ? 'light' : 'dark')}
+            title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} theme`}
+            aria-label="Toggle theme"
+          >
+            {mode === 'dark' ? '☀️' : '🌙'}
+          </button>
           <select
             className="select"
             style={{ width: 'auto' }}
@@ -48,7 +73,7 @@ export function AppShell() {
           >
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--color-primary)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 700 }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--color-primary)', color: 'var(--color-on-primary)', display: 'grid', placeItems: 'center', fontWeight: 700 }}>
             {staff.name[0]}
           </div>
         </header>

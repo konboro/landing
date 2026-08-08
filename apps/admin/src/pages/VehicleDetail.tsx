@@ -5,7 +5,7 @@ import { useDS } from '@/context/DataContext';
 import { useToast } from '@/components/ui/Toast';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, Button, KV, Field, Select, Textarea } from '@/components/ui/primitives';
-import { VehicleStatusBadge, TripStatusBadge, Badge } from '@/components/ui/Badge';
+import { VehicleStatusBadge, TripStatusBadge, Badge, SimStatusBadge, SimHealthBadge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { MapView, type MapMarker } from '@/components/map/MapView';
 import { LineTrend, chartPalette } from '@/components/charts/Charts';
@@ -14,10 +14,11 @@ import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/feedback';
 import { Qr } from '@/components/ui/Qr';
 import { TimelineFeed } from '@/components/ui/Timeline';
+import { UsageBar } from '@/components/sim/SimBits';
 import { VehicleRideHistoryTable } from '@/components/rides/RideHistoryTable';
 import { useTableState } from '@/hooks/useTableState';
 import { formatSoc, formatDateTime, relativeTime, titleCase, formatDistance, formatDuration, formatMoney } from '@/lib/format';
-import { colors, vehicleStatusColor } from '@penny/ui';
+import { useBrand } from '@/context/BrandContext';
 import type { Command } from '@penny/db-types';
 
 function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -48,9 +49,17 @@ export function VehicleDetailPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const { can } = useAuth();
+  const { statusColor } = useBrand();
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ['vehicle', id], queryFn: () => ds.getVehicle(id) });
   const [tab, setTab] = useState('overview');
+
+  // Connectivity for this vehicle — the SIM fitted in its device.
+  const simQ = useQuery({
+    queryKey: ['vehicle-sim', id],
+    queryFn: () => ds.getSims({ page: 1, pageSize: 1, filters: { vehicle_id: id } }),
+  });
+  const sim = simQ.data?.rows[0] ?? null;
 
   // Exhaustive per-vehicle history (docs/08 Vehicles → detail).
   const vehicleRidesState = useTableState({ pageSize: 25, sort: [{ field: 'started_at', dir: 'desc' }] });
@@ -88,7 +97,7 @@ export function VehicleDetailPage() {
   if (!data) return <div><PageHeader title="Vehicle not found" back={{ to: '/vehicles', label: 'Vehicles' }} /><Card><EmptyState emoji="🔍" title="No such vehicle" /></Card></div>;
 
   const { vehicle, device } = data;
-  const marker: MapMarker[] = [{ id: vehicle.id, lng: vehicle.lng, lat: vehicle.lat, color: vehicleStatusColor[vehicle.status] ?? colors.textMuted, label: vehicle.code }];
+  const marker: MapMarker[] = [{ id: vehicle.id, lng: vehicle.lng, lat: vehicle.lat, color: statusColor(vehicle.status), label: vehicle.code }];
 
   const sendCmd = (kind: string, danger?: boolean) => {
     if (!can('vehicles.command')) return;
@@ -133,12 +142,23 @@ export function VehicleDetailPage() {
           </Card>
           <div className="stack" style={{ gap: 'var(--space-lg)' }}>
             <Card>
-              <CardHeader title="Device info" sub="IMEI = device identity, code = business identity" />
+              <CardHeader
+                title="Device & SIM"
+                sub="IMEI = device identity, code = business identity"
+                actions={sim ? <Link className="btn btn-sm" to={`/connectivity/${sim.id}`}>Open SIM ›</Link> : null}
+              />
               <div className="card-pad">
+                {/* Identifiers are rendered exactly as stored (Hard Rule #10). */}
                 <KV items={[
                   ['IMEI', <span className="mono">{device?.imei ?? '—'}</span>],
-                  ['ICCID', <span className="mono">{device?.iccid ?? '—'}</span>],
-                  ['SIM MSISDN', <span className="mono">{device?.phone_number ?? '—'}</span>],
+                  ['ICCID', <span className="mono">{sim?.iccid ?? device?.iccid ?? '—'}</span>],
+                  ['SIM MSISDN', <span className="mono">{sim?.msisdn ?? device?.phone_number ?? '—'}</span>],
+                  ['SIM status', sim ? <SimStatusBadge status={sim.status} /> : simQ.isLoading ? '…' : '— no SIM linked'],
+                  ['SIM health', sim ? <SimHealthBadge health={sim.health} /> : '—'],
+                  ['Data this cycle', sim
+                    ? <UsageBar usedMb={sim.data_used_mb_cycle} limitMb={sim.plan_data_mb} pct={sim.data_pct_used} />
+                    : '—'],
+                  ['Plan', sim ? `${sim.plan_name} · ${formatMoney(sim.monthly_cost_cents)}/mo` : '—'],
                   ['Model', device?.model ?? '—'],
                   ['Firmware', device?.fw_version ?? '—'],
                   ['Server profile', device ? <Badge tone={device.server_profile === 'penny' ? 'success' : 'warning'}>{device.server_profile}</Badge> : '—'],
@@ -330,7 +350,7 @@ function RawCommandModal({ open, onClose, onSend }: { open: boolean; onClose: ()
     <Modal open={open} onClose={onClose} title="Raw command (permission-gated)" footer={<><Button onClick={onClose}>Cancel</Button><Button variant="danger" onClick={() => { try { const p = JSON.parse(text); setErr(''); onSend(p); } catch { setErr('Invalid JSON'); } }}>Send</Button></>}>
       <p className="muted" style={{ marginTop: 0 }}>Sends a raw Codec 12 payload. Use only if you know the Teltonika parameter IDs (docs/03).</p>
       <Textarea value={text} onChange={(e) => setText(e.target.value)} style={{ minHeight: 140, fontFamily: 'var(--font-mono)' }} />
-      {err ? <div style={{ color: colors.danger, fontSize: 13, marginTop: 6 }}>{err}</div> : null}
+      {err ? <div style={{ color: 'var(--color-danger)', fontSize: 13, marginTop: 6 }}>{err}</div> : null}
     </Modal>
   );
 }

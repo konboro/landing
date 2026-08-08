@@ -1,4 +1,5 @@
-// Core layout + typography primitives built on the shared design tokens.
+// Core layout + typography primitives. Brand-aware: every value comes from
+// `useTheme()`, so switching brand or light/dark re-renders them immediately.
 import React from 'react';
 import {
   View,
@@ -11,20 +12,34 @@ import {
   type ScrollViewProps,
 } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
-import { theme } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
+import type { RiderTheme } from '../../brand';
 
 type TVariant = 'display' | 'title' | 'heading' | 'subtitle' | 'body' | 'caption' | 'label' | 'mono';
 
-const variantStyle: Record<TVariant, TextStyle> = {
-  display: { fontSize: theme.font.size.display, fontWeight: '700', color: theme.color.text, letterSpacing: -0.5 },
-  title: { fontSize: theme.font.size.xxl, fontWeight: '700', color: theme.color.text, letterSpacing: -0.3 },
-  heading: { fontSize: theme.font.size.xl, fontWeight: '700', color: theme.color.text },
-  subtitle: { fontSize: theme.font.size.lg, fontWeight: '600', color: theme.color.text },
-  body: { fontSize: theme.font.size.md, fontWeight: '400', color: theme.color.text },
-  caption: { fontSize: theme.font.size.sm, fontWeight: '400', color: theme.color.textMuted },
-  label: { fontSize: theme.font.size.xs, fontWeight: '600', color: theme.color.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
-  mono: { fontSize: theme.font.size.xxl, fontWeight: '700', color: theme.color.text, fontVariant: ['tabular-nums'] },
-};
+function variantStyles(theme: RiderTheme): Record<TVariant, TextStyle> {
+  const { font, color } = theme;
+  return {
+    display: { fontSize: font.size.display, fontWeight: '700', color: color.text, letterSpacing: -0.5 },
+    title: { fontSize: font.size.xxl, fontWeight: '700', color: color.text, letterSpacing: -0.3 },
+    heading: { fontSize: font.size.xl, fontWeight: '700', color: color.text },
+    subtitle: { fontSize: font.size.lg, fontWeight: '600', color: color.text },
+    body: { fontSize: font.size.md, fontWeight: '400', color: color.text },
+    caption: { fontSize: font.size.sm, fontWeight: '400', color: color.textMuted },
+    label: { fontSize: font.size.xs, fontWeight: '600', color: color.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' },
+    mono: { fontSize: font.size.xxl, fontWeight: '700', color: color.text, fontVariant: ['tabular-nums'] },
+  };
+}
+
+// Cached per theme object so a re-render doesn't rebuild the map.
+const variantCache = new WeakMap<RiderTheme, Record<TVariant, TextStyle>>();
+function useVariants(theme: RiderTheme): Record<TVariant, TextStyle> {
+  const hit = variantCache.get(theme);
+  if (hit) return hit;
+  const built = variantStyles(theme);
+  variantCache.set(theme, built);
+  return built;
+}
 
 export function T({
   variant = 'body',
@@ -41,10 +56,11 @@ export function T({
   numberOfLines?: number;
   children: React.ReactNode;
 }) {
+  const variants = useVariants(useTheme());
   return (
     <RNText
       numberOfLines={numberOfLines}
-      style={[variantStyle[variant], color ? { color } : null, center ? { textAlign: 'center' } : null, style]}
+      style={[variants[variant], color ? { color } : null, center ? { textAlign: 'center' } : null, style]}
     >
       {children}
     </RNText>
@@ -67,6 +83,8 @@ export function Screen({
   padded?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 } & Pick<ScrollViewProps, 'refreshControl'>) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const paddedStyle = padded ? { paddingHorizontal: theme.space.lg } : null;
   return (
     <SafeAreaView edges={edges} style={[styles.screen, { backgroundColor: bg ?? theme.color.bg }]}>
@@ -99,6 +117,8 @@ export function Card({
   padded?: boolean;
   elevated?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <View
       style={[
@@ -116,7 +136,7 @@ export function Card({
 
 export function Row({
   children,
-  gap = theme.space.sm,
+  gap,
   align = 'center',
   justify = 'flex-start',
   wrap = false,
@@ -129,10 +149,17 @@ export function Row({
   wrap?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const theme = useTheme();
   return (
     <View
       style={[
-        { flexDirection: 'row', alignItems: align, justifyContent: justify, gap, flexWrap: wrap ? 'wrap' : 'nowrap' },
+        {
+          flexDirection: 'row',
+          alignItems: align,
+          justifyContent: justify,
+          gap: gap ?? theme.space.sm,
+          flexWrap: wrap ? 'wrap' : 'nowrap',
+        },
         style,
       ]}
     >
@@ -141,21 +168,31 @@ export function Row({
   );
 }
 
-export function Spacer({ size = theme.space.lg, horizontal = false }: { size?: number; horizontal?: boolean }) {
-  return <View style={horizontal ? { width: size } : { height: size }} />;
+export function Spacer({ size, horizontal = false }: { size?: number; horizontal?: boolean }) {
+  const theme = useTheme();
+  const s = size ?? theme.space.lg;
+  return <View style={horizontal ? { width: s } : { height: s }} />;
 }
 
 export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
-  return <View style={[{ height: StyleSheet.hairlineWidth, backgroundColor: theme.color.border, marginVertical: theme.space.md }, style]} />;
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        { height: StyleSheet.hairlineWidth, backgroundColor: theme.color.border, marginVertical: theme.space.md },
+        style,
+      ]}
+    />
+  );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: { flex: 1 },
   flex: { flex: 1 },
   card: {
-    backgroundColor: theme.color.surface,
-    borderRadius: theme.radius.lg,
+    backgroundColor: t.color.surface,
+    borderRadius: t.radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
+    borderColor: t.color.border,
   },
-});
+}));

@@ -2,11 +2,13 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Polyline, Circle } from 'react-native-svg';
-import { theme } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { boundsOf, makeProjector } from './map/projection';
 import type { LngLat } from '../services/types';
 
 export function MiniRoute({ route, width = 92, height = 92 }: { route: LngLat[]; width?: number; height?: number }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   if (route.length < 2) {
     return <View style={[styles.box, { width, height }]} />;
   }
@@ -27,12 +29,12 @@ export function MiniRoute({ route, width = 92, height = 92 }: { route: LngLat[];
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   box: {
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.color.surfaceAlt,
+    borderRadius: t.radius.md,
+    backgroundColor: t.color.surfaceAlt,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
+    borderColor: t.color.border,
   },
-});
+}));

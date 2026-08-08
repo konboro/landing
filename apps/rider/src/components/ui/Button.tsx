@@ -7,7 +7,9 @@ import {
   type ViewStyle,
   type StyleProp,
 } from 'react-native';
-import { theme, MIN_TOUCH } from '../../lib/theme';
+import { MIN_TOUCH } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
+import type { RiderTheme } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { T } from './primitives';
 import { Icon, type IconName } from './Icon';
@@ -15,22 +17,26 @@ import { Icon, type IconName } from './Icon';
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'dark';
 type Size = 'sm' | 'md' | 'lg';
 
-const bg: Record<Variant, string> = {
-  primary: theme.color.primary,
-  secondary: theme.color.surfaceAlt,
-  ghost: 'transparent',
-  danger: theme.color.danger,
-  success: theme.color.success,
-  dark: theme.palette.ink900,
-};
-const fg: Record<Variant, string> = {
-  primary: theme.color.onPrimary,
-  secondary: theme.color.text,
-  ghost: theme.color.primary,
-  danger: theme.color.textInverse,
-  success: theme.color.textInverse,
-  dark: theme.color.textInverse,
-};
+function bgFor(theme: RiderTheme, variant: Variant): string {
+  switch (variant) {
+    case 'primary': return theme.color.primary;
+    case 'secondary': return theme.color.surfaceAlt;
+    case 'ghost': return 'transparent';
+    case 'danger': return theme.color.danger;
+    case 'success': return theme.color.success;
+    // "dark" is deliberate chrome (photo/scan overlays), not a brand colour.
+    case 'dark': return theme.palette.ink900;
+  }
+}
+function fgFor(theme: RiderTheme, variant: Variant): string {
+  switch (variant) {
+    case 'primary': return theme.color.onPrimary;
+    case 'secondary': return theme.color.text;
+    case 'ghost': return theme.color.primary;
+    default: return theme.color.textInverse;
+  }
+}
+
 const pad: Record<Size, ViewStyle> = {
   sm: { paddingVertical: 8, paddingHorizontal: 14, minHeight: 36 },
   md: { paddingVertical: 12, paddingHorizontal: 18, minHeight: MIN_TOUCH },
@@ -62,7 +68,10 @@ export function Button({
   haptic?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const isDisabled = disabled || loading;
+  const fg = fgFor(theme, variant);
   return (
     <Pressable
       accessibilityRole="button"
@@ -75,7 +84,7 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         pad[size],
-        { backgroundColor: bg[variant] },
+        { backgroundColor: bgFor(theme, variant) },
         variant === 'ghost' && styles.ghostBorder,
         variant === 'secondary' && styles.secondaryBorder,
         full && { alignSelf: 'stretch' },
@@ -85,28 +94,28 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={fg[variant]} />
+        <ActivityIndicator color={fg} />
       ) : (
         <View style={styles.content}>
-          {icon ? <Icon name={icon} size={size === 'lg' ? 20 : 17} color={fg[variant]} /> : null}
-          <T variant="body" color={fg[variant]} style={[styles.label, size === 'lg' && { fontSize: theme.font.size.lg }]}>
+          {icon ? <Icon name={icon} size={size === 'lg' ? 20 : 17} color={fg} /> : null}
+          <T variant="body" color={fg} style={[styles.label, size === 'lg' && { fontSize: theme.font.size.lg }]}>
             {title}
           </T>
-          {iconRight ? <Icon name={iconRight} size={size === 'lg' ? 20 : 17} color={fg[variant]} /> : null}
+          {iconRight ? <Icon name={iconRight} size={size === 'lg' ? 20 : 17} color={fg} /> : null}
         </View>
       )}
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   base: {
-    borderRadius: theme.radius.pill,
+    borderRadius: t.radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ghostBorder: { borderWidth: 1.5, borderColor: theme.color.primary },
-  secondaryBorder: { borderWidth: StyleSheet.hairlineWidth, borderColor: theme.color.border },
+  ghostBorder: { borderWidth: 1.5, borderColor: t.color.primary },
+  secondaryBorder: { borderWidth: StyleSheet.hairlineWidth, borderColor: t.color.border },
   content: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   label: { fontWeight: '700' },
-});
+}));

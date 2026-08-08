@@ -3,9 +3,8 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
-import { colors as zoneColors } from '@penny/ui/tokens';
-import { theme } from '../../lib/theme';
-import { mapStyles } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
+import type { RiderTheme } from '../../brand';
 import { T } from '../ui';
 import { Icon } from '../ui/Icon';
 import { buildIndex, clustersFor } from './cluster';
@@ -20,18 +19,24 @@ if (token) {
   }
 }
 
-const ZONE_FILL: Record<string, string> = {
-  parking: zoneColors.zoneParking,
-  parking_station: zoneColors.zoneParking,
-  no_parking: zoneColors.zoneNoParking,
-  no_go: zoneColors.zoneNoGo,
-  bonus: zoneColors.zoneBonus,
-  paid_parking: zoneColors.zonePaidParking,
-  speed_limit: zoneColors.zoneSpeedLimit,
-  operating: zoneColors.zoneOperating,
-};
+function zoneFill(theme: RiderTheme, kind: string): string {
+  const c = theme.color;
+  const map: Record<string, string> = {
+    parking: c.zoneParking,
+    parking_station: c.zoneParking,
+    no_parking: c.zoneNoParking,
+    no_go: c.zoneNoGo,
+    bonus: c.zoneBonus,
+    paid_parking: c.zonePaidParking,
+    speed_limit: c.zoneSpeedLimit,
+    operating: c.zoneOperating,
+  };
+  return map[kind] ?? 'transparent';
+}
 
 export function MapboxFleetMap(props: FleetMapProps) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const [zoom, setZoom] = useState(props.night ? 13.5 : 14.5);
   const [bbox, setBbox] = useState<[number, number, number, number]>([23.68, 37.94, 23.78, 38.02]);
@@ -44,17 +49,17 @@ export function MapboxFleetMap(props: FleetMapProps) {
       type: 'FeatureCollection' as const,
       features: (props.showZones === false ? [] : props.zones).map((z) => ({
         type: 'Feature' as const,
-        properties: { kind: z.kind, color: ZONE_FILL[z.kind] ?? 'transparent' },
+        properties: { kind: z.kind, color: zoneFill(theme, z.kind) },
         geometry: z.geom,
       })),
     }),
-    [props.zones, props.showZones],
+    [props.zones, props.showZones, theme],
   );
 
   return (
     <Mapbox.MapView
       style={StyleSheet.absoluteFill}
-      styleURL={props.night ? mapStyles.night : mapStyles.day}
+      styleURL={props.night ?? theme.mode === 'dark' ? theme.map.night : theme.map.day}
       onPress={props.onMapPress}
       onCameraChanged={(e: any) => {
         const b = e?.properties?.bounds;
@@ -124,27 +129,27 @@ export function MapboxFleetMap(props: FleetMapProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   cluster: {
     minWidth: 40,
     height: 40,
     paddingHorizontal: 10,
     borderRadius: 20,
-    backgroundColor: theme.color.primary,
+    backgroundColor: t.color.primary,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: theme.color.surface,
+    borderColor: t.color.surface,
   },
   pin: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: theme.color.surface,
+    backgroundColor: t.color.surface,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: theme.color.surface,
-    ...theme.shadow.card,
+    borderColor: t.color.surface,
+    ...t.shadow.card,
   },
-});
+}));

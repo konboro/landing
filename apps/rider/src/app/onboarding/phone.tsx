@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import { getApi } from '../../services';
 import { useT } from '../../i18n';
 import { Screen, Header, T, Button, TextField, Banner } from '../../components/ui';
@@ -10,6 +10,7 @@ import { StepDots } from '../../components/onboarding/StepDots';
 export default function PhoneScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const [phone, setPhone] = useState('+30 ');
   const [devCode, setDevCode] = useState<string | null>(null);

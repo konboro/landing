@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { relativeTime } from '@penny/ui';
-import { theme } from '../lib/theme';
+import { useTheme } from '../brand';
 import { getApi } from '../services';
 import type { InboxItem } from '../services/types';
 import { useT } from '../i18n';
@@ -10,6 +10,7 @@ import { Screen, Header, T, Row, Card, Badge, Icon } from '../components/ui';
 
 export default function InboxScreen() {
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const router = useRouter();
   const [items, setItems] = useState<InboxItem[]>([]);

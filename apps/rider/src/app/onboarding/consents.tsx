@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { View, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { getApi } from '../../services';
 import { useT } from '../../i18n';
 import { useSession } from '../../store/session';
@@ -11,6 +11,8 @@ import { StepDots } from '../../components/onboarding/StepDots';
 export default function ConsentsScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const { brand } = useBrand();
   const api = getApi();
   const setUser = useSession((s) => s.setUser);
   const advance = useSession((s) => s.advance);
@@ -20,6 +22,8 @@ export default function ConsentsScreen() {
   const [mktPush, setMktPush] = useState(false);
   const [mktEmail, setMktEmail] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const open = (url: string) => Linking.openURL(url).catch(() => undefined);
 
   const next = async () => {
     setBusy(true);
@@ -43,10 +47,13 @@ export default function ConsentsScreen() {
       <Header />
       <StepDots current="consents" />
       <T variant="title" style={{ marginTop: theme.space.md }}>{t('onboarding.consentTitle')}</T>
+      <T variant="caption" style={{ marginTop: 4 }}>{brand.legal.legalName}</T>
       <Card style={{ marginTop: theme.space.lg }}>
         <Toggle label={t('onboarding.tos')} value={tos} onChange={setTos} />
+        <Button title={t('onboarding.tos')} variant="ghost" size="sm" icon="info" onPress={() => open(brand.legal.termsUrl)} />
         <Divider />
         <Toggle label={t('onboarding.privacy')} value={privacy} onChange={setPrivacy} />
+        <Button title={t('onboarding.privacy')} variant="ghost" size="sm" icon="shield" onPress={() => open(brand.legal.privacyUrl)} />
         <Divider />
         <Toggle label={t('onboarding.marketingPush')} description={t('common.optional')} value={mktPush} onChange={setMktPush} />
         <Divider />

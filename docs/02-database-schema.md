@@ -38,9 +38,31 @@ devices(id, imei text unique, iccid text, phone_number text,   -- SIM MSISDN for
         model enum(fmb930, ...), fw_version text,
         vehicle_id fk nullable,           -- re-linkable (device swap)
         server_profile enum(atom,penny),  -- migration tracking
-        added_by fk, status enum(active,bench,faulty,retired))
+        added_by fk, status enum(active,bench,faulty,retired),
+        sim_id fk nullable)               -- managed link to sims (00210); iccid stays the label of record
 battery_curves(id, model_id, points jsonb)   -- [[voltage_mv, soc_pct], ...]
 ```
+
+## Connectivity / SIMs (docs/15, migration 00210)
+
+```sql
+sims(id, iccid text unique,               -- SIM identity, EXACT text (Hard Rule #10)
+     imsi, msisdn,                        -- msisdn = the SMS-fallback number (docs/03)
+     provider text, provider_sim_id,      -- text, not an enum: MNOs get renamed
+     status text check(inventory|active|suspended|terminated|test),
+     activated_at, suspended_at, terminated_at,
+     plan_name, plan_data_mb, cycle_start date, cycle_end date, monthly_cost_cents,
+     device_id fk nullable, label, notes,
+     last_seen_at, network, country)
+sim_usage_daily(id, sim_id fk, day date, data_mb, sms_out, sms_in, cost_cents,
+                network, country, unique(sim_id, day))
+sim_events(id, sim_id fk, at, kind, detail jsonb, staff_id fk nullable, reason)
+```
+
+All three are **service_role only** (Hard Rule #6). Read models:
+`v_sim_inventory` (per-SIM row + device/vehicle + cycle usage + `health`),
+`v_sim_usage_30d`, `v_sim_cost_summary`, `v_sim_alerts`. Written by the
+`sim-sync` / `sim-command` edge functions.
 
 ## Telemetry (high volume)
 

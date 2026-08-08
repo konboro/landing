@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { theme } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { getApi } from '../services';
 import { useT } from '../i18n';
 import { useFlags } from '../store/flags';
@@ -13,6 +13,8 @@ export default function ScanScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const api = getApi();
   const flags = useFlags();
   const [manualOpen, setManualOpen] = useState(false);
@@ -63,10 +65,10 @@ export default function ScanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  fill: { flex: 1, backgroundColor: theme.palette.ink900 },
+const useStyles = makeStyles((t) => ({
+  fill: { flex: 1, backgroundColor: t.palette.ink900 },
   close: {
-    position: 'absolute', left: theme.space.lg, width: 40, height: 40, borderRadius: 20,
+    position: 'absolute', left: t.space.lg, width: 40, height: 40, borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center',
   },
-});
+}));

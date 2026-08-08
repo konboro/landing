@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { Haptics } from '../lib/native';
 import { getApi } from '../services';
 import { useT } from '../i18n';
@@ -16,6 +16,8 @@ type Phase = 'intro' | 'waiting' | 'go' | 'result' | 'blocked';
 export default function ReactionTestScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const api = getApi();
   const flags = useFlags();
 
@@ -126,7 +128,7 @@ export default function ReactionTestScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: theme.space.xl },
+const useStyles = makeStyles((t) => ({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.xl },
   tap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-});
+}));

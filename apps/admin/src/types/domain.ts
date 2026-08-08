@@ -320,6 +320,103 @@ export interface DemandCell {
   lat: number;
 }
 
+/* =========================================================================
+   Connectivity — SIM cards (provider: Truphone / 1GLOBAL behind an adapter)
+
+   Declared locally on purpose: the `sims` / `sim_usage_daily` / `sim_events`
+   tables and the `v_sim_*` views land in a parallel backend change, so the
+   panel must not depend on @penny/db-types gaining these names yet. The
+   shapes mirror the views 1:1 — when db-types catches up these can be
+   re-exported instead of re-declared.
+
+   ICCID / IMSI / MSISDN / IMEI are stored and rendered EXACTLY as provided
+   by the provider (Hard Rule #10) — never reformatted, never grouped.
+   ========================================================================= */
+
+export type SimStatus = 'inventory' | 'active' | 'suspended' | 'terminated' | 'test';
+
+/** Derived per-SIM health, computed by `v_sim_inventory`. */
+export type SimHealth = 'ok' | 'near_limit' | 'over_limit' | 'no_usage' | 'silent' | 'unassigned';
+
+/** One row of `v_sim_inventory` (SIM joined to device → vehicle + cycle usage). */
+export interface SimInventoryRow {
+  id: UUID;
+  /** Integrated Circuit Card ID — the physical SIM identity. Exact text. */
+  iccid: string;
+  imsi: string;
+  /** The number the gateway sends SMS-fallback commands to (docs/03). */
+  msisdn: string;
+  provider: string;
+  /** Provider-side primary key, used by the sync adapter. */
+  provider_sim_id: string;
+  status: SimStatus;
+
+  plan_name: string;
+  plan_data_mb: number;
+  /** Billing cycle bounds (date-only, YYYY-MM-DD). */
+  cycle_start: string;
+  cycle_end: string;
+  monthly_cost_cents: number;
+
+  device_id: UUID | null;
+  device_imei: string | null;
+  vehicle_id: UUID | null;
+  vehicle_code: string | null;
+  vehicle_status: string | null;
+
+  label: string;
+  notes: string | null;
+
+  last_seen_at: ISOTimestamp | null;
+  network: string | null;
+  country: string | null;
+
+  data_used_mb_cycle: number;
+  data_pct_used: number;
+  cost_mtd_cents: number;
+  days_since_seen: number | null;
+  health: SimHealth;
+}
+
+/** One row of `sim_usage_daily` / `v_sim_usage_30d`. */
+export interface SimUsageDay {
+  day: string; // YYYY-MM-DD
+  data_mb: number;
+  sms_out: number;
+  sms_in: number;
+  cost_cents: number;
+  network: string;
+  country: string;
+}
+
+/** One row of `sim_events` (append-only lifecycle log). */
+export interface SimEvent {
+  at: ISOTimestamp;
+  kind: string;
+  detail: string;
+  staff_id: string | null;
+  reason: string | null;
+}
+
+/** One row of `v_sim_alerts`. */
+export interface SimAlert {
+  sim_id: UUID;
+  iccid: string;
+  severity: 'info' | 'warning' | 'critical';
+  reason: string;
+  vehicle_code: string | null;
+}
+
+/** One row of `v_sim_cost_summary` (per calendar month). */
+export interface SimCostSummary {
+  month: string; // YYYY-MM
+  sims_active: number;
+  total_data_mb: number;
+  total_cost_cents: number;
+  avg_cost_cents: number;
+  sms_total: number;
+}
+
 /* ---------- Denormalized "view" rows for tables ---------- */
 export interface RideRow extends Trip {
   user_name: string;

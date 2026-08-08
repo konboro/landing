@@ -20,6 +20,7 @@ export const NAV: NavItem[] = [
   { to: '/marketing', label: 'Marketing', icon: '📣', group: 'Configure' },
 
   { to: '/fleet', label: 'Fleet maintenance', icon: '🔧', group: 'Fleet' },
+  { to: '/connectivity', label: 'Connectivity', icon: '📶', group: 'Fleet' },
 
   { to: '/finance', label: 'Finance', icon: '🧾', group: 'Money' },
 

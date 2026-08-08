@@ -76,6 +76,52 @@ export const LocationSvc = {
   },
 };
 
+/* --------------------------------- Storage ---------------------------------- */
+
+type AsyncStorageMod = { default: {
+  getItem(k: string): Promise<string | null>;
+  setItem(k: string, v: string): Promise<void>;
+  removeItem(k: string): Promise<void>;
+} };
+
+/**
+ * Small key/value persistence. Guarded like every other native module, so it is
+ * a silent no-op in environments without AsyncStorage (web preview, tests).
+ * Used for the manual theme-mode / brand override.
+ */
+export const Storage = {
+  available(): boolean {
+    return !!opt<AsyncStorageMod>(() => require('@react-native-async-storage/async-storage'));
+  },
+  async get(key: string): Promise<string | null> {
+    const mod = opt<AsyncStorageMod>(() => require('@react-native-async-storage/async-storage'));
+    if (!mod) return null;
+    try {
+      return await mod.default.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  async set(key: string, value: string): Promise<void> {
+    const mod = opt<AsyncStorageMod>(() => require('@react-native-async-storage/async-storage'));
+    if (!mod) return;
+    try {
+      await mod.default.setItem(key, value);
+    } catch {
+      /* ignore */
+    }
+  },
+  async remove(key: string): Promise<void> {
+    const mod = opt<AsyncStorageMod>(() => require('@react-native-async-storage/async-storage'));
+    if (!mod) return;
+    try {
+      await mod.default.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
 /* ------------------------------- Notifications ------------------------------ */
 
 type NotifMod = typeof import('expo-notifications');

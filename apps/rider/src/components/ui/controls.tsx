@@ -10,7 +10,8 @@ import {
   type ViewStyle,
   type StyleProp,
 } from 'react-native';
-import { theme, MIN_TOUCH } from '../../lib/theme';
+import { MIN_TOUCH } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { T } from './primitives';
 import { Icon, type IconName } from './Icon';
@@ -26,6 +27,8 @@ export function TextField({
   hint?: string;
   error?: string;
 } & TextInputProps) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <View style={{ gap: 6 }}>
       {label ? <T variant="label">{label}</T> : null}
@@ -60,6 +63,8 @@ export function Toggle({
   description?: string;
   icon?: IconName;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <Pressable
       onPress={() => {
@@ -92,6 +97,8 @@ export function SegmentedControl<Opt extends string>({
   value: Opt;
   onChange: (v: Opt) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <View style={styles.segment}>
       {options.map((o) => {
@@ -126,6 +133,8 @@ export function Chip({
   onPress?: () => void;
   icon?: IconName;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   return (
     <Pressable
       onPress={() => {
@@ -161,6 +170,8 @@ export function ListRow({
   danger?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const content = (
     <View style={[styles.row, style]}>
       {icon ? (
@@ -192,29 +203,29 @@ export function ListRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   input: {
-    backgroundColor: theme.color.surface,
+    backgroundColor: t.color.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.space.md,
+    borderColor: t.color.border,
+    borderRadius: t.radius.md,
+    paddingHorizontal: t.space.md,
     paddingVertical: 12,
-    fontSize: theme.font.size.md,
-    color: theme.color.text,
+    fontSize: t.font.size.md,
+    color: t.color.text,
     minHeight: MIN_TOUCH,
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.space.md,
+    gap: t.space.md,
     minHeight: MIN_TOUCH,
     paddingVertical: 6,
   },
   segment: {
     flexDirection: 'row',
-    backgroundColor: theme.color.surfaceAlt,
-    borderRadius: theme.radius.pill,
+    backgroundColor: t.color.surfaceAlt,
+    borderRadius: t.radius.pill,
     padding: 3,
   },
   segmentItem: {
@@ -222,10 +233,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 9,
-    borderRadius: theme.radius.pill,
+    borderRadius: t.radius.pill,
   },
   segmentItemActive: {
-    backgroundColor: theme.color.primary,
+    backgroundColor: t.color.primary,
   },
   chip: {
     flexDirection: 'row',
@@ -233,28 +244,28 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.color.surfaceAlt,
+    borderRadius: t.radius.pill,
+    backgroundColor: t.color.surfaceAlt,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.color.border,
+    borderColor: t.color.border,
   },
   chipActive: {
-    backgroundColor: theme.color.primary,
-    borderColor: theme.color.primary,
+    backgroundColor: t.color.primary,
+    borderColor: t.color.primary,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.space.md,
+    gap: t.space.md,
     minHeight: MIN_TOUCH,
     paddingVertical: 10,
   },
   rowIcon: {
     width: 32,
     height: 32,
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.color.surfaceAlt,
+    borderRadius: t.radius.sm,
+    backgroundColor: t.color.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

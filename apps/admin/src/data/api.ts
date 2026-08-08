@@ -28,6 +28,11 @@ import type {
   VehicleStats,
   SumsubProfileBundle,
   TimelineEvent,
+  SimAlert,
+  SimCostSummary,
+  SimEvent,
+  SimInventoryRow,
+  SimUsageDay,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -82,6 +87,48 @@ export interface AuditInput {
   after?: Record<string, unknown> | null;
 }
 
+/* ---------- Connectivity / SIM cards ---------- */
+
+/** Everything the SIM detail drawer renders in one round-trip. */
+export interface SimDetail {
+  sim: SimInventoryRow;
+  /** Newest last — the 30-day usage chart plots it as-is. */
+  usage: SimUsageDay[];
+  /** Newest first. */
+  events: SimEvent[];
+  /** `live` = fetched from the provider just now, `cache` = from our tables. */
+  source: 'live' | 'cache';
+  fetched_at: string;
+}
+
+export type SimAction = 'activate' | 'suspend' | 'resume' | 'terminate' | 'set_plan';
+
+export interface SimCommandInput {
+  sim_id: string;
+  action: SimAction;
+  /** Mandatory for `suspend` and `terminate` — lands in `audit_log`. */
+  reason: string;
+  /** Only read for `set_plan`. */
+  plan?: string;
+}
+
+/** Result of a `sim-sync` run against the provider adapter. */
+export interface SimSyncResult {
+  /** Rows the provider returned. */
+  fetched: number;
+  /** Rows whose status/usage actually changed. */
+  updated: number;
+  /** Provider SIMs we have never seen before. */
+  discovered: number;
+  synced_at: string;
+  provider: string;
+}
+
+/** Brand override as stored in `app_config.brand` — the exact JSON shape
+ *  `brandFromConfig()` accepts. Kept as a loose record so a brand gaining new
+ *  tokens does not need a panel release. */
+export type BrandConfig = Record<string, unknown>;
+
 export interface DataSource {
   readonly kind: 'mock' | 'supabase';
 
@@ -123,6 +170,19 @@ export interface DataSource {
   refund(paymentId: string, amountCents: number, reason: string): Promise<void>;
   setUserBlocked(userId: string, blocked: boolean, reason: string): Promise<void>;
   creditWallet(userId: string, amountCents: number, reason: string): Promise<void>;
+
+  // Connectivity / SIM cards (views `v_sim_*`, edge fns `sim-sync`,
+  // `sim-command`, `admin-sim-detail`)
+  getSims(query: QueryParams): Promise<Page<SimInventoryRow>>;
+  getSimDetail(simId: string): Promise<SimDetail | null>;
+  getSimAlerts(): Promise<SimAlert[]>;
+  getSimCostSummary(): Promise<SimCostSummary[]>;
+  syncSims(): Promise<SimSyncResult>;
+  simCommand(input: SimCommandInput): Promise<SimInventoryRow>;
+
+  // White-label branding (`app_config.brand`)
+  getBrandConfig(): Promise<BrandConfig | null>;
+  saveBrandConfig(config: BrandConfig, reason: string): Promise<void>;
 
   // Zones
   listZones(): Promise<Zone[]>;

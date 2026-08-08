@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { formatDateTime } from '@penny/ui';
-import { theme } from '../lib/theme';
+import { useTheme } from '../brand';
 import { getApi } from '../services';
 import type { KycDetail, KycDocument } from '../services/types';
 import { useT } from '../i18n';
@@ -15,6 +15,7 @@ import { T, Row, Card, Button, Badge, Icon, Divider } from './ui';
  */
 export function KycCard() {
   const { t } = useT();
+  const theme = useTheme();
   const api = getApi();
   const router = useRouter();
   const [kyc, setKyc] = useState<KycDetail | null>(null);

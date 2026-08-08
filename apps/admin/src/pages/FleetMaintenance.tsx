@@ -1,16 +1,18 @@
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { usePanelData } from '@/hooks/usePanelData';
 import { useToast } from '@/components/ui/Toast';
 import { useDS } from '@/context/DataContext';
 import { Card, CardHeader, Button, Field, Input, Select } from '@/components/ui/primitives';
-import { Badge } from '@/components/ui/Badge';
+import { Badge, SimHealthBadge, SimStatusBadge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { HexFrame } from '@/components/ui/HexFrame';
 import { EmptyState } from '@/components/ui/feedback';
+import { UsageBar } from '@/components/sim/SimBits';
 import { titleCase, relativeTime, formatMoney, formatDateTime } from '@/lib/format';
-import { colors } from '@penny/ui';
+
 
 export function FleetMaintenancePage() {
   const { data: db, isLoading } = usePanelData();
@@ -119,6 +121,10 @@ function IotRegistryTab({ db }: { db: DB }) {
   const toast = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const vehCode = (id: string | null) => db.vehicles.find((v) => v.id === id)?.code ?? '— (bench)';
+  // The SIM row is authoritative for ICCID/MSISDN — full management lives on
+  // the Connectivity page, this table just links through to it.
+  const simOf = (deviceId: string) => db.sims.find((s) => s.device_id === deviceId) ?? null;
+  const simsNeedingAttention = db.sims.filter((s) => s.health !== 'ok').length;
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
       <div className="row-wrap">
@@ -126,22 +132,44 @@ function IotRegistryTab({ db }: { db: DB }) {
         <MiniStat label="On bench" value={db.devices.filter((d) => d.status === 'bench').length} />
         <MiniStat label="Faulty" value={db.devices.filter((d) => d.status === 'faulty').length} />
         <MiniStat label="Penny profile" value={db.devices.filter((d) => d.server_profile === 'penny').length} />
+        <MiniStat label="SIMs needing attention" value={simsNeedingAttention} />
       </div>
       <Card>
-        <CardHeader title="Device registry" actions={<Button variant="primary" onClick={() => setAddOpen(true)}>+ Add device</Button>} />
+        <CardHeader
+          title="Device registry"
+          sub="ICCID / MSISDN come from the linked SIM — manage plans on Connectivity"
+          actions={
+            <>
+              <Link className="btn btn-sm" to="/connectivity">📶 Connectivity</Link>
+              <Button variant="primary" onClick={() => setAddOpen(true)}>+ Add device</Button>
+            </>
+          }
+        />
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>IMEI</th><th>ICCID</th><th>MSISDN</th><th>FW</th><th>Vehicle</th><th>Profile</th><th>FOTA</th><th>Status</th></tr></thead>
+            <thead><tr><th>IMEI</th><th>ICCID</th><th>MSISDN</th><th>SIM</th><th>Data used</th><th>FW</th><th>Vehicle</th><th>Profile</th><th>FOTA</th><th>Status</th></tr></thead>
             <tbody>
-              {db.devices.map((d) => (
-                <tr key={d.id}>
-                  <td className="mono">{d.imei}</td><td className="mono" style={{ fontSize: 12 }}>{d.iccid}</td><td className="mono">{d.phone_number}</td>
-                  <td>{d.fw_version}</td><td className="mono">{vehCode(d.vehicle_id)}</td>
-                  <td><Badge tone={d.server_profile === 'penny' ? 'success' : 'warning'}>{d.server_profile}</Badge></td>
-                  <td>{d.fw_version === '03.28.03' ? <Badge tone="success">up to date</Badge> : <Badge tone="warning">pending</Badge>}</td>
-                  <td><Badge tone={d.status === 'active' ? 'success' : d.status === 'faulty' ? 'danger' : 'neutral'}>{d.status}</Badge></td>
-                </tr>
-              ))}
+              {db.devices.map((d) => {
+                const sim = simOf(d.id);
+                return (
+                  <tr key={d.id}>
+                    {/* Identifiers rendered exactly as stored (Hard Rule #10). */}
+                    <td className="mono">{d.imei}</td>
+                    <td className="mono" style={{ fontSize: 12 }}>
+                      {sim ? <Link to={`/connectivity/${sim.id}`}>{sim.iccid}</Link> : d.iccid ?? '—'}
+                    </td>
+                    <td className="mono" style={{ fontSize: 12 }}>{sim?.msisdn ?? d.phone_number ?? '—'}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {sim ? <><SimStatusBadge status={sim.status} /> <SimHealthBadge health={sim.health} /></> : <span className="muted">no SIM</span>}
+                    </td>
+                    <td>{sim ? <UsageBar usedMb={sim.data_used_mb_cycle} limitMb={sim.plan_data_mb} pct={sim.data_pct_used} compact /> : '—'}</td>
+                    <td>{d.fw_version}</td><td className="mono">{vehCode(d.vehicle_id)}</td>
+                    <td><Badge tone={d.server_profile === 'penny' ? 'success' : 'warning'}>{d.server_profile}</Badge></td>
+                    <td>{d.fw_version === '03.28.03' ? <Badge tone="success">up to date</Badge> : <Badge tone="warning">pending</Badge>}</td>
+                    <td><Badge tone={d.status === 'active' ? 'success' : d.status === 'faulty' ? 'danger' : 'neutral'}>{d.status}</Badge></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -242,5 +270,5 @@ function ErrorTab({ db }: { db: DB }) {
 }
 
 function MiniStat({ label, value }: { label: string; value: ReactNode }) {
-  return <div className="card stat-card" style={{ minWidth: 150, flex: 1 }}><span className="stat-label">{label}</span><span style={{ fontSize: 22, fontWeight: 700, color: colors.text }}>{value}</span></div>;
+  return <div className="card stat-card" style={{ minWidth: 150, flex: 1 }}><span className="stat-label">{label}</span><span style={{ fontSize: 22, fontWeight: 700 }}>{value}</span></div>;
 }

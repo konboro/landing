@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme, MIN_TOUCH } from '../../lib/theme';
+import { MIN_TOUCH } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import { T, Row } from './primitives';
 import { Icon } from './Icon';
 
@@ -19,6 +20,8 @@ export function Header({
   transparent?: boolean;
 }) {
   const router = useRouter();
+  const theme = useTheme();
+  const styles = useStyles(theme);
   const back = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/map')));
   return (
     <Row
@@ -37,13 +40,13 @@ export function Header({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   header: {
     height: 52,
-    paddingHorizontal: theme.space.md,
-    backgroundColor: theme.color.bg,
+    paddingHorizontal: t.space.md,
+    backgroundColor: t.color.bg,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.color.border,
+    borderBottomColor: t.color.border,
   },
   iconBtn: {
     minWidth: MIN_TOUCH,
@@ -51,4 +54,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

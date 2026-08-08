@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { formatMoney, formatDuration, formatDistance, formatDateTime } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { getApi } from '../../services';
 import type { HistoryMonthGroup, HistoryFilter, RiderCity, TripView } from '../../services/types';
 import { useT } from '../../i18n';
@@ -36,6 +36,8 @@ function countActive(f: HistoryFilter): number {
 
 export default function HistoryScreen() {
   const { t } = useT();
+  const theme = useTheme();
+  const { brand } = useBrand();
   const api = getApi();
   const router = useRouter();
 
@@ -167,7 +169,7 @@ export default function HistoryScreen() {
             <T variant="subtitle">{group.label}</T>
             <T variant="caption">
               {t('history.monthRides', { n: String(group.rides) })} · {formatDistance(group.distance_m)} ·{' '}
-              {formatMoney(group.spent_cents, 'EUR')}
+              {formatMoney(group.spent_cents, brand.currency)}
             </T>
           </Row>
           <Divider style={{ marginVertical: theme.space.sm }} />
@@ -245,6 +247,7 @@ export default function HistoryScreen() {
 
 function RideRow({ trip, onPress }: { trip: TripView; onPress: () => void }) {
   const { t } = useT();
+  const theme = useTheme();
   const tone = trip.status === 'disputed' ? 'warning' : trip.status === 'charged' ? 'success' : 'neutral';
   const statusLabel =
     trip.status === 'disputed' ? t('history.disputed') : trip.status === 'charged' ? t('history.charged') : t('history.ended');

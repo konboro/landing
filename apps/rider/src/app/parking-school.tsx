@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { theme } from '../lib/theme';
+import { useTheme } from '../brand';
 import { useT } from '../i18n';
 import { Screen, Header, T, Row, Card, Banner, Divider, Icon } from '../components/ui';
 
@@ -9,6 +9,7 @@ const BAD = ['Lying on the ground', 'In a red no-parking zone', 'Blocking the si
 
 export default function ParkingSchool() {
   const { t } = useT();
+  const theme = useTheme();
   return (
     <Screen edges={['top']} scroll>
       <Header title={t('endRide.parkingSchool')} />

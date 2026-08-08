@@ -4,6 +4,7 @@ import { Rng } from '@/lib/rng';
 import { ATHENS_CENTER, jitterPoint, boxPolygon, buildRoute } from './geoutil';
 import { ATHENS_AREAS, RATING_TAGS, type RideExtra } from './history';
 import { buildSumsubBundle } from './sumsub';
+import { buildSimAlerts, buildSimCostSummary, buildSims } from './sims';
 import { buildUserProfile, buildUserTimeline, buildVehicleTimeline, type ProfileCtx } from './profiles';
 import type { LngLat } from '@penny/db-types';
 import type {
@@ -59,6 +60,11 @@ import type {
   SumsubProfileBundle,
   TimelineEvent,
   UserProfileFull,
+  SimAlert,
+  SimCostSummary,
+  SimEvent,
+  SimInventoryRow,
+  SimUsageDay,
 } from '@/types/domain';
 
 export interface MockDb {
@@ -67,6 +73,18 @@ export interface MockDb {
   batteryCurves: BatteryCurve[];
   vehicles: VehicleRow[];
   devices: Device[];
+  /** Connectivity fleet (`v_sim_inventory`) — one row per SIM card. */
+  sims: SimInventoryRow[];
+  /** 30 days of daily usage, keyed by sim id (`v_sim_usage_30d`). */
+  simUsage: Record<string, SimUsageDay[]>;
+  /** Append-only lifecycle log, keyed by sim id (`sim_events`). */
+  simEvents: Record<string, SimEvent[]>;
+  simAlerts: SimAlert[];
+  simCostSummary: SimCostSummary[];
+  /** Last successful provider sync (null until "Sync from Truphone" is run). */
+  simLastSyncAt: string | null;
+  /** White-label brand override persisted in `app_config.brand` (null = default). */
+  brandConfig: Record<string, unknown> | null;
   customers: CustomerRow[];
   rides: RideRow[];
   /** Per-ride detail behind the exhaustive user/vehicle ride tables. */
@@ -218,6 +236,7 @@ function build(): MockDb {
       server_profile: rng.bool(0.7) ? 'penny' : 'atom',
       added_by: 'staff-owner',
       status: 'active',
+      sim_id: null, // linked below by buildSims()
     });
   }
   // a few bench/faulty devices not linked
@@ -233,8 +252,18 @@ function build(): MockDb {
       server_profile: 'penny',
       added_by: 'staff-owner',
       status: rng.pick(['bench', 'faulty'] as const),
+      sim_id: null, // linked below by buildSims()
     });
   }
+
+  /* ---------- SIM cards / connectivity ----------
+     Built straight after the devices because it rewrites device.iccid /
+     device.phone_number: the SIM row is the single source of truth for the
+     connectivity identifiers, so the IoT registry can never disagree with the
+     Connectivity page. */
+  const { sims, usage: simUsage, events: simEvents } = buildSims(devices, vehicles, rng);
+  const simAlerts = buildSimAlerts(sims);
+  const simCostSummary = buildSimCostSummary(sims, simUsage, rng);
 
   /* ---------- Customers ---------- */
   const customers: CustomerRow[] = [];
@@ -829,6 +858,7 @@ function build(): MockDb {
 
   return {
     rideExtras, userProfiles, sumsub, userTimelines, vehicleTimelines,
+    sims, simUsage, simEvents, simAlerts, simCostSummary, simLastSyncAt: null, brandConfig: null,
     cities, models, batteryCurves, vehicles, devices, customers, rides, tripEvents, payments, debts,
     zones, zoneVersions, alerts, commands, opsTasks, damageReports, staff, kpis, ledgerAccounts, ledgerEntries,
     invoices, corporate, notificationRules, notificationLog, promos, groups, campaigns, loyalty, referrals, pois,

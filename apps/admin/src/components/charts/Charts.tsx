@@ -15,13 +15,27 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { palette, colors } from '@penny/ui';
+import { palette } from '@penny/ui';
+import { useBrand } from '@/context/BrandContext';
 
-const AXIS = { fontSize: 11, fill: colors.textMuted };
-const GRID = colors.border;
+/**
+ * Axis/grid ink comes from the active brand so charts stay legible after a
+ * re-theme or a light/dark switch. Recharts writes these onto SVG presentation
+ * attributes, which cannot resolve `var(--…)` — so they must be real values.
+ */
+function useChartInk() {
+  const { colors } = useBrand();
+  return {
+    axis: { fontSize: 11, fill: colors.textMuted },
+    grid: colors.border,
+    colors,
+  };
+}
 
 /* ---------- Sparkline (lightweight inline SVG) ---------- */
-export function Sparkline({ data, color = colors.primary, width = 100, height = 30 }: { data: number[]; color?: string; width?: number; height?: number }) {
+export function Sparkline({ data, color, width = 100, height = 30 }: { data: number[]; color?: string; width?: number; height?: number }) {
+  const { colors } = useChartInk();
+  const stroke = color ?? colors.primary;
   if (!data.length) return <svg width={width} height={height} />;
   const min = Math.min(...data);
   const max = Math.max(...data);
@@ -33,14 +47,15 @@ export function Sparkline({ data, color = colors.primary, width = 100, height = 
   const lastY = height - ((last - min) / range) * (height - 4) - 2;
   return (
     <svg width={width} height={height} style={{ display: 'block' }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={lastX} cy={lastY} r={2.4} fill={color} />
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r={2.4} fill={stroke} />
     </svg>
   );
 }
 
 /* ---------- Semicircle gauge ---------- */
 export function Gauge({ value, label, size = 150 }: { value: number; label?: string; size?: number }) {
+  const { colors } = useChartInk();
   const v = Math.max(0, Math.min(100, value));
   const r = size / 2 - 12;
   const cx = size / 2;
@@ -107,6 +122,7 @@ export function DonutLegend({ data }: { data: DonutSlice[] }) {
 /* ---------- Trend line ---------- */
 export interface Series { key: string; name: string; color: string }
 export function TrendLine({ data, xKey, series, height = 260, stacked }: { data: Record<string, unknown>[]; xKey: string; series: Series[]; height?: number; stacked?: boolean }) {
+  const { axis: AXIS, grid: GRID } = useChartInk();
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
@@ -132,6 +148,7 @@ export function TrendLine({ data, xKey, series, height = 260, stacked }: { data:
 }
 
 export function LineTrend({ data, xKey, series, height = 240 }: { data: Record<string, unknown>[]; xKey: string; series: Series[]; height?: number }) {
+  const { axis: AXIS, grid: GRID } = useChartInk();
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>
@@ -150,6 +167,7 @@ export function LineTrend({ data, xKey, series, height = 240 }: { data: Record<s
 
 /* ---------- Bars ---------- */
 export function Bars({ data, xKey, series, height = 260, stacked }: { data: Record<string, unknown>[]; xKey: string; series: Series[]; height?: number; stacked?: boolean }) {
+  const { axis: AXIS, grid: GRID } = useChartInk();
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -12 }}>

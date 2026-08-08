@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import { useT } from '../../i18n';
@@ -14,6 +14,8 @@ interface Step { icon: IconName; title: string; body: string }
 export default function TutorialScreen() {
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const { brand } = useBrand();
   const api = getApi();
   const advance = useSession((s) => s.advance);
   const load = useSession((s) => s.load);
@@ -24,7 +26,7 @@ export default function TutorialScreen() {
     { icon: 'scan', title: 'Scan to unlock', body: 'Tap Scan and point at the QR code. Unlocking can take up to 20s on 2G.' },
     { icon: 'scooter', title: 'Ride & pause', body: 'Big timer, live cost, pause when you stop. Watch the zone banners.' },
     { icon: 'camera', title: 'End with a photo', body: 'Park in a green zone and take a photo — green is good, red is a no-go.' },
-    { icon: 'wallet', title: 'Pay your way', body: 'Apple Pay, Google Pay, cards, wallet, packages or a subscription.' },
+    { icon: 'wallet', title: 'Pay your way', body: `Apple Pay, Google Pay and cards — every ride billed in ${brand.currency}.` },
   ];
 
   const finish = async () => {

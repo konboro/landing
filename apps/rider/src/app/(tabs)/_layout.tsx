@@ -1,11 +1,12 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { theme } from '../../lib/theme';
+import { useTheme } from '../../brand';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { useT } from '../../i18n';
 
 export default function TabsLayout() {
   const { t } = useT();
+  const theme = useTheme();
   const icon = (name: IconName) => ({ color, size }: { color: string; size: number }) =>
     <Icon name={name} size={size ?? 22} color={color} />;
 

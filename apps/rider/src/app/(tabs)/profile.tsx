@@ -1,31 +1,40 @@
 import React, { useCallback, useState } from 'react';
-import { View, Share, StyleSheet } from 'react-native';
+import { View, Share, Pressable } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { formatMoney, formatDistance, formatDuration } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { formatMoney, formatDistance, formatDuration, deepLink } from '@penny/ui';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import type { LifetimeStats, NotifPrefs, RiderUser } from '../../services/types';
 import { useT, useI18n, LANGS, LANG_LABEL, type Lang } from '../../i18n';
 import { useSession } from '../../store/session';
 import {
-  Screen, T, Row, Card, Button, Badge, Banner, ListRow, Divider, Sheet, TextField, Toggle, SegmentedControl, Icon, Spacer,
+  Screen, T, Row, Card, Button, Badge, Banner, ListRow, Divider, Sheet, TextField, Toggle, Icon, Spacer,
 } from '../../components/ui';
 import { KycCard } from '../../components/KycCard';
+import { BrandSwitcher } from '../../components/BrandSwitcher';
 
 export default function ProfileScreen() {
   const { t } = useT();
   const router = useRouter();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { brand, isEnabled } = useBrand();
   const api = getApi();
   const user = useSession((s) => s.user);
   const setUser = useSession((s) => s.setUser);
   const logout = useSession((s) => s.logout);
   const { lang, setLang } = useI18n();
 
+  const referralsOn = isEnabled('referrals');
+  const loyaltyOn = isEnabled('loyalty');
+  const parkingSchoolOn = isEnabled('parkingSchool');
+
   const [stats, setStats] = useState<LifetimeStats | null>(null);
   const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
   const [sheet, setSheet] = useState<null | 'lang' | 'notif' | 'personal' | 'emergency' | 'consents' | 'delete'>(null);
   const [draft, setDraft] = useState<Partial<RiderUser>>({});
+  const [devOpen, setDevOpen] = useState(false);
 
   useFocusEffect(useCallback(() => {
     api.getStats().then(setStats);
@@ -42,12 +51,16 @@ export default function ProfileScreen() {
 
   const share = async () => {
     if (!user) return;
-    await Share.share({ message: `Ride with Penny! Use my code ${user.referral_code} for free minutes 🛴 penny://` }).catch(() => {});
+    const message = `Ride with ${brand.name}! Use my code ${user.referral_code} for free minutes ${brand.assets.emoji ?? ''} ${deepLink(brand, `referral/${user.referral_code}`)}`;
+    await Share.share({ message: message.trim() }).catch(() => {});
   };
 
   return (
     <Screen edges={['top']} scroll>
-      <T variant="title" style={{ marginBottom: theme.space.md }}>{t('profile.title')}</T>
+      {/* Long-press the title to open the white-label brand switcher (dev tool). */}
+      <Pressable onLongPress={() => { Haptics.medium(); setDevOpen(true); }} delayLongPress={600}>
+        <T variant="title" style={{ marginBottom: theme.space.md }}>{t('profile.title')}</T>
+      </Pressable>
 
       {/* identity + KYC */}
       <Card style={{ marginBottom: theme.space.md }}>
@@ -58,7 +71,9 @@ export default function ProfileScreen() {
             <T variant="caption">{user?.phone}{user?.email ? ` · ${user.email}` : ''}</T>
             <Row gap={6} style={{ marginTop: 6 }}>
               <Badge tone={kycTone} icon="shield" label={t(`kyc.${user?.kyc_status ?? 'none'}`)} />
-              <Badge tone="neutral" icon="points" label={t('profile.points', { n: stats?.loyalty_points ?? 0 })} />
+              {loyaltyOn ? (
+                <Badge tone="neutral" icon="points" label={t('profile.points', { n: stats?.loyalty_points ?? 0 })} />
+              ) : null}
             </Row>
           </View>
         </Row>
@@ -70,9 +85,9 @@ export default function ProfileScreen() {
 
       {/* yearly recap */}
       {stats ? (
-        <Card style={[styles.recap]}>
+        <Card style={styles.recap}>
           <Row justify="space-between">
-            <T variant="label" color="rgba(255,255,255,0.85)">{t('profile.recap', { year: stats.year })}</T>
+            <T variant="label" color={theme.color.onPrimary} style={{ opacity: 0.85 }}>{t('profile.recap', { year: stats.year })}</T>
             <Icon name="leaf" size={20} color={theme.color.onPrimary} />
           </Row>
           <Row justify="space-between" style={{ marginTop: theme.space.md }}>
@@ -80,22 +95,26 @@ export default function ProfileScreen() {
             <Recap value={formatDistance(stats.distance_m)} label={t('profile.distance')} />
             <Recap value={`${stats.co2_kg} kg`} label={t('profile.co2Total')} />
           </Row>
-          <Divider style={{ backgroundColor: 'rgba(255,255,255,0.25)' }} />
+          <Divider style={styles.recapDivider} />
           <Row justify="space-between">
             <Recap value={formatDuration(stats.duration_s)} label={t('ride.time')} />
-            <Recap value={formatMoney(stats.spent_cents)} label={t('ride.cost')} />
+            <Recap value={formatMoney(stats.spent_cents, brand.currency)} label={t('ride.cost')} />
             <Recap value={t('profile.days', { n: stats.parking_streak })} label={t('profile.streak')} />
           </Row>
         </Card>
       ) : null}
 
       {/* referral */}
-      <Card style={{ marginVertical: theme.space.md }}>
-        <Row justify="space-between">
-          <Row gap={10}><Icon name="referral" size={22} color={theme.color.primary} /><View><T variant="body" style={{ fontWeight: '700' }}>{t('profile.referral')}</T><T variant="caption">{user?.referral_code}</T></View></Row>
-          <Button title={t('profile.referralShare')} size="sm" full={false} icon="share" onPress={share} />
-        </Row>
-      </Card>
+      {referralsOn ? (
+        <Card style={{ marginVertical: theme.space.md }}>
+          <Row justify="space-between">
+            <Row gap={10}><Icon name="referral" size={22} color={theme.color.primary} /><View><T variant="body" style={{ fontWeight: '700' }}>{t('profile.referral')}</T><T variant="caption">{user?.referral_code}</T></View></Row>
+            <Button title={t('profile.referralShare')} size="sm" full={false} icon="share" onPress={share} />
+          </Row>
+        </Card>
+      ) : (
+        <Spacer size={theme.space.md} />
+      )}
 
       <SectionCard>
         <ListRow icon="profile" title={t('profile.personal')} onPress={() => { setDraft({ full_name: user?.full_name ?? '', email: user?.email ?? '', address: user?.address ?? '', date_of_birth: user?.date_of_birth ?? '' }); setSheet('personal'); }} />
@@ -113,8 +132,12 @@ export default function ProfileScreen() {
 
       <SectionCard>
         <ListRow icon="scan" title={t('profile.tutorialReplay')} onPress={() => router.push('/onboarding/tutorial')} />
-        <Divider />
-        <ListRow icon="parking" title={t('profile.parkingSchool')} onPress={() => router.push('/parking-school')} />
+        {parkingSchoolOn ? (
+          <>
+            <Divider />
+            <ListRow icon="parking" title={t('profile.parkingSchool')} onPress={() => router.push('/parking-school')} />
+          </>
+        ) : null}
         <Divider />
         <ListRow icon="inbox" title={t('support.inbox')} onPress={() => router.push('/inbox')} />
       </SectionCard>
@@ -124,6 +147,10 @@ export default function ProfileScreen() {
         <Divider />
         <ListRow icon="back" title={t('profile.logout')} onPress={() => logout().then(() => router.replace('/'))} />
       </SectionCard>
+
+      <T variant="caption" center style={{ marginTop: theme.space.sm }}>
+        {brand.legal.legalName} · {brand.legal.address}
+      </T>
 
       {/* language sheet */}
       <Sheet visible={sheet === 'lang'} onClose={() => setSheet(null)} title={t('profile.language')}>
@@ -184,23 +211,29 @@ export default function ProfileScreen() {
           <Button title={t('common.cancel')} variant="ghost" onPress={() => setSheet(null)} />
         </View>
       </Sheet>
+
+      <BrandSwitcher visible={devOpen} onClose={() => setDevOpen(false)} />
     </Screen>
   );
 }
 
 function SectionCard({ children }: { children: React.ReactNode }) {
+  const theme = useTheme();
   return <Card style={{ marginBottom: theme.space.md }} padded>{children}</Card>;
 }
+
 function Recap({ value, label }: { value: string; label: string }) {
+  const theme = useTheme();
   return (
     <View style={{ alignItems: 'center', flex: 1 }}>
       <T variant="subtitle" color={theme.color.onPrimary}>{value}</T>
-      <T variant="caption" color="rgba(255,255,255,0.8)" center>{label}</T>
+      <T variant="caption" color={theme.color.onPrimary} center style={{ opacity: 0.8 }}>{label}</T>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: theme.color.primary, alignItems: 'center', justifyContent: 'center' },
-  recap: { backgroundColor: theme.palette.blue700, gap: theme.space.sm },
-});
+const useStyles = makeStyles((t) => ({
+  avatar: { width: 56, height: 56, borderRadius: 28, backgroundColor: t.color.primary, alignItems: 'center', justifyContent: 'center' },
+  recap: { backgroundColor: t.color.primaryDark, gap: t.space.sm },
+  recapDivider: { backgroundColor: t.color.onPrimary, opacity: 0.25 },
+}));

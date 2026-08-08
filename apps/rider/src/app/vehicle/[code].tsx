@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatMoney } from '@penny/ui';
-import { theme } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 import { getApi } from '../../services';
 import type { MapVehicle, PricingQuote } from '../../services/types';
 import { useT } from '../../i18n';
@@ -17,6 +17,9 @@ export default function PreUnlockScreen() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
   const { t } = useT();
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { brand, isEnabled } = useBrand();
   const api = getApi();
   const user = useSession((s) => s.user);
   const flags = useFlags();
@@ -60,7 +63,8 @@ export default function PreUnlockScreen() {
     if (!kycOk) { router.push('/onboarding/kyc'); return; }
     if (!hasCard) { router.push('/(tabs)/wallet'); return; }
     if (debt) { router.push('/(tabs)/wallet'); return; }
-    if (reactionRequired(flags)) { router.push('/reaction-test'); return; }
+    // Night anti-DUI gate is a per-operator product surface.
+    if (isEnabled('reactionTest') && reactionRequired(flags)) { router.push('/reaction-test'); return; }
     setStarting(true);
     const clientCommandId = uuid(); // idempotency
     router.replace({
@@ -74,7 +78,7 @@ export default function PreUnlockScreen() {
     });
   };
 
-  const money = (c: number) => formatMoney(c, quote?.currency ?? 'EUR');
+  const money = (c: number) => formatMoney(c, quote?.currency ?? brand.currency);
 
   return (
     <Screen edges={['top']} scroll={false} padded={false}>
@@ -164,6 +168,7 @@ export default function PreUnlockScreen() {
 }
 
 function PriceRow({ label, value, badge, tone, strong }: { label: string; value: string; badge?: string; tone?: 'success'; strong?: boolean }) {
+  const theme = useTheme();
   return (
     <Row justify="space-between">
       <Row gap={8}>
@@ -175,10 +180,10 @@ function PriceRow({ label, value, badge, tone, strong }: { label: string; value:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   footer: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
-    padding: theme.space.lg, paddingBottom: theme.space.xl,
-    backgroundColor: theme.color.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.color.border,
+    padding: t.space.lg, paddingBottom: t.space.xl,
+    backgroundColor: t.color.surface, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.color.border,
   },
-});
+}));
