@@ -67,9 +67,7 @@ export function Screen({
   padded?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
 } & Pick<ScrollViewProps, 'refreshControl'>) {
-  const inner = (
-    <View style={[padded && { paddingHorizontal: theme.space.lg }, contentStyle]}>{children}</View>
-  );
+  const paddedStyle = padded ? { paddingHorizontal: theme.space.lg } : null;
   return (
     <SafeAreaView edges={edges} style={[styles.screen, { backgroundColor: bg ?? theme.color.bg }]}>
       {scroll ? (
@@ -79,10 +77,10 @@ export function Screen({
           showsVerticalScrollIndicator={false}
           {...rest}
         >
-          {inner}
+          <View style={[paddedStyle, contentStyle]}>{children}</View>
         </ScrollView>
       ) : (
-        inner
+        <View style={[styles.flex, paddedStyle, contentStyle]}>{children}</View>
       )}
     </SafeAreaView>
   );
@@ -153,6 +151,7 @@ export function Divider({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  flex: { flex: 1 },
   card: {
     backgroundColor: theme.color.surface,
     borderRadius: theme.radius.lg,

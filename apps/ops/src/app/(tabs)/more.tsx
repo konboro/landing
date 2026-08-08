@@ -37,7 +37,7 @@ export default function MoreTab() {
         <StatusLegend />
       </Card>
 
-      <MenuItem icon="⚠" label="Damage reports" onPress={() => router.push('/damage/index')} />
+      <MenuItem icon="⚠" label="Damage reports" onPress={() => router.push('/damage')} />
       <MenuItem icon="📍" label="Deploy mode" onPress={() => router.push('/deploy')} />
       <MenuItem icon="🔁" label="Sync & dev tools" onPress={() => router.push('/dev')} />
       <MenuItem icon="🎓" label="Replay onboarding" onPress={() => router.push('/onboarding')} />
