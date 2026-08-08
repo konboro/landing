@@ -11,6 +11,7 @@ import type {
   MaintenanceEntry,
   HeatCell,
   VehicleError,
+  VehicleRide,
 } from '../lib/types';
 import { buildChecklist } from '../lib/checklists';
 
@@ -292,6 +293,35 @@ export function generateBootstrap(): Bootstrap {
     }
   }
 
+  // Ride history per vehicle — what the field crew sees on the history screen.
+  // Rider identity arrives already masked from the server (PII minimization).
+  const rides: VehicleRide[] = [];
+  const ZONES = ['Syntagma', 'Kolonaki', 'Exarchia', 'Plaka', 'Koukaki', 'Monastiraki', 'Psyrri'];
+  const REVIEWS = ['auto_ok', 'auto_ok', 'auto_ok', 'approved', 'pending', 'rejected'];
+  for (const v of vehicles) {
+    const n = Math.round(between(3, 22));
+    for (let i = 0; i < n; i++) {
+      const startedMin = -Math.round(between(30, 90 * 24 * 60));
+      const durationS = Math.round(between(180, 2700));
+      const distanceM = Math.round((durationS / 60) * between(120, 320));
+      rides.push({
+        id: id('ride'),
+        vehicle_id: v.id,
+        rider_masked: `+30••••${String(Math.round(between(1000, 9999)))}`,
+        status: rnd() > 0.06 ? 'charged' : 'disputed',
+        started_at: iso(startedMin),
+        ended_at: iso(startedMin + Math.round(durationS / 60)),
+        duration_s: durationS,
+        distance_m: distanceM,
+        cost_cents: 100 + Math.round((durationS / 60) * 15),
+        currency: 'EUR',
+        photo_review: REVIEWS[Math.floor(rnd() * REVIEWS.length)] ?? 'auto_ok',
+        end_zone_name: ZONES[Math.floor(rnd() * ZONES.length)] ?? null,
+      });
+    }
+  }
+  rides.sort((a, b) => (b.started_at ?? '').localeCompare(a.started_at ?? ''));
+
   return {
     server_time: new Date().toISOString(),
     vehicles,
@@ -301,6 +331,7 @@ export function generateBootstrap(): Bootstrap {
     statusLog,
     batterySwaps,
     maintenance,
+    rides,
     heat: makeHeat(vehicles),
   };
 }

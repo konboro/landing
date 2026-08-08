@@ -9,8 +9,9 @@ import type { LifetimeStats, NotifPrefs, RiderUser } from '../../services/types'
 import { useT, useI18n, LANGS, LANG_LABEL, type Lang } from '../../i18n';
 import { useSession } from '../../store/session';
 import {
-  Screen, T, Row, Card, Button, Badge, Banner, ListRow, Divider, Sheet, TextField, Toggle, SegmentedControl, Icon,
+  Screen, T, Row, Card, Button, Badge, Banner, ListRow, Divider, Sheet, TextField, Toggle, SegmentedControl, Icon, Spacer,
 } from '../../components/ui';
+import { KycCard } from '../../components/KycCard';
 
 export default function ProfileScreen() {
   const { t } = useT();
@@ -61,10 +62,11 @@ export default function ProfileScreen() {
             </Row>
           </View>
         </Row>
-        {user?.kyc_status !== 'approved' ? (
-          <Button title={t('profile.reVerify')} icon="shield" variant="secondary" style={{ marginTop: theme.space.md }} onPress={() => router.push('/onboarding/kyc')} />
-        ) : null}
       </Card>
+
+      {/* the rider's own verification detail (docs + reject reason + retry) */}
+      <KycCard />
+      <Spacer size={theme.space.md} />
 
       {/* yearly recap */}
       {stats ? (

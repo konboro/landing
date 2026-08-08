@@ -68,7 +68,7 @@ export class SupabaseOpsApi implements OpsApi {
     return {
       server_time: new Date().toISOString(),
       vehicles: [], tasks: [], zones: [], damageReports: [],
-      statusLog: [], batterySwaps: [], maintenance: [], heat: [],
+      statusLog: [], batterySwaps: [], maintenance: [], rides: [], heat: [],
     };
   }
 

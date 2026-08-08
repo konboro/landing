@@ -10,6 +10,7 @@ import type {
   BatterySwap,
   MaintenanceEntry,
   HeatCell,
+  VehicleRide,
 } from '../lib/types';
 import type { OpsTask, DamageReport, UUID, VehicleStatus } from '@penny/db-types';
 import { nowIso } from '../lib/ids';
@@ -51,6 +52,9 @@ export async function seedFromBootstrap(b: Bootstrap): Promise<void> {
     }
     for (const m of b.maintenance) {
       await db.runAsync(`INSERT OR REPLACE INTO maintenance(id,vehicle_id,at,json) VALUES(?,?,?,?)`, [m.id, m.vehicle_id, m.at, JSON.stringify(m)]);
+    }
+    for (const r of b.rides ?? []) {
+      await db.runAsync(`INSERT OR REPLACE INTO rides(id,vehicle_id,started_at,json) VALUES(?,?,?,?)`, [r.id, r.vehicle_id, r.started_at, JSON.stringify(r)]);
     }
     await db.runAsync(`DELETE FROM heat_cells`);
     for (const h of b.heat) {
@@ -145,6 +149,16 @@ export async function getMaintenance(vehicleId: UUID): Promise<MaintenanceEntry[
     [vehicleId],
   );
   return rows.map((r) => parse<MaintenanceEntry>(r.json));
+}
+
+/** Completed rides on a vehicle, newest first — read from the local mirror. */
+export async function getVehicleRides(vehicleId: UUID): Promise<VehicleRide[]> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ json: string }>(
+    'SELECT json FROM rides WHERE vehicle_id=? ORDER BY started_at DESC',
+    [vehicleId],
+  );
+  return rows.map((r) => parse<VehicleRide>(r.json));
 }
 
 export async function getHeatCells(): Promise<HeatCell[]> {

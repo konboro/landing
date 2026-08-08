@@ -87,6 +87,14 @@ CREATE TABLE IF NOT EXISTS maintenance (
 );
 CREATE INDEX IF NOT EXISTS idx_maint_vehicle ON maintenance(vehicle_id);
 
+CREATE TABLE IF NOT EXISTS rides (
+  id         TEXT PRIMARY KEY,
+  vehicle_id TEXT NOT NULL,
+  started_at TEXT,
+  json       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rides_vehicle ON rides(vehicle_id, started_at DESC);
+
 CREATE TABLE IF NOT EXISTS heat_cells (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
   json TEXT NOT NULL

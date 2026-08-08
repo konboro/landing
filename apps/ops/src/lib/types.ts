@@ -87,6 +87,23 @@ export interface BatterySwap {
   voltage_after: number | null;
 }
 
+/** A completed ride on a vehicle, mirrored for the field history screen.
+ *  Rider identity is masked — ops never needs the full number. */
+export interface VehicleRide {
+  id: UUID;
+  vehicle_id: UUID;
+  rider_masked: string;
+  status: string;
+  started_at: ISOTimestamp | null;
+  ended_at: ISOTimestamp | null;
+  duration_s: number;
+  distance_m: number;
+  cost_cents: number;
+  currency: string;
+  photo_review: string | null;
+  end_zone_name: string | null;
+}
+
 // --- vehicle_status_log ---
 export interface StatusLogEntry {
   id: UUID;
@@ -121,6 +138,7 @@ export interface Bootstrap {
   statusLog: StatusLogEntry[];
   batterySwaps: BatterySwap[];
   maintenance: MaintenanceEntry[];
+  rides: VehicleRide[];
   heat: HeatCell[];
 }
 

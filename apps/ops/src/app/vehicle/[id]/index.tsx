@@ -125,6 +125,7 @@ function Sheet({ v }: { v: OpsVehicle }) {
       {/* Status + visibility + swap + damage */}
       <Card>
         <H2>Manage</H2>
+        <Button title="Full history" icon="🕓" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/history`)} />
         <Button title="Change status" icon="🔄" onPress={() => router.push(`/vehicle/${v.id}/status`)} />
         <Button
           title={v.visible ? 'Hide from rider map' : 'Make visible'}
