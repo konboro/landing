@@ -26,6 +26,7 @@ import { SimDetailDrawer } from '@/components/sim/SimDetailDrawer';
 import { SIM_PLANS } from '@/lib/simPlans';
 import { formatMoney, formatNumber, relativeTime } from '@/lib/format';
 import type { SimInventoryRow, SimStatus } from '@/types/domain';
+import type { SimSyncResult } from '@/data/api';
 
 const STATUSES: SimStatus[] = ['inventory', 'active', 'suspended', 'terminated', 'test'];
 const HEALTHS = ['ok', 'near_limit', 'over_limit', 'no_usage', 'silent', 'unassigned'] as const;
@@ -52,9 +53,20 @@ export function ConnectivityPage() {
   // The KPI tiles summarise the whole fleet, not the current table page.
   const allQ = useQuery({ queryKey: ['sims', 'all'], queryFn: () => ds.getSims({ page: 1, pageSize: 1000 }) });
 
+  // Last provider sync is parked in the query cache (not component state) so
+  // the live/cached chip survives navigating away and back.
+  const lastSyncQ = useQuery<SimSyncResult | null>({
+    queryKey: ['sim-sync'],
+    queryFn: () => null,
+    enabled: false,
+    initialData: null,
+    staleTime: Infinity,
+  });
+
   const sync = useMutation({
     mutationFn: () => ds.syncSims(),
     onSuccess: (r) => {
+      qc.setQueryData(['sim-sync'], r);
       toast.push(
         `Synced ${r.fetched} SIMs from ${r.provider} — ${r.updated} updated, ${r.discovered} new`,
         'success',
@@ -209,7 +221,7 @@ export function ConnectivityPage() {
     { name: 'Most expensive', view: { filters: {}, sort: [{ field: 'cost_mtd_cents', dir: 'desc' }] } },
   ];
 
-  const lastSync = sync.data?.synced_at ?? null;
+  const lastSync = lastSyncQ.data?.synced_at ?? null;
   const canManage = can('settings.edit') || can('vehicles.status');
 
   return (

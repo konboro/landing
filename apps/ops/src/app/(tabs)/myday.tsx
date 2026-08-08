@@ -11,13 +11,16 @@ import { getCurrentPos } from '../../lib/geoloc';
 import { nearestNeighborRoute } from '../../lib/route';
 import { formatDistance } from '@penny/ui';
 import { navigateTo } from '../../lib/nav';
-import { c, space, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import type { OpsTask } from '@penny/db-types';
 import type { OpsVehicle } from '../../lib/types';
 import type { LngLat } from '@penny/db-types';
 
 export default function MyDayTab() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
   const staffId = useOps((s) => s.session?.staff_id);
   const tasks = useMirror(getTasks, [] as OpsTask[]);
   const vehicles = useMirror(getVehicles, [] as OpsVehicle[]);
@@ -99,6 +102,7 @@ export default function MyDayTab() {
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
+  const st = useStyles(useTheme());
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <Text style={st.statValue}>{value}</Text>
@@ -107,12 +111,12 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-const st = StyleSheet.create({
-  header: { padding: space.md, backgroundColor: c.surface },
-  statValue: { color: c.text, fontSize: font.size.xl, fontWeight: '800' },
-  statLabel: { color: c.textMuted, fontSize: font.size.xs, fontWeight: '600' },
-  stopWrap: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
-  badge: { width: 44, alignItems: 'center', gap: 2, paddingTop: space.md },
-  badgeText: { color: c.onPrimary, backgroundColor: c.primary, width: 32, height: 32, borderRadius: 16, textAlign: 'center', lineHeight: 32, fontWeight: '800', overflow: 'hidden' },
-  legText: { color: c.textFaint, fontSize: font.size.xs },
-});
+const useStyles = makeStyles((t) => ({
+  header: { padding: t.space.md, backgroundColor: t.c.surface },
+  statValue: { color: t.c.text, fontSize: t.font.size.xl, fontWeight: '800' },
+  statLabel: { color: t.c.textMuted, fontSize: t.font.size.xs, fontWeight: '600' },
+  stopWrap: { flexDirection: 'row', gap: t.space.sm, alignItems: 'flex-start' },
+  badge: { width: 44, alignItems: 'center', gap: 2, paddingTop: t.space.md },
+  badgeText: { color: t.c.onPrimary, backgroundColor: t.c.primary, width: 32, height: 32, borderRadius: 16, textAlign: 'center', lineHeight: 32, fontWeight: '800', overflow: 'hidden' },
+  legText: { color: t.c.textFaint, fontSize: t.font.size.xs },
+}));

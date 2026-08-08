@@ -5,7 +5,7 @@ import { PhotoButton, PhotoStrip } from '../components/PhotoCapture';
 import { findVehicleByCode } from '../offline/repo';
 import { deployDrop } from '../offline/actions';
 import { getCurrentPos } from '../lib/geoloc';
-import { c, space, font } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import type { OpsVehicle } from '../lib/types';
 import type { LngLat } from '@penny/db-types';
 
@@ -17,6 +17,9 @@ interface BatchItem {
 }
 
 export default function Deploy() {
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
   const [code, setCode] = useState('');
   const [batch, setBatch] = useState<BatchItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +65,7 @@ export default function Deploy() {
       {batch.length > 0 && (
         <Row style={{ justifyContent: 'space-between' }}>
           <H2>Batch ({batch.length})</H2>
-          <Badge label={`${doneCount} deployed`} color={c.success} textColor="#fff" />
+          <Badge label={`${doneCount} deployed`} color={c.success} textColor={c.onSuccess} />
         </Row>
       )}
 
@@ -73,7 +76,7 @@ export default function Deploy() {
           <Card key={item.vehicle.id} style={{ borderColor: item.deployed ? c.success : c.border }}>
             <Row style={{ justifyContent: 'space-between' }}>
               <H2>{item.vehicle.code}</H2>
-              {item.deployed ? <Badge label="available ✓" color={c.success} textColor="#fff" /> : <Badge label="staged" color={c.surfaceAlt} />}
+              {item.deployed ? <Badge label="available ✓" color={c.success} textColor={c.onSuccess} /> : <Badge label="staged" color={c.surfaceAlt} />}
             </Row>
             {!item.deployed && (
               <>
@@ -97,6 +100,6 @@ export default function Deploy() {
   );
 }
 
-const st = StyleSheet.create({
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-});
+const useStyles = makeStyles((t) => ({
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+}));

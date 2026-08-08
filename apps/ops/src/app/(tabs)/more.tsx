@@ -8,12 +8,13 @@ import { useOps } from '../../lib/store';
 import { clearSession } from '../../lib/auth';
 import { resetDb } from '../../offline/db';
 import { env } from '../../lib/env';
-import { c, space, font } from '../../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 
 export default function MoreTab() {
   const router = useRouter();
   const session = useOps((s) => s.session);
   const setSession = useOps((s) => s.setSession);
+  const { brand, opsName, isEnabled } = useBrand();
 
   async function logout() {
     await clearSession();
@@ -38,17 +39,21 @@ export default function MoreTab() {
       </Card>
 
       <MenuItem icon="⚠" label="Damage reports" onPress={() => router.push('/damage')} />
-      <MenuItem icon="📍" label="Deploy mode" onPress={() => router.push('/deploy')} />
+      {isEnabled('opsDeployMode') ? (
+        <MenuItem icon="📍" label="Deploy mode" onPress={() => router.push('/deploy')} />
+      ) : null}
       <MenuItem icon="🔁" label="Sync & dev tools" onPress={() => router.push('/dev')} />
       <MenuItem icon="🎓" label="Replay onboarding" onPress={() => router.push('/onboarding')} />
 
       <Button title="Sign out" variant="danger" onPress={logout} />
-      <Muted style={{ textAlign: 'center' }}>Penny Ops · offline-first field service</Muted>
+      <Muted style={{ textAlign: 'center' }}>{opsName} · offline-first field service</Muted>
+      <Muted style={{ textAlign: 'center' }}>{brand.legal.legalName} · support {brand.support.email}</Muted>
     </Screen>
   );
 }
 
 function MenuItem({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const st = useStyles(useTheme());
   return (
     <Card onPress={onPress}>
       <Row style={{ justifyContent: 'space-between' }}>
@@ -62,7 +67,7 @@ function MenuItem({ icon, label, onPress }: { icon: string; label: string; onPre
   );
 }
 
-const st = StyleSheet.create({
-  label: { color: c.text, fontSize: font.size.md, fontWeight: '700' },
-  chevron: { color: c.textMuted, fontSize: font.size.xl },
-});
+const useStyles = makeStyles((t) => ({
+  label: { color: t.c.text, fontSize: t.font.size.md, fontWeight: '700' },
+  chevron: { color: t.c.textMuted, fontSize: t.font.size.xl },
+}));

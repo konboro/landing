@@ -6,14 +6,17 @@ import { PhotoButton, PhotoStrip } from '../../components/PhotoCapture';
 import { findVehicleByCode, getVehicle } from '../../offline/repo';
 import { createDamage } from '../../offline/actions';
 import { getCurrentPos } from '../../lib/geoloc';
-import { c, space, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import type { OpsVehicle } from '../../lib/types';
 
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
-const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
 
 export default function NewDamage() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
+  const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
   const params = useLocalSearchParams<{ vehicleId?: string; taskId?: string }>();
   const [vehicle, setVehicle] = useState<OpsVehicle | null>(null);
   const [code, setCode] = useState('');
@@ -69,7 +72,7 @@ export default function NewDamage() {
         <Row style={{ flexWrap: 'wrap' }}>
           {SEVERITIES.map((s) => (
             <Pressable key={s} onPress={() => setSeverity(s)} style={[st.sev, severity === s && { borderColor: SEV_COLOR[s], borderWidth: 2 }]}>
-              <Badge label={s} color={SEV_COLOR[s]} textColor={s === 'low' ? c.text : '#fff'} />
+              <Badge label={s} color={SEV_COLOR[s]} textColor={s === 'low' ? c.text : c.onDanger} />
             </Pressable>
           ))}
         </Row>
@@ -87,8 +90,8 @@ export default function NewDamage() {
   );
 }
 
-const st = StyleSheet.create({
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-  label: { color: c.textMuted, fontSize: font.size.sm, fontWeight: '600' },
+const useStyles = makeStyles((t) => ({
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+  label: { color: t.c.textMuted, fontSize: t.font.size.sm, fontWeight: '600' },
   sev: { padding: 4, borderRadius: 8, borderWidth: 2, borderColor: 'transparent' },
-});
+}));

@@ -15,6 +15,7 @@ import {
   scaledFontSize,
   scaledRadius,
   scaledSpace,
+  readableOn,
   statusColor as brandStatusColor,
   type Brand,
   type BrandColors,
@@ -34,6 +35,13 @@ export interface OpsColors extends BrandColors {
   textFaint: string;
   /** Deep primary used for filled chips/pills on the dark chrome. */
   primaryDeep: string;
+  /**
+   * Auto-picked black/white ink for text drawn on a filled semantic chip.
+   * A client can pick any amber/green/red; `readableOn` keeps the label legible.
+   */
+  onWarning: string;
+  onSuccess: string;
+  onDanger: string;
 }
 
 export interface SpaceScale {
@@ -95,6 +103,9 @@ export function deriveTheme(brand: Brand, mode: ThemeMode = 'dark'): OpsTheme {
     ...base,
     textFaint: withAlpha(base.textMuted, 0.7),
     primaryDeep: base.primaryDark,
+    onWarning: readableOn(base.warning),
+    onSuccess: readableOn(base.success),
+    onDanger: readableOn(base.danger),
   };
 
   const space: SpaceScale = {

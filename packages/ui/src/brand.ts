@@ -266,12 +266,20 @@ export const pennyBrand: Brand = {
 
 /* ───────────────────────────────── merge ────────────────────────────────── */
 
-type Primitive = string | number | boolean | null;
+/**
+ * Recursively optional.
+ *
+ * Note the `extends object` test rather than `extends Record<string, unknown>`:
+ * an `interface` without an index signature does NOT satisfy the latter, so the
+ * earlier version silently fell through and required every nested field —
+ * defeating the point of `createBrand({ colors: { primary } })`. Arrays and
+ * nullable primitives are passed through untouched.
+ */
 export type DeepPartial<T> = {
-  [K in keyof T]?: T[K] extends Primitive | undefined
+  [K in keyof T]?: T[K] extends readonly unknown[]
     ? T[K]
-    : T[K] extends Record<string, unknown>
-      ? DeepPartial<T[K]>
+    : T[K] extends object | undefined
+      ? DeepPartial<NonNullable<T[K]>>
       : T[K];
 };
 

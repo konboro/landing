@@ -4,7 +4,7 @@
 // for resumable upload via the outbox and referenced by their remote path.
 import React, { useState } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet, Image } from 'react-native';
-import { c, space, radius, font, tap } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { queuePhoto } from '../offline/outbox';
 import { uuid } from '../lib/ids';
 
@@ -42,6 +42,8 @@ export function PhotoButton({
   variant?: 'primary' | 'secondary';
 }) {
   const [open, setOpen] = useState(false);
+  const theme = useTheme();
+  const st = useStyles(theme);
 
   async function finalize(localUri: string) {
     const remotePath = await queuePhoto(localUri, vehicleId);
@@ -54,11 +56,11 @@ export function PhotoButton({
         onPress={() => setOpen(true)}
         style={({ pressed }) => [
           st.btn,
-          variant === 'primary' && { backgroundColor: c.primary },
+          variant === 'primary' && { backgroundColor: theme.c.primary },
           pressed && { opacity: 0.7 },
         ]}
       >
-        <Text style={[st.btnText, variant === 'primary' && { color: c.onPrimary }]}>{'📷  ' + label}</Text>
+        <Text style={[st.btnText, variant === 'primary' && { color: theme.c.onPrimary }]}>{'📷  ' + label}</Text>
       </Pressable>
       <CameraModal open={open} onClose={() => setOpen(false)} onShot={finalize} />
     </>
@@ -73,6 +75,8 @@ function CameraModal({ open, onClose, onShot }: {
   const request = perms?.[1];
   const CameraView = Camera?.CameraView;
   const cameraRef = React.useRef<any>(null);
+  const theme = useTheme();
+  const st = useStyles(theme);
 
   const canUseCamera = !!CameraView && permission?.granted;
 
@@ -99,8 +103,8 @@ function CameraModal({ open, onClose, onShot }: {
             <Pressable style={st.action} onPress={() => request?.()}>
               <Text style={st.actionText}>Grant permission</Text>
             </Pressable>
-            <Pressable style={[st.action, { backgroundColor: c.surfaceAlt }]} onPress={shoot}>
-              <Text style={[st.actionText, { color: c.text }]}>Use placeholder photo</Text>
+            <Pressable style={[st.action, { backgroundColor: theme.c.surfaceAlt }]} onPress={shoot}>
+              <Text style={[st.actionText, { color: theme.c.text }]}>Use placeholder photo</Text>
             </Pressable>
           </View>
         ) : canUseCamera ? (
@@ -132,6 +136,7 @@ function syntheticUri(): string {
 
 /** Horizontal strip of attached photos (thumbnails or placeholder tiles). */
 export function PhotoStrip({ photos }: { photos: string[] }) {
+  const st = useStyles(useTheme());
   if (photos.length === 0) return null;
   return (
     <View style={st.strip}>
@@ -149,22 +154,23 @@ export function PhotoStrip({ photos }: { photos: string[] }) {
   );
 }
 
-const st = StyleSheet.create({
-  btn: { minHeight: tap.min, borderRadius: radius.md, backgroundColor: c.surfaceAlt, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.lg, borderWidth: 1, borderColor: c.border },
-  btnText: { color: c.text, fontSize: font.size.md, fontWeight: '700' },
+// The camera modal is deliberately black chrome (viewfinder), not brand surface.
+const useStyles = makeStyles((t) => ({
+  btn: { minHeight: t.tap.min, borderRadius: t.radius.md, backgroundColor: t.c.surfaceAlt, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space.lg, borderWidth: 1, borderColor: t.c.border },
+  btnText: { color: t.c.text, fontSize: t.font.size.md, fontWeight: '700' },
   modal: { flex: 1, backgroundColor: '#000' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: space.md, padding: space.xl },
-  info: { color: '#fff', fontSize: font.size.lg, textAlign: 'center' },
-  hint: { color: '#aaa', fontSize: font.size.sm, textAlign: 'center' },
-  action: { backgroundColor: c.primary, paddingHorizontal: space.xl, paddingVertical: space.md, borderRadius: radius.md },
-  actionText: { color: '#fff', fontWeight: '700', fontSize: font.size.md },
-  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.xl, backgroundColor: '#000' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: t.space.md, padding: t.space.xl },
+  info: { color: '#fff', fontSize: t.font.size.lg, textAlign: 'center' },
+  hint: { color: '#aaa', fontSize: t.font.size.sm, textAlign: 'center' },
+  action: { backgroundColor: t.c.primary, paddingHorizontal: t.space.xl, paddingVertical: t.space.md, borderRadius: t.radius.md },
+  actionText: { color: t.c.onPrimary, fontWeight: '700', fontSize: t.font.size.md },
+  bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: t.space.xl, backgroundColor: '#000' },
   cancel: { width: 72 },
-  cancelText: { color: '#fff', fontSize: font.size.md },
+  cancelText: { color: '#fff', fontSize: t.font.size.md },
   shutter: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: '#fff', alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: 54, height: 54, borderRadius: 27, backgroundColor: '#fff' },
-  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  thumb: { width: 64, height: 64, borderRadius: radius.sm, backgroundColor: c.surfaceAlt },
-  placeholder: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border },
+  strip: { flexDirection: 'row', flexWrap: 'wrap', gap: t.space.sm },
+  thumb: { width: 64, height: 64, borderRadius: t.radius.sm, backgroundColor: t.c.surfaceAlt },
+  placeholder: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: t.c.border },
   placeholderText: { fontSize: 24 },
-});
+}));

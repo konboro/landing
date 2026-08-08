@@ -1,11 +1,11 @@
-// Utilitarian, high-contrast, glove-friendly primitives built on @penny/ui
-// tokens via the ops theme. Big tap targets for outdoor field use.
+// Utilitarian, high-contrast, glove-friendly primitives. Brand-aware: every
+// colour, radius and type size comes from `useTheme()`, so switching brand or
+// light/dark re-themes the whole app. Big tap targets for outdoor field use.
 import React from 'react';
 import {
   View,
   Text,
   Pressable,
-  StyleSheet,
   ScrollView,
   ActivityIndicator,
   TextInput,
@@ -14,11 +14,14 @@ import {
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { c, space, radius, font, tap, colorForStatus } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 
 export function Screen({ children, style, scroll = false, pad = true }: {
   children: React.ReactNode; style?: StyleProp<ViewStyle>; scroll?: boolean; pad?: boolean;
 }) {
+  const theme = useTheme();
+  const s = useStyles(theme);
+  const { space } = theme;
   const inner = (
     <View style={[pad && { padding: space.lg, gap: space.md }, style]}>{children}</View>
   );
@@ -36,21 +39,22 @@ export function Screen({ children, style, scroll = false, pad = true }: {
 }
 
 export function H1({ children }: { children: React.ReactNode }) {
-  return <Text style={s.h1}>{children}</Text>;
+  return <Text style={useStyles(useTheme()).h1}>{children}</Text>;
 }
 export function H2({ children }: { children: React.ReactNode }) {
-  return <Text style={s.h2}>{children}</Text>;
+  return <Text style={useStyles(useTheme()).h2}>{children}</Text>;
 }
 export function Muted({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
-  return <Text style={[s.muted, style]}>{children}</Text>;
+  return <Text style={[useStyles(useTheme()).muted, style]}>{children}</Text>;
 }
 export function Body({ children, style }: { children: React.ReactNode; style?: StyleProp<TextStyle> }) {
-  return <Text style={[s.body, style]}>{children}</Text>;
+  return <Text style={[useStyles(useTheme()).body, style]}>{children}</Text>;
 }
 
 export function Card({ children, style, onPress }: {
   children: React.ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void;
 }) {
+  const s = useStyles(useTheme());
   if (onPress) {
     return (
       <Pressable onPress={onPress} style={({ pressed }) => [s.card, pressed && s.pressed, style]}>
@@ -61,10 +65,13 @@ export function Card({ children, style, onPress }: {
   return <View style={[s.card, style]}>{children}</View>;
 }
 
-export function Row({ children, style, gap = space.sm }: {
+export function Row({ children, style, gap }: {
   children: React.ReactNode; style?: StyleProp<ViewStyle>; gap?: number;
 }) {
-  return <View style={[{ flexDirection: 'row', alignItems: 'center', gap }, style]}>{children}</View>;
+  const { space } = useTheme();
+  return (
+    <View style={[{ flexDirection: 'row', alignItems: 'center', gap: gap ?? space.sm }, style]}>{children}</View>
+  );
 }
 
 type BtnVariant = 'primary' | 'secondary' | 'danger' | 'ghost' | 'success';
@@ -72,6 +79,9 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
   title: string; onPress?: () => void; variant?: BtnVariant; disabled?: boolean;
   loading?: boolean; style?: StyleProp<ViewStyle>; icon?: string;
 }) {
+  const theme = useTheme();
+  const s = useStyles(theme);
+  const { c } = theme;
   const bg = {
     primary: c.primary, secondary: c.surfaceAlt, danger: c.danger, success: c.success, ghost: 'transparent',
   }[variant];
@@ -102,21 +112,26 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
 }
 
 export function StatusDot({ status, size = 12 }: { status: string; size?: number }) {
+  const { colorForStatus } = useTheme();
   return <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colorForStatus(status) }} />;
 }
 
 export function Badge({ label, color, textColor }: { label: string; color?: string; textColor?: string }) {
+  const theme = useTheme();
+  const s = useStyles(theme);
   return (
-    <View style={[s.badge, { backgroundColor: color ?? c.surfaceAlt }]}>
-      <Text style={[s.badgeText, { color: textColor ?? c.text }]}>{label}</Text>
+    <View style={[s.badge, { backgroundColor: color ?? theme.c.surfaceAlt }]}>
+      <Text style={[s.badgeText, { color: textColor ?? theme.c.text }]}>{label}</Text>
     </View>
   );
 }
 
 export function Pill({ label, color, textColor }: { label: string; color?: string; textColor?: string }) {
+  const theme = useTheme();
+  const s = useStyles(theme);
   return (
-    <View style={[s.pill, { backgroundColor: color ?? c.surfaceAlt }]}>
-      <Text style={[s.pillText, { color: textColor ?? c.text }]}>{label}</Text>
+    <View style={[s.pill, { backgroundColor: color ?? theme.c.surfaceAlt }]}>
+      <Text style={[s.pillText, { color: textColor ?? theme.c.text }]}>{label}</Text>
     </View>
   );
 }
@@ -125,14 +140,16 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, m
   label: string; value: string; onChangeText: (t: string) => void; placeholder?: string;
   keyboardType?: 'default' | 'numeric' | 'phone-pad' | 'number-pad'; multiline?: boolean; autoFocus?: boolean;
 }) {
+  const theme = useTheme();
+  const s = useStyles(theme);
   return (
-    <View style={{ gap: space.xs }}>
+    <View style={{ gap: theme.space.xs }}>
       <Text style={s.label}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor={c.textFaint}
+        placeholderTextColor={theme.c.textFaint}
         keyboardType={keyboardType}
         multiline={multiline}
         autoFocus={autoFocus}
@@ -143,31 +160,37 @@ export function Field({ label, value, onChangeText, placeholder, keyboardType, m
 }
 
 export function Divider() {
-  return <View style={{ height: 1, backgroundColor: c.border, marginVertical: space.xs }} />;
+  const theme = useTheme();
+  return <View style={{ height: 1, backgroundColor: theme.c.border, marginVertical: theme.space.xs }} />;
 }
 
 export function Empty({ text }: { text: string }) {
+  const theme = useTheme();
   return (
-    <View style={{ padding: space.xxl, alignItems: 'center' }}>
+    <View style={{ padding: theme.space.xxl, alignItems: 'center' }}>
       <Muted>{text}</Muted>
     </View>
   );
 }
 
-export const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
-  h1: { color: c.text, fontSize: font.size.xxl, fontWeight: '700' },
-  h2: { color: c.text, fontSize: font.size.lg, fontWeight: '600' },
-  body: { color: c.text, fontSize: font.size.md },
-  muted: { color: c.textMuted, fontSize: font.size.sm },
-  card: { backgroundColor: c.surface, borderRadius: radius.lg, padding: space.lg, gap: space.sm, borderWidth: 1, borderColor: c.border },
+const useStyles = makeStyles((t) => ({
+  screen: { flex: 1, backgroundColor: t.c.bg },
+  h1: { color: t.c.text, fontSize: t.font.size.xxl, fontWeight: '700' },
+  h2: { color: t.c.text, fontSize: t.font.size.lg, fontWeight: '600' },
+  body: { color: t.c.text, fontSize: t.font.size.md },
+  muted: { color: t.c.textMuted, fontSize: t.font.size.sm },
+  card: { backgroundColor: t.c.surface, borderRadius: t.radius.lg, padding: t.space.lg, gap: t.space.sm, borderWidth: 1, borderColor: t.c.border },
   pressed: { opacity: 0.7 },
-  btn: { minHeight: tap.min, borderRadius: radius.md, paddingHorizontal: space.lg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-  btnText: { fontSize: font.size.md, fontWeight: '700' },
-  badge: { paddingHorizontal: space.sm, paddingVertical: 3, borderRadius: radius.sm, alignSelf: 'flex-start' },
-  badgeText: { fontSize: font.size.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
-  pill: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, alignSelf: 'flex-start' },
-  pillText: { fontSize: font.size.sm, fontWeight: '600' },
-  label: { color: c.textMuted, fontSize: font.size.sm, fontWeight: '600' },
-  input: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: radius.md, color: c.text, paddingHorizontal: space.md, minHeight: tap.min, fontSize: font.size.md },
-});
+  btn: { minHeight: t.tap.min, borderRadius: t.radius.md, paddingHorizontal: t.space.lg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+  btnText: { fontSize: t.font.size.md, fontWeight: '700' },
+  badge: { paddingHorizontal: t.space.sm, paddingVertical: 3, borderRadius: t.radius.sm, alignSelf: 'flex-start' },
+  badgeText: { fontSize: t.font.size.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  pill: { paddingHorizontal: t.space.md, paddingVertical: 6, borderRadius: t.radius.pill, alignSelf: 'flex-start' },
+  pillText: { fontSize: t.font.size.sm, fontWeight: '600' },
+  label: { color: t.c.textMuted, fontSize: t.font.size.sm, fontWeight: '600' },
+  input: { backgroundColor: t.c.surface, borderWidth: 1, borderColor: t.c.border, borderRadius: t.radius.md, color: t.c.text, paddingHorizontal: t.space.md, minHeight: t.tap.min, fontSize: t.font.size.md },
+}));
+
+// Kept as a named export for parity with the previous module surface; screens
+// should build their own themed styles with `makeStyles` instead.
+export { useStyles as useUiStyles };

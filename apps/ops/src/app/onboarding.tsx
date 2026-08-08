@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Screen, H1, H2, Body, Muted, Button, Card } from '../components/ui';
 import { StatusLegend } from '../components/StatusLegend';
 import { setOnboarded } from '../lib/auth';
-import { c, space, font } from '../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../brand';
 
 interface Slide {
   title: string;
@@ -22,14 +22,18 @@ const TASK_TYPES: { icon: string; name: string; desc: string }[] = [
 
 export default function Onboarding() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
+  const { brand, opsName } = useBrand();
   const [i, setI] = useState(0);
 
   const slides: Slide[] = [
     {
-      title: 'Welcome to Penny Ops',
+      title: `Welcome to ${opsName}`,
       body: (
         <View style={{ gap: space.md }}>
-          <Body>Your field service tool for the Athens fleet. Big buttons, high contrast, built for outdoor use with gloves.</Body>
+          <Body>Your field service tool for the {brand.name} fleet. Big buttons, high contrast, built for outdoor use with gloves.</Body>
           <Card>
             <H2>Status colors</H2>
             <Muted>You&apos;ll see every vehicle on the map — not just available ones.</Muted>
@@ -111,9 +115,9 @@ export default function Onboarding() {
   );
 }
 
-const st = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   dots: { flexDirection: 'row', gap: 6, justifyContent: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.border },
-  dotActive: { backgroundColor: c.primary, width: 24 },
-  tt: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-});
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.c.border },
+  dotActive: { backgroundColor: t.c.primary, width: 24 },
+  tt: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+}));

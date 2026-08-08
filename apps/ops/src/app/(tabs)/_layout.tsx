@@ -1,13 +1,14 @@
 import React from 'react';
 import { Text } from 'react-native';
 import { Tabs } from 'expo-router';
-import { c, font } from '../../lib/theme';
+import { useTheme } from '../../brand';
 
 function Icon({ emoji, color }: { emoji: string; color: string }) {
-  return <Text style={{ fontSize: 22, color, opacity: color === c.primary ? 1 : 0.9 }}>{emoji}</Text>;
+  return <Text style={{ fontSize: 22, color, opacity: 0.95 }}>{emoji}</Text>;
 }
 
 export default function TabsLayout() {
+  const { c, font } = useTheme();
   return (
     <Tabs
       screenOptions={{

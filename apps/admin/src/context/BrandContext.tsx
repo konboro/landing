@@ -46,7 +46,6 @@ export const aegeanBrand: Brand = createBrand({
   domain: 'aegean.ride',
   locale: 'el-GR',
   colors: {
-    ...pennyBrand.colors,
     primary: '#0d7a8f',
     primaryDark: '#075263',
     primarySoft: '#e3f4f7',
@@ -55,17 +54,16 @@ export const aegeanBrand: Brand = createBrand({
     statusInTrip: '#0d7a8f',
     statusReserved: '#4bb3c6',
   },
-  darkColors: { ...pennyBrand.darkColors, primary: '#4bb3c6', primarySoft: '#0f3b45' },
-  assets: { ...pennyBrand.assets, monogram: 'Æ', emoji: '🌊' },
-  support: { ...pennyBrand.support, email: 'support@aegean.ride', url: 'https://aegean.ride/help' },
+  darkColors: { primary: '#4bb3c6', primarySoft: '#0f3b45' },
+  assets: { monogram: 'Æ', emoji: '🌊' },
+  support: { email: 'support@aegean.ride', url: 'https://aegean.ride/help' },
   legal: {
-    ...pennyBrand.legal,
     legalName: 'Aegean Ride Μ.Ι.Κ.Ε.',
     address: 'Piraeus, Greece',
     termsUrl: 'https://aegean.ride/terms',
     privacyUrl: 'https://aegean.ride/privacy',
   },
-  features: { ...pennyBrand.features, loyalty: false, groupRides: false },
+  features: { loyalty: false, groupRides: false },
 });
 
 export const voltaBrand: Brand = createBrand({
@@ -76,7 +74,6 @@ export const voltaBrand: Brand = createBrand({
   defaultLang: 'en',
   locale: 'en-GB',
   colors: {
-    ...pennyBrand.colors,
     primary: '#f25c05',
     primaryDark: '#b23f00',
     primarySoft: '#fff0e6',
@@ -86,20 +83,19 @@ export const voltaBrand: Brand = createBrand({
     statusInTrip: '#f25c05',
     statusTransport: '#7b4bd8',
   },
-  darkColors: { ...pennyBrand.darkColors, primary: '#ff8a44', primarySoft: '#4a2308' },
-  typography: { ...pennyBrand.typography, scale: 1.05 },
+  darkColors: { primary: '#ff8a44', primarySoft: '#4a2308' },
+  typography: { scale: 1.05 },
   shape: { radiusScale: 1.6, spaceScale: 1 },
-  assets: { ...pennyBrand.assets, monogram: 'V', emoji: '⚡' },
-  support: { ...pennyBrand.support, email: 'hello@voltamobility.eu', phone: '+30 210 000 0000', url: 'https://voltamobility.eu/support' },
+  assets: { monogram: 'V', emoji: '⚡' },
+  support: { email: 'hello@voltamobility.eu', phone: '+30 210 000 0000', url: 'https://voltamobility.eu/support' },
   legal: {
-    ...pennyBrand.legal,
     legalName: 'Volta Mobility BV',
     address: 'Rotterdam, Netherlands',
     vatId: 'NL861234567B01',
     termsUrl: 'https://voltamobility.eu/terms',
     privacyUrl: 'https://voltamobility.eu/privacy',
   },
-  features: { ...pennyBrand.features, packages: false, parkingSchool: false },
+  features: { packages: false, parkingSchool: false },
 });
 
 /** Brands selectable from the switcher / pinnable via `VITE_BRAND`. */

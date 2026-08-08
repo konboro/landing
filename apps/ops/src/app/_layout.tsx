@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,12 +10,24 @@ import { startSync } from '../offline/sync';
 import { isSeeded } from '../offline/repo';
 import { getOpsApi } from '../services';
 import { seedFromBootstrap } from '../offline/repo';
-import { c } from '../lib/theme';
+import { BrandProvider, useBrand, useTheme, makeStyles } from '../brand';
 
 export default function RootLayout() {
+  return (
+    <BrandProvider>
+      <AppShell />
+    </BrandProvider>
+  );
+}
+
+function AppShell() {
   const [booting, setBooting] = useState(true);
   const setSession = useOps((s) => s.setSession);
   const setBootstrapped = useOps((s) => s.setBootstrapped);
+  const theme = useTheme();
+  const styles = useStyles(theme);
+  const { opsName } = useBrand();
+  const { c } = theme;
 
   useEffect(() => {
     (async () => {
@@ -49,7 +61,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
         <AuthGate />
         <Stack
           screenOptions={{
@@ -60,7 +72,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ title: 'Welcome to Penny Ops', headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ title: `Welcome to ${opsName}`, headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="dev" options={{ title: 'Sync & Dev tools', presentation: 'modal' }} />
           <Stack.Screen name="deploy" options={{ title: 'Deploy mode' }} />
@@ -96,6 +108,6 @@ function AuthGate() {
   return null;
 }
 
-const styles = StyleSheet.create({
-  boot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
-});
+const useStyles = makeStyles((t) => ({
+  boot: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: t.c.bg },
+}));

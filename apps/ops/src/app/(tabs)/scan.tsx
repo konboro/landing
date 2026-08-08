@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Screen, H2, Muted, Button, Field, Card, Row } from '../../components/ui';
 import { SyncPill } from '../../components/SyncPill';
 import { findVehicleByCode } from '../../offline/repo';
-import { c, space, radius, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 
 let Camera: any = null;
 try {
@@ -16,6 +16,8 @@ try {
 
 export default function ScanTab() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -95,10 +97,10 @@ export default function ScanTab() {
   );
 }
 
-const st = StyleSheet.create({
-  scanBox: { height: 220, borderRadius: radius.md, overflow: 'hidden', backgroundColor: '#000', borderWidth: 1, borderColor: c.border },
-  scanPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: space.sm },
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-  link: { flex: 1, padding: space.md, alignItems: 'center', borderRadius: radius.md, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
-  linkText: { color: c.text, fontWeight: '700', fontSize: font.size.sm },
-});
+const useStyles = makeStyles((t) => ({
+  scanBox: { height: 220, borderRadius: t.radius.md, overflow: 'hidden', backgroundColor: '#000', borderWidth: 1, borderColor: t.c.border },
+  scanPlaceholder: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: t.space.sm },
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+  link: { flex: 1, padding: t.space.md, alignItems: 'center', borderRadius: t.radius.md, borderWidth: 1, borderColor: t.c.border, backgroundColor: t.c.surface },
+  linkText: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.sm },
+}));

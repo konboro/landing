@@ -6,11 +6,15 @@ import { getOpsApi } from '../services';
 import { bootstrapAfterLogin } from '../offline/bootstrap';
 import { saveSession, isOnboarded } from '../lib/auth';
 import { useOps } from '../lib/store';
-import { c, space, font } from '../lib/theme';
+import { useBrand, useTheme, makeStyles } from '../brand';
 import { env } from '../lib/env';
 
 export default function Login() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
+  const { opsName } = useBrand();
   const setSession = useOps((s) => s.setSession);
   const [phone, setPhone] = useState('+306900000000');
   const [otp, setOtp] = useState('');
@@ -48,7 +52,7 @@ export default function Login() {
     <Screen>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ gap: space.xl, marginTop: space.xxxl }}>
         <View style={{ gap: space.xs }}>
-          <Text style={st.logo}>Penny Ops</Text>
+          <Text style={st.logo}>{opsName}</Text>
           <H1>Field service</H1>
           <Muted>Staff login — OTP + staff role check. Offline-first.</Muted>
         </View>
@@ -80,8 +84,8 @@ export default function Login() {
   );
 }
 
-const st = StyleSheet.create({
-  logo: { color: c.primary, fontSize: font.size.lg, fontWeight: '800', letterSpacing: 0.5 },
-  err: { color: c.danger, fontSize: font.size.sm, fontWeight: '600' },
-  demoTitle: { color: c.text, fontWeight: '700', fontSize: font.size.sm },
-});
+const useStyles = makeStyles((t) => ({
+  logo: { color: t.c.primary, fontSize: t.font.size.lg, fontWeight: '800', letterSpacing: 0.5 },
+  err: { color: t.c.danger, fontSize: t.font.size.sm, fontWeight: '600' },
+  demoTitle: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.sm },
+}));

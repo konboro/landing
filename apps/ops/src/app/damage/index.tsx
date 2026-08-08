@@ -6,16 +6,19 @@ import { SyncPill } from '../../components/SyncPill';
 import { useMirror } from '../../lib/useMirror';
 import { getDamageReports, getVehicles } from '../../offline/repo';
 import { relativeTime } from '@penny/ui';
-import { c, space, radius, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import type { DamageReport } from '@penny/db-types';
 import type { OpsVehicle } from '../../lib/types';
 
-const STATUS_COLOR: Record<string, string> = { new: c.warning, confirmed: c.primary, fixed: c.success, rejected: c.textFaint };
-const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
 const FILTERS = ['all', 'new', 'confirmed', 'fixed'] as const;
 
 export default function DamageList() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
+  const STATUS_COLOR: Record<string, string> = { new: c.warning, confirmed: c.primary, fixed: c.success, rejected: c.textFaint };
+  const SEV_COLOR: Record<string, string> = { low: c.surfaceAlt, medium: c.warning, high: c.danger, critical: c.danger };
   const reports = useMirror(getDamageReports, [] as DamageReport[]);
   const vehicles = useMirror(getVehicles, [] as OpsVehicle[]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
@@ -46,14 +49,14 @@ export default function DamageList() {
             <Row style={{ justifyContent: 'space-between' }}>
               <Text style={st.code}>{vmap.get(item.vehicle_id)?.code ?? 'Vehicle'}</Text>
               <Row gap={6}>
-                <Badge label={item.severity} color={SEV_COLOR[item.severity]} textColor={item.severity === 'low' ? c.text : '#fff'} />
-                <Badge label={item.status} color={STATUS_COLOR[item.status]} textColor={item.status === 'new' ? '#1a1200' : '#fff'} />
+                <Badge label={item.severity} color={SEV_COLOR[item.severity]} textColor={item.severity === 'low' ? c.text : c.onDanger} />
+                <Badge label={item.status} color={STATUS_COLOR[item.status]} textColor={item.status === 'new' ? c.onWarning : c.onPrimary} />
               </Row>
             </Row>
             <Text style={st.desc} numberOfLines={2}>{item.description}</Text>
             <Row style={{ justifyContent: 'space-between' }}>
               <Muted>by {item.reporter} · {relativeTime(item.created_at)}</Muted>
-              {item.penalty_payment_id ? <Badge label="penalty→review" color={c.danger} textColor="#fff" /> : null}
+              {item.penalty_payment_id ? <Badge label="penalty→review" color={c.danger} textColor={c.onDanger} /> : null}
             </Row>
           </Card>
         )}
@@ -62,13 +65,13 @@ export default function DamageList() {
   );
 }
 
-const st = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, backgroundColor: c.surface },
-  filterRow: { flexDirection: 'row', gap: space.sm, padding: space.sm, backgroundColor: c.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.border },
-  chip: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  chipOn: { backgroundColor: c.primary, borderColor: c.primary },
-  chipText: { color: c.textMuted, fontSize: font.size.sm, fontWeight: '700', textTransform: 'capitalize' },
-  chipTextOn: { color: c.onPrimary },
-  code: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-  desc: { color: c.text, fontSize: font.size.md },
-});
+const useStyles = makeStyles((t) => ({
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: t.space.md, backgroundColor: t.c.surface },
+  filterRow: { flexDirection: 'row', gap: t.space.sm, padding: t.space.sm, backgroundColor: t.c.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.c.border },
+  chip: { paddingHorizontal: t.space.md, paddingVertical: 6, borderRadius: t.radius.pill, backgroundColor: t.c.surfaceAlt, borderWidth: 1, borderColor: t.c.border },
+  chipOn: { backgroundColor: t.c.primary, borderColor: t.c.primary },
+  chipText: { color: t.c.textMuted, fontSize: t.font.size.sm, fontWeight: '700', textTransform: 'capitalize' },
+  chipTextOn: { color: t.c.onPrimary },
+  code: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+  desc: { color: t.c.text, fontSize: t.font.size.md },
+}));

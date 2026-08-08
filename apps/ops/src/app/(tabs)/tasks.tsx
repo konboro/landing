@@ -7,7 +7,7 @@ import { Empty } from '../../components/ui';
 import { useMirror } from '../../lib/useMirror';
 import { getTasks, getVehicles } from '../../offline/repo';
 import { useOps } from '../../lib/store';
-import { c, space, radius, font } from '../../lib/theme';
+import { useTheme, makeStyles } from '../../brand';
 import type { OpsTask } from '@penny/db-types';
 import type { OpsVehicle } from '../../lib/types';
 
@@ -24,6 +24,9 @@ const KINDS = ['battery_swap', 'rebalance', 'repair', 'inspect', 'pickup', 'depl
 
 export default function TasksTab() {
   const router = useRouter();
+  const theme = useTheme();
+  const st = useStyles(theme);
+  const { c, space } = theme;
   const staffId = useOps((s) => s.session?.staff_id);
   const tasks = useMirror(getTasks, [] as OpsTask[]);
   const vehicles = useMirror(getVehicles, [] as OpsVehicle[]);
@@ -113,13 +116,13 @@ export default function TasksTab() {
   );
 }
 
-const st = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: space.md, backgroundColor: c.surface },
-  counts: { color: c.textMuted, fontSize: font.size.xs, fontWeight: '600' },
-  filterRow: { paddingVertical: space.xs, backgroundColor: c.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.border },
-  chip: { paddingHorizontal: space.md, paddingVertical: 8, borderRadius: radius.pill, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  chipSm: { paddingHorizontal: space.md, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: c.surfaceAlt, borderWidth: 1, borderColor: c.border },
-  chipOn: { backgroundColor: c.primary, borderColor: c.primary },
-  chipText: { color: c.textMuted, fontSize: font.size.sm, fontWeight: '700', textTransform: 'capitalize' },
-  chipTextOn: { color: c.onPrimary },
-});
+const useStyles = makeStyles((t) => ({
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: t.space.md, backgroundColor: t.c.surface },
+  counts: { color: t.c.textMuted, fontSize: t.font.size.xs, fontWeight: '600' },
+  filterRow: { paddingVertical: t.space.xs, backgroundColor: t.c.surface, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.c.border },
+  chip: { paddingHorizontal: t.space.md, paddingVertical: 8, borderRadius: t.radius.pill, backgroundColor: t.c.surfaceAlt, borderWidth: 1, borderColor: t.c.border },
+  chipSm: { paddingHorizontal: t.space.md, paddingVertical: 6, borderRadius: t.radius.pill, backgroundColor: t.c.surfaceAlt, borderWidth: 1, borderColor: t.c.border },
+  chipOn: { backgroundColor: t.c.primary, borderColor: t.c.primary },
+  chipText: { color: t.c.textMuted, fontSize: t.font.size.sm, fontWeight: '700', textTransform: 'capitalize' },
+  chipTextOn: { color: t.c.onPrimary },
+}));

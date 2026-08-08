@@ -9,7 +9,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { hasMapboxToken, env } from '../lib/env';
-import { c, space, radius, font, colorForStatus } from '../lib/theme';
+import { useTheme, makeStyles } from '../brand';
 import { StatusDot, Badge } from './ui';
 import { formatSoc } from '@penny/ui';
 import type { OpsVehicle, RebalanceZone, HeatCell } from '../lib/types';
@@ -64,10 +64,13 @@ function NativeMap({ vehicles, zones, heat, layers, onSelect }: {
   vehicles: OpsVehicle[]; zones: RebalanceZone[]; heat: HeatCell[]; layers: MapLayers;
   onSelect: (v: OpsVehicle) => void;
 }) {
+  const theme = useTheme();
+  const mapStyles = useStyles(theme);
+  const { c, colorForStatus } = theme;
   const { MapView, Camera, PointAnnotation, ShapeSource, FillLayer, CircleLayer } = Mapbox;
   return (
     <View style={{ flex: 1 }}>
-      <MapView style={{ flex: 1 }} styleURL={Mapbox.StyleURL?.Dark} scaleBarEnabled={false}>
+      <MapView style={{ flex: 1 }} styleURL={theme.mode === 'dark' ? theme.map.night : theme.map.day} scaleBarEnabled={false}>
         <Camera zoomLevel={12.5} centerCoordinate={ATHENS_CENTER} />
 
         {layers.showZones &&
@@ -117,6 +120,9 @@ function FallbackMap({ vehicles, zones, heat, layers, onSelect }: {
   vehicles: OpsVehicle[]; zones: RebalanceZone[]; heat: HeatCell[]; layers: MapLayers;
   onSelect: (v: OpsVehicle) => void;
 }) {
+  const theme = useTheme();
+  const mapStyles = useStyles(theme);
+  const { c, space } = theme;
   const alarms = vehicles.filter(hasAlarm);
   return (
     <View style={{ flex: 1 }}>
@@ -137,7 +143,7 @@ function FallbackMap({ vehicles, zones, heat, layers, onSelect }: {
               return (
                 <View key={z.id} style={mapStyles.zoneRow}>
                   <Text style={mapStyles.zoneName}>{z.name}</Text>
-                  <Badge label={z.demand} color={z.demand === 'high' ? c.danger : z.demand === 'medium' ? c.warning : c.surfaceAlt} textColor={z.demand === 'low' ? c.text : '#fff'} />
+                  <Badge label={z.demand} color={z.demand === 'high' ? c.danger : z.demand === 'medium' ? c.warning : c.surfaceAlt} textColor={z.demand === 'low' ? c.text : c.textInverse} />
                   <Text style={mapStyles.zoneCount}>
                     {z.current_count}/{z.target_count}
                     <Text style={{ color: gap > 0 ? c.warning : c.success }}>{gap > 0 ? `  (need ${gap})` : '  ✓'}</Text>
@@ -182,6 +188,9 @@ function FallbackMap({ vehicles, zones, heat, layers, onSelect }: {
 }
 
 export function VehicleListRow({ v, onSelect }: { v: OpsVehicle; onSelect: (v: OpsVehicle) => void }) {
+  const theme = useTheme();
+  const mapStyles = useStyles(theme);
+  const { c } = theme;
   return (
     <Pressable
       onPress={() => onSelect(v)}
@@ -194,7 +203,7 @@ export function VehicleListRow({ v, onSelect }: { v: OpsVehicle; onSelect: (v: O
           {v.status.replace('_', ' ')} · {formatSoc(v.soc_pct)} · {v.online ? 'online' : 'offline'}
         </Text>
       </View>
-      {hasAlarm(v) && <Badge label="alarm" color={c.danger} textColor="#fff" />}
+      {hasAlarm(v) && <Badge label="alarm" color={c.danger} textColor={c.textInverse} />}
       {!v.visible && <Badge label="hidden" color={c.surfaceAlt} />}
     </Pressable>
   );
@@ -204,21 +213,21 @@ export function hasAlarm(v: OpsVehicle): boolean {
   return v.fall || v.power_cut || v.moved_while_locked || v.status === 'stolen';
 }
 
-const mapStyles = StyleSheet.create({
-  marker: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#0d1220' },
+const useStyles = makeStyles((t) => ({
+  marker: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: t.c.bg },
   hiddenMarker: { opacity: 0.4, borderStyle: 'dashed' },
-  alarmRing: { borderColor: c.danger, borderWidth: 3, width: 22, height: 22, borderRadius: 11 },
-  banner: { backgroundColor: c.surfaceAlt, padding: space.md, gap: 2, borderBottomWidth: 1, borderColor: c.border },
-  bannerTitle: { color: c.text, fontWeight: '700', fontSize: font.size.sm },
-  bannerText: { color: c.textMuted, fontSize: font.size.xs },
-  section: { backgroundColor: c.surface, borderRadius: radius.lg, padding: space.md, gap: space.sm, borderWidth: 1, borderColor: c.border },
-  sectionTitle: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  zoneName: { color: c.text, fontWeight: '600', flex: 1 },
-  zoneCount: { color: c.textMuted, fontSize: font.size.sm, fontWeight: '600' },
-  heatChip: { backgroundColor: c.warning, borderRadius: radius.sm, paddingHorizontal: space.sm, paddingVertical: 4 },
-  heatText: { color: '#1a1200', fontSize: font.size.xs, fontWeight: '700' },
-  vrow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingVertical: space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.border },
-  vcode: { color: c.text, fontWeight: '700', fontSize: font.size.md },
-  vmeta: { color: c.textMuted, fontSize: font.size.sm, textTransform: 'capitalize' },
-});
+  alarmRing: { borderColor: t.c.danger, borderWidth: 3, width: 22, height: 22, borderRadius: 11 },
+  banner: { backgroundColor: t.c.surfaceAlt, padding: t.space.md, gap: 2, borderBottomWidth: 1, borderColor: t.c.border },
+  bannerTitle: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.sm },
+  bannerText: { color: t.c.textMuted, fontSize: t.font.size.xs },
+  section: { backgroundColor: t.c.surface, borderRadius: t.radius.lg, padding: t.space.md, gap: t.space.sm, borderWidth: 1, borderColor: t.c.border },
+  sectionTitle: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+  zoneRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm },
+  zoneName: { color: t.c.text, fontWeight: '600', flex: 1 },
+  zoneCount: { color: t.c.textMuted, fontSize: t.font.size.sm, fontWeight: '600' },
+  heatChip: { backgroundColor: t.c.warning, borderRadius: t.radius.sm, paddingHorizontal: t.space.sm, paddingVertical: 4 },
+  heatText: { color: t.c.onWarning, fontSize: t.font.size.xs, fontWeight: '700' },
+  vrow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingVertical: t.space.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: t.c.border },
+  vcode: { color: t.c.text, fontWeight: '700', fontSize: t.font.size.md },
+  vmeta: { color: t.c.textMuted, fontSize: t.font.size.sm, textTransform: 'capitalize' },
+}));
