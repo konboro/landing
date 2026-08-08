@@ -12,7 +12,6 @@
 // Anything unexpected (missing method, network error, malformed JSON) resolves
 // to `null`, so the app always boots on the local brand.
 import { brandFromConfig, type Brand } from '@penny/ui';
-import { getApi } from '../services';
 
 /** The optional shape we probe for on the API object. */
 interface ConfigCapableApi {
@@ -28,6 +27,9 @@ export const BRAND_CONFIG_KEY = 'brand';
  */
 export async function loadRemoteBrand(): Promise<Brand | null> {
   try {
+    // Lazy require: keeps the service layer out of the brand module graph, so
+    // `useTheme()` never drags the API (and its fixtures) into a render path.
+    const { getApi } = require('../services') as typeof import('../services');
     const api = getApi() as unknown as ConfigCapableApi;
     const get = api.getAppConfig ?? api.getConfig;
     if (typeof get !== 'function') return null;

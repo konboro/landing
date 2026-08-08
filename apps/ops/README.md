@@ -148,3 +148,61 @@ deploy drop, and free-form notes. Offline photos queue and upload later.
 - App icons in `assets/` are 1×1 placeholders — swap for real artwork before a
   production build.
 ```
+
+---
+
+## White-labelling — ship for a new client
+
+Same Brand contract as the rider app (`packages/ui/src/brand.ts`). No screen
+hardcodes a colour, product name or support address.
+
+```
+src/brand/
+  build.ts          build-time identity (ops app name, slug, scheme, bundle ids, splash)
+                    — zero imports, because app.config.ts loads it directly
+  brands.ts         registry: Penny + demo clients (createBrand deep-merges)
+  deriveTheme.ts    Brand → { c, space, radius, font, tap, colorForStatus, legend }
+  BrandProvider.tsx context: { brand, colors, mode, setMode, isEnabled, opsName }
+  useTheme.ts       the hook every screen destructures
+  makeStyles.ts     themed StyleSheet factory (memoised per brand+mode)
+  remoteBrand.ts    app_config.brand seam (see the SEAM note in the file)
+```
+
+**Runtime resolution:** `EXPO_PUBLIC_BRAND` → `app_config.brand` → `pennyBrand`.
+A brand chosen in the dev menu wins and persists — together with the light/dark
+choice — in the SQLite `meta` table, so it survives a whole offline shift.
+
+Ops runs **dark by default** (high contrast for outdoor use). Light mode is a
+real option for daylight glare and is one tap away in the dev menu.
+
+### Add a client
+
+1. **`src/brand/build.ts`** — add id, name, `opsName` (what field techs see),
+   slug, scheme, bundle ids, primary + splash colours, monogram, emoji.
+2. **`src/brand/brands.ts`** — add an `opsBrand({ … })` with the palette,
+   `darkColors`, `shape`, `maps`, `support`, `legal` and any `features` to switch
+   off. Register it in `BRANDS`.
+3. **Assets** — replace `assets/icon.png`, `assets/adaptive-icon.png`.
+4. **Build** — `EXPO_PUBLIC_BRAND=<id> pnpm --filter @penny/ops start` (or
+   `expo run:ios` / `eas build`). `app.config.ts` derives the app name, slug,
+   scheme, bundle identifiers, permission copy and the splash background.
+
+### Ops feature flags
+
+`brand.features` accepts any key (docs/16); the ops app reads:
+
+| flag | hides |
+| --- | --- |
+| `opsDeployMode` | batch Deploy mode (More menu, Scan shortcut, "Deploy here") |
+| `opsDeviceSwap` | "Swap IoT device" on the vehicle sheet |
+
+### Demo it
+
+**More → Sync & dev tools** — the first card is the brand switcher. Pick an
+operator or light/dark and the whole app re-themes instantly: status-pin colours,
+chrome, corner radius, type scale, map style, which ops surfaces exist. It also
+shows `validateBrand()` contrast warnings for the selected palette.
+
+Shipped demo brands: **Meltemi Field** (Syros, bright orange, rounder, device
+swaps are a workshop job) and **Nordvei Drift** (Oslo, deep green, near-square
+corners, deployment handled by a logistics partner).

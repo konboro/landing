@@ -11,7 +11,6 @@
 // Ops is offline-first, so this is strictly best-effort: any failure resolves to
 // `null` and the app boots on the local brand from the on-device registry.
 import { brandFromConfig, type Brand } from '@penny/ui';
-import { getOpsApi } from '../services';
 
 interface ConfigCapableApi {
   getAppConfig?: (key: string) => Promise<unknown>;
@@ -22,6 +21,8 @@ export const BRAND_CONFIG_KEY = 'brand';
 
 export async function loadRemoteBrand(): Promise<Brand | null> {
   try {
+    // Lazy require: keeps the service layer out of the brand module graph.
+    const { getOpsApi } = require('../services') as typeof import('../services');
     const api = getOpsApi() as unknown as ConfigCapableApi;
     const get = api.getAppConfig ?? api.getConfig;
     if (typeof get !== 'function') return null;

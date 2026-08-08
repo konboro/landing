@@ -163,7 +163,7 @@ export class SupabaseDataSource implements DataSource {
       } else if (key === 'over_limit') {
         q = q.gte('data_pct_used', 100);
       } else {
-        q = q.eq(key, value);
+        q = q.eq(simViewColumn(key), value);
       }
     }
     const search = params.search?.trim();
@@ -176,12 +176,12 @@ export class SupabaseDataSource implements DataSource {
           .join(','),
       );
     }
-    for (const s of params.sort ?? []) q = q.order(s.field, { ascending: s.dir === 'asc' });
+    for (const s of params.sort ?? []) q = q.order(simViewColumn(s.field), { ascending: s.dir === 'asc' });
     if (!params.sort?.length) q = q.order('data_pct_used', { ascending: false });
 
     const { data, error, count } = await q.range(from, from + pageSize - 1);
     if (error) throw error;
-    return { rows: (data ?? []) as SimInventoryRow[], total: count ?? 0, page, pageSize };
+    return { rows: (data ?? []).map(mapSimInventoryRow), total: count ?? 0, page, pageSize };
   }
 
   async getSimDetail(simId: string): Promise<SimDetail | null> {
@@ -278,4 +278,70 @@ export class SupabaseDataSource implements DataSource {
       before: null, after: null, reason: _input.reason, ip: null, at: new Date().toISOString(),
     };
   }
+}
+
+/* ---------------------------------------------------------------------------
+   v_sim_inventory → SimInventoryRow
+
+   Two impedance mismatches make a raw cast wrong:
+     1. the view's primary key is `sim_id`, the panel's row shape uses `id`, so
+        a cast leaves every React key, row link and getSimDetail() call
+        undefined;
+     2. Postgres reports EVERY column of a view as nullable, and inventory SIMs
+        genuinely have no plan/cycle/MSISDN yet — so the non-null fields the UI
+        renders need explicit fallbacks rather than `undefined` leaking into
+        the table.
+   Keep this in step with migration 00210's view definition.
+   --------------------------------------------------------------------------- */
+/** Panel column name → v_sim_inventory column name. */
+function simViewColumn(field: string): string {
+  const alias: Record<string, string> = {
+    id: 'sim_id',
+    cycle_start: 'cycle_from',
+    cycle_end: 'cycle_to',
+    data_used: 'data_used_mb_cycle',
+  };
+  return alias[field] ?? field;
+}
+
+function mapSimInventoryRow(r: Record<string, unknown>): SimInventoryRow {
+  const s = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
+  const n = (v: unknown, fallback = 0): number => (v == null ? fallback : Number(v));
+  const nullableS = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  const nullableN = (v: unknown): number | null => (v == null ? null : Number(v));
+
+  return {
+    id: s(r.sim_id),
+    iccid: s(r.iccid),
+    imsi: s(r.imsi),
+    msisdn: s(r.msisdn),
+    provider: s(r.provider, 'truphone'),
+    provider_sim_id: s(r.provider_sim_id),
+    status: s(r.status, 'inventory') as SimInventoryRow['status'],
+
+    plan_name: s(r.plan_name, '—'),
+    plan_data_mb: n(r.plan_data_mb),
+    cycle_start: s(r.cycle_from ?? r.cycle_start),
+    cycle_end: s(r.cycle_to ?? r.cycle_end),
+    monthly_cost_cents: n(r.monthly_cost_cents),
+
+    device_id: nullableS(r.device_id),
+    device_imei: nullableS(r.device_imei),
+    vehicle_id: nullableS(r.vehicle_id),
+    vehicle_code: nullableS(r.vehicle_code),
+    vehicle_status: nullableS(r.vehicle_status),
+
+    label: s(r.label),
+    notes: nullableS(r.notes),
+
+    last_seen_at: nullableS(r.last_seen_at),
+    network: nullableS(r.network),
+    country: nullableS(r.country),
+
+    data_used_mb_cycle: n(r.data_used_mb_cycle),
+    data_pct_used: n(r.data_pct_used),
+    cost_mtd_cents: n(r.cost_mtd_cents),
+    days_since_seen: nullableN(r.days_since_seen),
+    health: s(r.health, 'ok') as SimInventoryRow['health'],
+  };
 }

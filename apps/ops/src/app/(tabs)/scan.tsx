@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Screen, H2, Muted, Button, Field, Card, Row } from '../../components/ui';
 import { SyncPill } from '../../components/SyncPill';
 import { findVehicleByCode } from '../../offline/repo';
-import { useTheme, makeStyles } from '../../brand';
+import { useBrand, useTheme, makeStyles } from '../../brand';
 
 let Camera: any = null;
 try {
@@ -18,6 +18,7 @@ export default function ScanTab() {
   const router = useRouter();
   const theme = useTheme();
   const st = useStyles(theme);
+  const { isEnabled } = useBrand();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -86,9 +87,11 @@ export default function ScanTab() {
       </Card>
 
       <Row style={{ justifyContent: 'space-between' }}>
-        <Pressable style={st.link} onPress={() => router.push('/deploy')}>
-          <Text style={st.linkText}>📍 Deploy mode (batch)</Text>
-        </Pressable>
+        {isEnabled('opsDeployMode') ? (
+          <Pressable style={st.link} onPress={() => router.push('/deploy')}>
+            <Text style={st.linkText}>📍 Deploy mode (batch)</Text>
+          </Pressable>
+        ) : null}
         <Pressable style={st.link} onPress={() => router.push('/damage/new')}>
           <Text style={st.linkText}>⚠ Report damage</Text>
         </Pressable>
