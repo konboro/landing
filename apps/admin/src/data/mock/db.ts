@@ -124,6 +124,11 @@ export interface MockDb {
 const GREEK_FIRST = ['Nikos', 'Maria', 'Giorgos', 'Eleni', 'Kostas', 'Sofia', 'Dimitris', 'Katerina', 'Yannis', 'Anna', 'Petros', 'Ioanna', 'Vasilis', 'Despina', 'Alexis', 'Christina'];
 const GREEK_LAST = ['Papadopoulos', 'Nikolaou', 'Georgiou', 'Dimitriou', 'Vasileiou', 'Ioannou', 'Panagiotou', 'Konstantinou', 'Makris', 'Antoniou', 'Petrou', 'Christodoulou'];
 const INTL = ['James Carter', 'Emma Wright', 'Lukas Weber', 'Marta Kowalska', 'Ahmed Hassan', 'Yuki Tanaka'];
+const ATHENS_STREETS = [
+  'Ermou', 'Athinas', 'Stadiou', 'Panepistimiou', 'Akadimias', 'Patission',
+  'Syngrou Ave', 'Kifisias Ave', 'Alexandras Ave', 'Vouliagmenis Ave',
+  'Mitropoleos', 'Adrianou', 'Voukourestiou', 'Solonos', 'Skoufa', 'Praxitelous',
+];
 
 function isoDaysAgo(days: number, rng: Rng): string {
   const ms = Date.now() - days * 86400000 - rng.int(0, 86400000);
@@ -259,6 +264,30 @@ function build(): MockDb {
       emergency_contact: rng.bool(0.3) ? `+3069${rng.int(10000000, 99999999)}` : null,
       created_at: isoDaysAgo(rng.int(1, 400), rng),
       updated_at: isoMinutesAgo(rng.int(1, 4000)),
+      // Extended profile ("dokładne dane" — docs/08 Customers).
+      date_of_birth: `19${rng.int(65, 99)}-${String(rng.int(1, 12)).padStart(2, '0')}-${String(rng.int(1, 28)).padStart(2, '0')}`,
+      nationality: useGreek ? 'GR' : rng.pick(['PL', 'DE', 'GB', 'FR', 'IT'] as const),
+      gender: rng.pick(['male', 'female', null] as const),
+      address_line: `${rng.pick(ATHENS_STREETS)} ${rng.int(1, 180)}`,
+      address_city: city.name,
+      address_postcode: `1${rng.int(0, 9)}${rng.int(0, 9)} ${rng.int(10, 99)}`,
+      address_country: 'GR',
+      avatar_url: null, // rendered as an initials avatar; never hotlink
+      preferred_lang: useGreek ? 'el' : rng.pick(['en', 'pl'] as const),
+      email_verified: rng.bool(0.78),
+      phone_verified: true, // phone OTP is the primary auth
+      signup_source: rng.pick(['ios', 'android', 'android', 'web', 'referral'] as const),
+      signup_city_id: city.id,
+      last_active_at: isoDaysAgo(rng.int(0, 45), rng),
+      risk_score: status === 'blocked' ? rng.int(60, 95) : rng.int(0, 35),
+      tags: [
+        ...(rides > 90 ? ['power-user'] : []),
+        ...(debt > 0 ? ['has-debt'] : []),
+        ...(rng.bool(0.15) ? ['student'] : []),
+        ...(rng.bool(0.08) ? ['vip'] : []),
+      ],
+      internal_notes: rng.bool(0.2) ? 'Called support about a parking penalty; resolved.' : null,
+      deleted_at: null,
       rides,
       spend_cents: rides * rng.int(180, 520),
       debt_cents: debt,
