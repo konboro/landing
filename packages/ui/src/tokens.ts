@@ -25,7 +25,7 @@ export const palette = {
   ink700: '#232c42',
   ink600: '#38425c',
   ink500: '#5a6780',
-  ink400: '#8a93a8',
+  ink400: '#7b8699',
   ink300: '#b5bccb',
   ink200: '#d7dce6',
   ink100: '#eceff4',
