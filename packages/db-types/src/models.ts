@@ -120,6 +120,10 @@ export interface Vehicle {
 export interface Device {
   id: UUID;
   imei: string;
+  /**
+   * The ICCID printed on the SIM fitted in this device — the label of record, kept
+   * exactly as entered (Hard Rule #10). `sim_id` is the managed relational link.
+   */
   iccid: string | null;
   phone_number: string | null;
   model: DeviceModel;
@@ -128,6 +132,8 @@ export interface Device {
   server_profile: ServerProfile;
   added_by: UUID | null;
   status: DeviceStatus;
+  /** The device's current managed SIM (migration 00210). Null until sim-sync links it. */
+  sim_id: UUID | null;
 }
 
 /** The ONLY table apps subscribe to for live vehicle data. */
@@ -704,4 +710,291 @@ export interface AdminVehicleHistoryResponse {
   maintenance: Record<string, unknown>[];
   battery_swaps: Record<string, unknown>[];
   telemetry_summary: VehicleTelemetryDay[];
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIM / connectivity management (migration 00210, docs/15).
+
+   `sims.status` and the computed `health` are plain text in Postgres, not enums:
+   MNO state machines change and a new state must not need a migration. They are
+   modelled here as string unions so the panel still gets exhaustive switches.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export type SimStatus = 'inventory' | 'active' | 'suspended' | 'terminated' | 'test';
+
+/** The `health` verdict computed by `v_sim_inventory` (first match wins, see docs/15). */
+export type SimHealth =
+  | 'ok'
+  | 'no_usage'
+  | 'over_limit'
+  | 'near_limit'
+  | 'unassigned'
+  | 'silent';
+
+export type SimEventKind =
+  | 'created'
+  | 'activated'
+  | 'suspended'
+  | 'resumed'
+  | 'terminated'
+  | 'plan_changed'
+  | 'synced'
+  | 'linked'
+  | 'unlinked'
+  | 'alert';
+
+export type SimAlertKind =
+  | 'sim_over_limit'
+  | 'sim_near_limit'
+  | 'sim_silent'
+  | 'sim_unassigned'
+  | 'sim_terminated_still_linked';
+
+export type SimAlertSeverity = 'critical' | 'warning' | 'info';
+
+/** Lifecycle actions accepted by the `sim-command` edge function. */
+export type SimCommandAction = 'activate' | 'suspend' | 'resume' | 'terminate' | 'set_plan';
+
+/** A row of the `sims` table. */
+export interface Sim {
+  id: UUID;
+  /** SIM identity — EXACT printed text, never reformatted (Hard Rule #10). */
+  iccid: string;
+  imsi: string | null;
+  /** The SMS-fallback number (docs/03); equals `devices.phone_number` for the fitted device. */
+  msisdn: string | null;
+  /** 'truphone' | 'other' — free text, operators get renamed. */
+  provider: string;
+  provider_sim_id: string | null;
+  status: SimStatus;
+  activated_at: ISOTimestamp | null;
+  suspended_at: ISOTimestamp | null;
+  terminated_at: ISOTimestamp | null;
+  plan_name: string | null;
+  /** Bundle allowance per cycle, in MB. */
+  plan_data_mb: number | null;
+  /** YYYY-MM-DD. */
+  cycle_start: string | null;
+  cycle_end: string | null;
+  monthly_cost_cents: number;
+  /** The device this SIM physically sits in; null for a spare. */
+  device_id: UUID | null;
+  label: string | null;
+  notes: string | null;
+  last_seen_at: ISOTimestamp | null;
+  network: string | null;
+  country: string | null;
+  created_at: ISOTimestamp;
+  updated_at: ISOTimestamp;
+}
+
+/** A row of `sim_usage_daily` (also the shape returned inside `v_sim_usage_30d`). */
+export interface SimUsageDay {
+  id: UUID;
+  sim_id: UUID;
+  /** YYYY-MM-DD (UTC). */
+  day: string;
+  data_mb: number;
+  sms_out: number;
+  sms_in: number;
+  cost_cents: number;
+  network: string | null;
+  country: string | null;
+  created_at: ISOTimestamp;
+}
+
+/** One row of `v_sim_usage_30d` — the detail-drawer chart series. */
+export interface SimUsageChartPoint {
+  sim_id: UUID;
+  iccid: string;
+  label: string | null;
+  device_imei: string | null;
+  vehicle_code: string | null;
+  day: string;
+  data_mb: number;
+  sms_out: number;
+  sms_in: number;
+  cost_cents: number;
+  network: string | null;
+  country: string | null;
+  data_mb_cum: number;
+  cost_cents_cum: number;
+}
+
+/** A row of `sim_events` — what the SIM did, complementing `audit_log` (who did it). */
+export interface SimEvent {
+  id: UUID;
+  sim_id: UUID;
+  at: ISOTimestamp;
+  kind: SimEventKind;
+  detail: Record<string, unknown>;
+  staff_id: UUID | null;
+  reason: string | null;
+}
+
+/** One row of `v_sim_inventory` — the admin Connectivity table. */
+export interface SimInventoryRow {
+  sim_id: UUID;
+  iccid: string;
+  imsi: string | null;
+  msisdn: string | null;
+  provider: string;
+  provider_sim_id: string | null;
+  status: SimStatus;
+  activated_at: ISOTimestamp | null;
+  suspended_at: ISOTimestamp | null;
+  terminated_at: ISOTimestamp | null;
+  plan_name: string | null;
+  plan_data_mb: number | null;
+  cycle_start: string | null;
+  cycle_end: string | null;
+  monthly_cost_cents: number;
+  device_id: UUID | null;
+  label: string | null;
+  notes: string | null;
+  last_seen_at: ISOTimestamp | null;
+  network: string | null;
+  country: string | null;
+  created_at: ISOTimestamp;
+  updated_at: ISOTimestamp;
+  // fitted device + its vehicle
+  device_imei: string | null;
+  device_status: DeviceStatus | null;
+  device_phone_number: string | null;
+  /** True when `devices.iccid` and `sims.iccid` disagree — the panel shows a badge. */
+  iccid_mismatch: boolean | null;
+  vehicle_id: UUID | null;
+  vehicle_code: string | null;
+  vehicle_status: VehicleStatus | null;
+  // current billing cycle (falls back to the calendar month)
+  cycle_from: string;
+  cycle_to: string;
+  data_used_mb_cycle: number;
+  sms_out_cycle: number;
+  sms_in_cycle: number;
+  usage_cost_cycle_cents: number;
+  // month to date
+  data_mtd_mb: number;
+  /** Usage this month + the recurring bundle fee for an active SIM. */
+  cost_mtd_cents: number;
+  usage_cost_mtd_cents: number;
+  days_since_seen: number | null;
+  /** Null when the SIM has no bundle assigned. */
+  data_pct_used: number | null;
+  health: SimHealth;
+}
+
+/** One row of `v_sim_alerts`. */
+export interface SimAlert {
+  sim_id: UUID;
+  iccid: string;
+  msisdn: string | null;
+  label: string | null;
+  status: SimStatus;
+  provider: string;
+  device_id: UUID | null;
+  device_imei: string | null;
+  vehicle_id: UUID | null;
+  vehicle_code: string | null;
+  kind: SimAlertKind;
+  severity: SimAlertSeverity;
+  /** 1 = critical, 2 = warning, 3 = info. Sort key. */
+  severity_rank: number;
+  /** Human-readable, already formatted for the panel. */
+  reason: string;
+  data_used_mb_cycle: number;
+  plan_data_mb: number | null;
+  data_pct_used: number | null;
+  last_seen_at: ISOTimestamp | null;
+  days_since_seen: number | null;
+  cost_mtd_cents: number;
+}
+
+/** One row of `v_sim_cost_summary` — monthly connectivity spend. */
+export interface SimCostSummary {
+  /** First day of the month, YYYY-MM-DD. */
+  month: string;
+  sims_active: number;
+  sims_with_usage: number;
+  peak_sims_seen: number;
+  total_data_mb: number;
+  total_sms_out: number;
+  total_sms_in: number;
+  usage_cost_cents: number;
+  subscription_cost_cents: number;
+  total_cost_cents: number;
+  avg_cost_per_active_sim_cents: number | null;
+  avg_data_mb_per_active_sim: number | null;
+  /** Highest fleet-wide outbound SMS count on any single day of the month. */
+  peak_sms_out_day: number;
+  peak_sms_out_on: string | null;
+  /** Threshold read live from the `sms_budget` notification rule (docs/03). */
+  sms_budget_per_day: number | null;
+  sms_budget_breach_days: number;
+}
+
+/** The provider's own live view of a SIM, as normalized by the SimProvider adapter. */
+export interface SimProviderView {
+  iccid: string;
+  imsi: string | null;
+  msisdn: string | null;
+  provider_sim_id: string | null;
+  status: SimStatus | null;
+  plan_name: string | null;
+  plan_data_mb: number | null;
+  cycle_start: string | null;
+  cycle_end: string | null;
+  monthly_cost_cents: number | null;
+  last_seen_at: ISOTimestamp | null;
+  network: string | null;
+  country: string | null;
+  raw: Record<string, unknown>;
+}
+
+/** `admin-sim-detail` response. */
+export interface AdminSimDetailResponse {
+  sim: SimInventoryRow;
+  device: Device | null;
+  vehicle: Vehicle | null;
+  usage_30d: SimUsageChartPoint[];
+  events: SimEvent[];
+  alerts: SimAlert[];
+  provider: {
+    name: string;
+    /** False when no credentials are configured — everything above is still valid cache. */
+    live: boolean;
+    /** Present only when `live` is false: 'no_credentials' | 'no_base_url' | … */
+    reason?: string;
+    sim: SimProviderView | null;
+    /** Present when the provider was reachable-but-failing. */
+    error?: string;
+  };
+}
+
+/** `sim-sync` response. */
+export interface SimSyncResponse {
+  live: boolean;
+  reason?: string;
+  provider: string;
+  window: { from: string; to: string };
+  sims_seen: number;
+  sims_created: number;
+  sims_updated: number;
+  sims_failed: number;
+  usage_rows: number;
+  /** Provider usage records whose ICCID matched no known SIM. */
+  usage_unmatched: number;
+  linked: number;
+}
+
+/** `sim-command` response. */
+export interface SimCommandResponse {
+  ok: true;
+  sim: Sim;
+  action: SimCommandAction;
+  live: boolean;
+  /** False when the change was recorded locally but not pushed to the provider. */
+  provider_applied: boolean;
+  reason?: string;
+  provider_echo: SimProviderView | null;
 }
