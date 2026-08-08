@@ -18,7 +18,9 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(workspaceRoot, 'node_modules'),
 ];
-config.resolver.disableHierarchicalLookup = true;
+// NOTE: hierarchical lookup is left ENABLED (the default) — pnpm's symlinked,
+// non-hoisted node_modules needs it to resolve nested transitive deps. Do not
+// set disableHierarchicalLookup=true here (that's the yarn/npm-hoisted recipe).
 
 // The @penny/* packages ship raw TypeScript whose barrels re-export sibling
 // files with an explicit `.js` extension (NodeNext ESM style). Metro doesn't

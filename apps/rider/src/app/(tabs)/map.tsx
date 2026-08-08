@@ -13,7 +13,7 @@ import { useTrip } from '../../store/trip';
 import { useFlags } from '../../store/flags';
 import { FleetMap } from '../../components/map/FleetMap';
 import {
-  T, Row, Card, Button, Badge, SocPill, Sheet, Banner, Icon,
+  T, Row, Card, Button, Badge, Sheet, Banner, Icon,
 } from '../../components/ui';
 
 export default function MapScreen() {

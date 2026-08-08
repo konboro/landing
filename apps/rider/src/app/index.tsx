@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Redirect } from 'expo-router';
 import { theme } from '../lib/theme';
 import { T } from '../components/ui';

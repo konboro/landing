@@ -87,8 +87,10 @@ Shared packages reused: `@penny/ui` (tokens + formatters), `@penny/geo` (zone ch
   `npx expo install --fix` inside `apps/rider` to align every Expo/RN package to the exact SDK-54
   versions (especially `react`, `react-native`, `expo-router`, `react-native-reanimated`,
   `react-native-svg`, `@rnmapbox/maps`).
-- **Reanimated / gesture-handler**: `babel.config.js` includes the reanimated plugin (must stay
-  last) and `_layout.tsx` imports `react-native-gesture-handler` first — both required.
+- **gesture-handler**: `_layout.tsx` imports `react-native-gesture-handler` first (required). The
+  app deliberately does **not** depend on `react-native-reanimated` (the slide-to-end control uses
+  core `Animated`/`PanResponder`), avoiding the Reanimated 4 + worklets babel chain. If you later
+  add a navigator that needs it, run `npx expo install react-native-reanimated`.
 - **Metro monorepo**: `metro.config.js` watches the workspace root, resolves both node_modules
   trees, and shims the shared packages' `.js`-in-source imports to their `.ts` sources.
 - **Assets**: `assets/*.png` are solid-color placeholders — swap for real brand art before a store
