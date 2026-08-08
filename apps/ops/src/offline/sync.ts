@@ -18,6 +18,7 @@ import {
   markDone,
   markError,
   pendingCount,
+  resetStuckSyncing,
 } from './outbox';
 import { getVehicle, upsertVehicle, upsertTask, upsertDamage } from './repo';
 import type { OutboxRow, SyncItemResult } from '../lib/types';
@@ -140,7 +141,13 @@ async function tick() {
   const online = net.online;
   useOps.getState().setOnline(online);
   if (!online) return;
-  await flushOnce();
+  // Drain the backlog fully (each flush handles one batch). Rows that error
+  // get a future next_attempt_at, so dueRows stops returning them and the loop
+  // terminates instead of spinning.
+  let guard = 0;
+  while ((await flushOnce()) && guard++ < 100) {
+    /* keep draining */
+  }
   if (Date.now() - lastPullAt > PULL_INTERVAL_MS) {
     lastPullAt = Date.now();
     await pullOnce();
@@ -150,7 +157,7 @@ async function tick() {
 export function startSync() {
   net.start();
   useOps.getState().setOnline(net.online);
-  refreshPending();
+  void resetStuckSyncing().then(refreshPending);
   if (!timer) timer = setInterval(() => void tick(), FLUSH_INTERVAL_MS);
   if (!unsub) {
     unsub = net.subscribe((online) => {

@@ -121,3 +121,9 @@ export async function clearDone(): Promise<void> {
   const db = await getDb();
   await db.runAsync(`DELETE FROM outbox WHERE status='done'`);
 }
+
+/** Requeue rows left mid-flight if the app was killed during a sync. */
+export async function resetStuckSyncing(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync(`UPDATE outbox SET status='pending' WHERE status='syncing'`);
+}

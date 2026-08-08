@@ -59,7 +59,6 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: c.bg },
           }}
         >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="onboarding" options={{ title: 'Welcome to Penny Ops', headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

@@ -21,6 +21,7 @@
     "@penny/ui": "workspace:*",
     "@react-native-community/netinfo": "11.4.1",
     "@rnmapbox/maps": "^10.1.33",
+    "@supabase/supabase-js": "^2.48.0",
     "expo": "~54.0.0",
     "expo-camera": "~17.0.7",
     "expo-constants": "~18.0.8",

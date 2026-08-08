@@ -9,11 +9,9 @@ type Extra = {
   supabaseAnonKey?: string;
 };
 
+const legacyManifest = (Constants as unknown as { manifest?: { extra?: Extra } }).manifest;
 const extra: Extra =
-  (Constants.expoConfig?.extra as Extra | undefined) ??
-  // @ts-expect-error legacy manifest fallback
-  (Constants.manifest?.extra as Extra | undefined) ??
-  {};
+  (Constants.expoConfig?.extra as Extra | undefined) ?? legacyManifest?.extra ?? {};
 
 export type DataSource = 'mock' | 'supabase';
 

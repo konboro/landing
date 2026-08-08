@@ -8,7 +8,6 @@ import { nudgeSync } from './sync';
 import {
   getTask,
   upsertTask,
-  getVehicle,
   patchVehicle,
   upsertDamage,
   getDamageReport,

@@ -62,7 +62,9 @@ const config: ExpoConfig = {
     ],
   ],
   experiments: {
-    typedRoutes: true,
+    // Kept off so plain string hrefs (e.g. `/vehicle/${id}`) type-check without
+    // the generated .expo/types. Flip on once routes are generated if desired.
+    typedRoutes: false,
   },
   extra: {
     dataSource: process.env.EXPO_PUBLIC_DATA_SOURCE ?? 'mock',
