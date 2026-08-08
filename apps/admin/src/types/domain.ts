@@ -331,6 +331,8 @@ export interface VehicleRow extends Vehicle {
   rides_today: number;
   idle_hours: number;
   imei: string | null;
+  lng: number;
+  lat: number;
 }
 
 export interface CustomerRow extends User {
