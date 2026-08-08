@@ -1,0 +1,29 @@
+{
+  "name": "penny-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Penny.rent — in-house free-floating e-scooter sharing platform (Greece). Rider + Ops + Admin + Gateway.",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "admin:dev": "pnpm --filter @penny/admin dev",
+    "rider:start": "pnpm --filter @penny/rider start",
+    "ops:start": "pnpm --filter @penny/ops start",
+    "gateway:run": "cd services/gateway && go run ./cmd/gateway",
+    "gateway:test": "cd services/gateway && go test ./...",
+    "gateway:sim": "cd services/gateway && go run ./cmd/simdevice"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3",
+    "prettier": "^3.4.2"
+  }
+}
