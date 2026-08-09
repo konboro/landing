@@ -12,7 +12,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,7 +68,10 @@ async function deploy(slug) {
     ),
   );
   for (const f of files) {
-    const rel = relative(EDGE, f);
+    // POSIX separators always: on Windows relative() yields `functions\slug\index.ts`,
+    // which the API stores verbatim and then cannot match against the forward-slash
+    // entrypoint_path above ("Entrypoint path does not exist").
+    const rel = relative(EDGE, f).split(sep).join('/');
     form.append('file', new Blob([readFileSync(f)], { type: 'text/typescript' }), rel);
   }
 
