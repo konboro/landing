@@ -1,36 +1,22 @@
 // Build-time brand identity for the Ops app.
 //
-// IMPORTANT: zero imports on purpose — `app.config.ts` loads this file directly
-// through Expo's TypeScript config loader, outside Metro.
+// IMPORTANT — why this file is .js and not .ts:
+// `app.config.ts` imports it, and Expo's config loader transpiles ONLY the
+// config file itself, then `require()`s its relative imports through plain Node
+// resolution. Node cannot resolve `./src/brand/build` to a `.ts` file, so a
+// TypeScript module here fails every `expo prebuild` / `expo start` with
+// "Cannot find module './src/brand/build'". CommonJS is loadable by the config
+// loader, by Metro and by tsc alike; the types live in `build.d.ts`.
+//
+// Zero imports on purpose — it must stay plain data.
 //
 // Only the values a native build bakes in live here. The runtime brand (full
 // palette, support details, feature flags) is in `brands.ts`, which reuses
 // these fields so the two can never drift.
 
-export interface BuildBrand {
-  /** Stable slug — the value you put in EXPO_PUBLIC_BRAND. */
-  id: string;
-  /** Rider-facing product name (the operator). */
-  name: string;
-  /** Ops app display name — what field techs see on the home screen. */
-  opsName: string;
-  slug: string;
-  /** Deep-link scheme, without `://`. Distinct from the rider app's. */
-  scheme: string;
-  iosBundleId: string;
-  androidPackage: string;
-  domain: string;
-  primary: string;
-  /** Splash / adaptive-icon background — the ops chrome is dark by default. */
-  splash: string;
-  onPrimary: string;
-  monogram: string;
-  emoji: string;
-}
+const DEFAULT_BRAND_ID = 'penny';
 
-export const DEFAULT_BRAND_ID = 'penny';
-
-export const BUILD_BRANDS: Record<string, BuildBrand> = {
+const BUILD_BRANDS = {
   penny: {
     id: 'penny',
     name: 'Penny',
@@ -83,7 +69,9 @@ export const BUILD_BRANDS: Record<string, BuildBrand> = {
 };
 
 /** Resolve a brand id (usually `process.env.EXPO_PUBLIC_BRAND`) to its build config. */
-export function resolveBuildBrand(id: string | null | undefined): BuildBrand {
+function resolveBuildBrand(id) {
   const key = (id ?? '').trim().toLowerCase();
-  return BUILD_BRANDS[key] ?? BUILD_BRANDS[DEFAULT_BRAND_ID]!;
+  return BUILD_BRANDS[key] ?? BUILD_BRANDS[DEFAULT_BRAND_ID];
 }
+
+module.exports = { DEFAULT_BRAND_ID, BUILD_BRANDS, resolveBuildBrand };
