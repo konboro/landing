@@ -31,9 +31,26 @@ export function AppShell() {
   return (
     <div className="app-shell">
       <Sidebar open={sidebarOpen} />
+      {/* Rendered only while the drawer is open, so it never covers the desktop
+          layout. Tapping it closes the menu — otherwise the only way out is
+          picking a link. */}
+      {sidebarOpen ? (
+        <button
+          className="sidebar-scrim"
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
       <div className="app-main">
         <header className="topbar">
-          <button className="btn btn-ghost btn-icon" style={{ display: 'none' }} onClick={() => setSidebarOpen((o) => !o)} aria-label="Menu">☰</button>
+          <button
+            className="btn btn-ghost btn-icon menu-btn"
+            onClick={() => setSidebarOpen((o) => !o)}
+            aria-label="Menu"
+            aria-expanded={sidebarOpen}
+          >
+            ☰
+          </button>
           <h1>{title}</h1>
           <div className="topbar-spacer" />
           <button className="cmdk-trigger" onClick={() => setCmdkOpen(true)}>
@@ -44,7 +61,7 @@ export function AppShell() {
           {/* White-label switcher: re-themes the whole panel instantly. A brand
               edited in Settings → Branding is kept as an extra option. */}
           <select
-            className="select"
+            className="select hide-sm"
             style={{ width: 'auto' }}
             value={BUILT_IN_BRANDS.some((b) => b.id === brand.id) ? brand.id : '__custom'}
             onChange={(e) => {
@@ -65,7 +82,7 @@ export function AppShell() {
             {mode === 'dark' ? '☀️' : '🌙'}
           </button>
           <select
-            className="select"
+            className="select hide-sm"
             style={{ width: 'auto' }}
             value={staff.role}
             onChange={(e) => setRole(e.target.value as StaffRole)}

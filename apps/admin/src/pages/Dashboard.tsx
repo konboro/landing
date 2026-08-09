@@ -30,9 +30,12 @@ export function DashboardPage() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      <PageHeader title="Operations dashboard" sub="Live snapshot of the Athens fleet" />
+      <PageHeader title="Operations dashboard" sub="Live snapshot of the Thessaloniki fleet" />
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+      {/* Column counts come from the stylesheet, never from an inline style: an
+          inline gridTemplateColumns cannot be overridden by a media query, which
+          is precisely why this page ignored screen width before. */}
+      <div className="grid grid-kpi">
         <StatCard label="Active rides" value={k ? formatNumber(k.active_rides) : '—'} icon="🛴" spark={k?.spark_rides} sparkColor={colors.primary} />
         <StatCard label="Today revenue" value={k ? formatMoney(k.today_revenue_cents) : '—'} delta={deltaUp(8)} spark={k?.spark_revenue} sparkColor={colors.success} />
         <StatCard label="Today rides" value={k ? formatNumber(k.today_rides) : '—'} delta={deltaUp(4)} spark={k?.spark_rides} sparkColor={colors.primary} />
@@ -40,7 +43,7 @@ export function DashboardPage() {
         <StatCard label="Open debts" value={k ? formatMoney(k.open_debts_cents) : '—'} delta={k ? { value: `${k.open_debts_count} open`, up: false } : null} icon="🧾" />
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
+      <div className="grid grid-main">
         <Card>
           <CardHeader title="Live fleet map" sub={`${markers.length} online`} actions={<Link className="btn btn-sm" to="/vehicles">All vehicles</Link>} />
           <div style={{ padding: 'var(--space-md)' }}>
