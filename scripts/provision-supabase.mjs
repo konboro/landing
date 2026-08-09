@@ -236,6 +236,47 @@ async function main() {
   }
 
   // ── secrets ──────────────────────────────────────────────────────────
+  // ── storage buckets ──────────────────────────────────────────────────
+  // All private: trip photos and ops photos are user content, kyc-docs holds
+  // identity documents (Hard Rule #11 — never public, always signed URLs).
+  step('Creating storage buckets');
+  const BUCKETS = [
+    { id: 'trip-photos', public: false, fileSizeLimit: 10_485_760 },
+    { id: 'ops-photos', public: false, fileSizeLimit: 10_485_760 },
+    { id: 'kyc-docs', public: false, fileSizeLimit: 10_485_760 },
+  ];
+  if (DRY) {
+    BUCKETS.forEach((b) => console.log(c.dim(`      would create private bucket ${b.id}`)));
+  } else {
+    for (const bucket of BUCKETS) {
+      try {
+        const res = await fetch(`${projectUrl}/storage/v1/bucket`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${serviceKey}`,
+            apikey: serviceKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: bucket.id,
+            name: bucket.id,
+            public: bucket.public,
+            file_size_limit: bucket.fileSizeLimit,
+          }),
+        });
+        if (res.ok) ok(`bucket ${bucket.id} (private)`);
+        else {
+          const body = await res.text();
+          // Re-running provisioning must not fail on buckets that already exist.
+          if (/already exists/i.test(body)) ok(`bucket ${bucket.id} (already existed)`);
+          else warn(`bucket ${bucket.id}: ${res.status} ${body.slice(0, 90)}`);
+        }
+      } catch (e) {
+        warn(`bucket ${bucket.id}: ${(e instanceof Error ? e.message : String(e)).slice(0, 90)}`);
+      }
+    }
+  }
+
   step('Setting edge function secrets');
   const secretNames = [
     'STRIPE_SECRET_KEY',
@@ -345,13 +386,14 @@ async function main() {
   console.log(`  Dashboard     https://supabase.com/dashboard/project/${ref}`);
   console.log(`  DB password   ${c.b(dbPassword)}  ${c.dim('(saved in .env.provisioned — store it safely)')}`);
   console.log(`
-${c.b('Next:')}
-  1. Storage buckets (private):  ${c.dim('trip-photos, ops-photos, kyc-docs')}
-     ${c.dim(`supabase storage create trip-photos --project-ref ${ref}`)}
-  2. Point the gateway at it:    ${c.dim('DB_URL from .env.provisioned')}
-  3. Run the panel live:         ${c.dim('pnpm --filter @penny/admin dev')}
-  4. Stripe/Sumsub webhooks →    ${c.dim(`${projectUrl}/functions/v1/payments-webhook`)}
-                                 ${c.dim(`${projectUrl}/functions/v1/sumsub-webhook`)}
+${c.b('Next (dashboard — cannot be automated):')}
+  1. Auth → enable the ${c.b('Phone')} provider + an SMS sender (rider login is OTP)
+  2. Stripe webhook  →  ${c.dim(`${projectUrl}/functions/v1/payments-webhook`)}
+     Sumsub webhook  →  ${c.dim(`${projectUrl}/functions/v1/sumsub-webhook`)}
+
+${c.b('Then:')}
+  Gateway:    ${c.dim('DB_URL from .env.provisioned')}
+  Panel live: ${c.dim('pnpm --filter @penny/admin dev')}
 `);
 }
 

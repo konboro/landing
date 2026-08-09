@@ -57,14 +57,26 @@ SUPABASE_ACCESS_TOKEN=sbp_xxx pnpm supabase:provision
 
 Later: `supabase secrets set NAME=value --project-ref <ref>`.
 
-### After provisioning — three manual bits
+### Targeting a project you created yourself
 
-The Management API can't do these; they take a minute in the dashboard.
+The script does not have to create the project. Point it at an existing one:
 
-1. **Storage buckets** (all **private**): `trip-photos`, `ops-photos`, `kyc-docs`.
-2. **Auth**: enable **Phone** provider (OTP is the primary rider login) and set an
-   SMS provider; set Site URL / redirect URLs for the admin panel.
-3. **Webhooks** pointed at the deployed functions:
+```bash
+SUPABASE_ACCESS_TOKEN=sbp_xxx pnpm supabase:provision -- --project-ref <ref>
+```
+
+The ref is the `abcdefghijkl` part of your dashboard URL
+(`supabase.com/dashboard/project/<ref>`). Everything else — migrations, buckets,
+secrets, functions, env files — runs exactly the same. Re-running is safe.
+
+### After provisioning — two manual bits
+
+Storage buckets are created automatically (private: `trip-photos`,
+`ops-photos`, `kyc-docs`). Two things still need the dashboard:
+
+1. **Auth**: enable the **Phone** provider (OTP is the primary rider login) and
+   configure an SMS sender; set Site URL / redirect URLs for the admin panel.
+2. **Webhooks** pointed at the deployed functions:
    - Stripe → `https://<ref>.supabase.co/functions/v1/payments-webhook`
    - Sumsub → `https://<ref>.supabase.co/functions/v1/sumsub-webhook`
 
