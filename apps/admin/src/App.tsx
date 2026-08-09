@@ -5,6 +5,7 @@ import { DataProvider } from '@/context/DataContext';
 import { BrandProvider } from '@/context/BrandContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { AppShell } from '@/components/layout/AppShell';
+import { AuthGate } from '@/components/layout/AuthGate';
 
 import { DashboardPage } from '@/pages/Dashboard';
 import { RideVerificationPage } from '@/pages/RideVerification';
@@ -38,6 +39,7 @@ export function App() {
         <DataProvider>
           <BrandProvider>
             <AuthProvider>
+              <AuthGate>
               <BrowserRouter>
                 <Routes>
                   {/* standalone printable view (no shell) */}
@@ -68,6 +70,7 @@ export function App() {
                   </Route>
                 </Routes>
               </BrowserRouter>
+              </AuthGate>
             </AuthProvider>
           </BrandProvider>
         </DataProvider>

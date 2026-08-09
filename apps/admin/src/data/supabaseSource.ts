@@ -60,20 +60,78 @@ export class SupabaseDataSource implements DataSource {
     });
   }
 
-  // ---- Reads (TODO: back with v_* panel views on integration day) ----
-  async getKpis(): Promise<KpiSnapshot> { return notImpl('getKpis'); }
+  /* ---- List pages ----
+     Each reads exactly ONE admin view whose columns match the row type
+     (migration 00220), so sort / filter / search / pagination push down into
+     Postgres instead of being done in the browser. */
+
+  /** Shared list reader. Goes through the `admin-list` edge function, which
+   *  checks staff permission and runs the query with service_role — the
+   *  v_admin_* views are deliberately unreadable with the anon key. */
+  private async listFrom<T>(view: string, params: QueryParams): Promise<Page<T>> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = params.pageSize ?? 25;
+    const res = await this.invoke<{ rows: T[]; total: number }>('admin-list', {
+      view,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+      sort: params.sort ?? [],
+      search: params.search ?? '',
+      filters: params.filters ?? {},
+    });
+    return { rows: res.rows ?? [], total: res.total ?? 0, page, pageSize };
+  }
+
+  async getKpis(): Promise<KpiSnapshot> {
+    const res = await this.invoke<{ rows: Record<string, unknown>[] }>('admin-list', {
+      view: 'v_admin_kpis', limit: 1, offset: 0,
+    });
+    const k = res.rows?.[0];
+    if (!k) throw new Error('v_admin_kpis returned no row');
+    const arr = (v: unknown): number[] => (Array.isArray(v) ? v.map(Number) : []);
+    return {
+      active_rides: Number(k.active_rides ?? 0),
+      today_revenue_cents: Number(k.today_revenue_cents ?? 0),
+      today_rides: Number(k.today_rides ?? 0),
+      new_users_today: Number(k.new_users_today ?? 0),
+      open_debts_cents: Number(k.open_debts_cents ?? 0),
+      open_debts_count: Number(k.open_debts_count ?? 0),
+      unlock_success_pct: Number(k.unlock_success_pct ?? 0),
+      fleet_by_status: (k.fleet_by_status ?? {}) as Record<string, number>,
+      spark_revenue: arr(k.spark_revenue),
+      spark_rides: arr(k.spark_rides),
+      spark_users: arr(k.spark_users),
+      spark_unlock: arr(k.spark_unlock),
+    };
+  }
   async getAlerts(): Promise<VehicleAlert[]> {
     const { data, error } = await this.client.supabase.from('vehicle_alerts').select('*').order('created_at', { ascending: false }).limit(50);
     if (error) throw error;
     return (data ?? []) as VehicleAlert[];
   }
-  async getLiveVehicles(): Promise<VehicleRow[]> { return notImpl('getLiveVehicles'); }
-  async listRides(_params: QueryParams): Promise<Page<RideRow>> { return notImpl('listRides'); }
+  async getLiveVehicles(): Promise<VehicleRow[]> {
+    const res = await this.invoke<{ rows: VehicleRow[] }>('admin-list', {
+      view: 'v_admin_vehicles', limit: 500, offset: 0, filters: { visible: true },
+    });
+    return res.rows ?? [];
+  }
+  async listRides(params: QueryParams): Promise<Page<RideRow>> {
+    return this.listFrom<RideRow>('v_admin_rides', params);
+  }
   async getRide(_id: string): Promise<RideDetail | null> { return notImpl('getRide'); }
-  async listVerification(): Promise<VerificationItem[]> { return notImpl('listVerification'); }
-  async listVehicles(_params: QueryParams): Promise<Page<VehicleRow>> { return notImpl('listVehicles'); }
+  async listVerification(): Promise<VerificationItem[]> {
+    const res = await this.invoke<{ rows: VerificationItem[] }>('admin-list', {
+      view: 'v_ride_verification_queue', limit: 200, offset: 0,
+    });
+    return res.rows ?? [];
+  }
+  async listVehicles(params: QueryParams): Promise<Page<VehicleRow>> {
+    return this.listFrom<VehicleRow>('v_admin_vehicles', params);
+  }
   async getVehicle(_id: string): Promise<VehicleDetail | null> { return notImpl('getVehicle'); }
-  async listCustomers(_params: QueryParams): Promise<Page<CustomerRow>> { return notImpl('listCustomers'); }
+  async listCustomers(params: QueryParams): Promise<Page<CustomerRow>> {
+    return this.listFrom<CustomerRow>('v_admin_customers', params);
+  }
   async getCustomer(_id: string): Promise<CustomerDetail | null> { return notImpl('getCustomer'); }
   async listZones(): Promise<Zone[]> {
     const { data, error } = await this.client.supabase.from('zones').select('*').eq('active', true);
@@ -151,6 +209,12 @@ export class SupabaseDataSource implements DataSource {
      provider credentials and audit write stay server-side. */
 
   async getSims(params: QueryParams): Promise<Page<SimInventoryRow>> {
+    const paged = await this.listFrom<Record<string, unknown>>('v_sim_inventory', params);
+    return { ...paged, rows: paged.rows.map(mapSimInventoryRow) };
+  }
+
+  /** @deprecated direct-view variant, kept for reference during integration. */
+  private async getSimsDirect(params: QueryParams): Promise<Page<SimInventoryRow>> {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = params.pageSize ?? 25;
     const from = (page - 1) * pageSize;
@@ -241,7 +305,9 @@ export class SupabaseDataSource implements DataSource {
   }
 
   async search(_q: string): Promise<SearchResult[]> { return notImpl('search'); }
-  async listAudit(_params: QueryParams): Promise<Page<AuditLogEntry>> { return notImpl('listAudit'); }
+  async listAudit(params: QueryParams): Promise<Page<AuditLogEntry>> {
+    return this.listFrom<AuditLogEntry>('audit_log', params);
+  }
 
   // ---- Mutations via edge functions (permission-checked + audited server-side) ----
   async reviewPhoto(tripId: string, verdict: 'approved' | 'rejected', reason?: string): Promise<void> {
