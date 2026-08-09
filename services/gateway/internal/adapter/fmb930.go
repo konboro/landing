@@ -58,8 +58,14 @@ func DefaultFMB930Profile() DoutProfile {
 		SirenDoutIO:  ioDout2,
 		RingPulseMs:  300, // 3x 300ms pulse pattern, see docs/03
 		AlarmSeconds: 30,
-		// TODO(verify wiki): confirm relay polarity on bench. Assumed: energising
-		// DOUT1 releases the lock (unlock), de-energised = locked.
+		// CONFIRMED against the fleet's own wiring (2026-08-09):
+		//   DOUT1 = 1 -> scooter powered ON   ("unlock")
+		//   DOUT1 = 0 -> scooter powered OFF  ("lock")
+		//   DOUT2     -> siren
+		// The lock is therefore NOT held by an energised relay, so `false` here
+		// is correct and makes unlock send '1'. Do not flip this without
+		// re-checking the harness: inverted, "unlock" cuts power to a scooter
+		// that may be moving.
 		LockedWhenDoutHigh: false,
 	}
 }
