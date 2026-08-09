@@ -253,20 +253,24 @@ export class SupabaseDataSource implements DataSource {
     return 'sim' in res && res.sim ? (res as SimDetail) : null;
   }
 
+  /* Both go through `admin-list`, not the anon client: migration 00210 revokes
+     v_sim_alerts / v_sim_cost_summary from anon+authenticated (they expose the
+     whole SIM estate), so a direct read returns "permission denied for view".
+     v_sim_inventory above already took this route. */
+
   async getSimAlerts(): Promise<SimAlert[]> {
-    const { data, error } = await this.client.supabase.from('v_sim_alerts').select('*');
-    if (error) throw error;
-    return (data ?? []) as SimAlert[];
+    const res = await this.invoke<{ rows: SimAlert[] }>('admin-list', {
+      view: 'v_sim_alerts', limit: 200, offset: 0,
+    });
+    return res.rows ?? [];
   }
 
   async getSimCostSummary(): Promise<SimCostSummary[]> {
-    const { data, error } = await this.client.supabase
-      .from('v_sim_cost_summary')
-      .select('*')
-      .order('month', { ascending: false })
-      .limit(12);
-    if (error) throw error;
-    return (data ?? []) as SimCostSummary[];
+    const res = await this.invoke<{ rows: SimCostSummary[] }>('admin-list', {
+      view: 'v_sim_cost_summary', limit: 12, offset: 0,
+      sort: [{ field: 'month', dir: 'desc' }],
+    });
+    return res.rows ?? [];
   }
 
   async syncSims(): Promise<SimSyncResult> {
@@ -299,9 +303,7 @@ export class SupabaseDataSource implements DataSource {
   async saveBrandConfig(config: BrandConfig, reason: string): Promise<void> {
     // Writes go through an edge fn: app_config is service_role-only and the
     // change has to land in audit_log with who/what/reason (Hard Rule #8).
-    await this.client.supabase.functions.invoke('admin-app-config', {
-      body: { key: 'brand', value: config, reason },
-    });
+    await this.invoke('admin-app-config', { key: 'brand', value: config, reason });
   }
 
   async search(_q: string): Promise<SearchResult[]> { return notImpl('search'); }
@@ -309,16 +311,20 @@ export class SupabaseDataSource implements DataSource {
     return this.listFrom<AuditLogEntry>('audit_log', params);
   }
 
-  // ---- Mutations via edge functions (permission-checked + audited server-side) ----
+  /* ---- Mutations via edge functions (permission-checked + audited server-side) ----
+     All of these go through invoke(), which throws on a non-2xx. Calling
+     `functions.invoke` directly and dropping its `error` made a 403 (missing
+     permission) look like a successful save in the UI. */
+
   async reviewPhoto(tripId: string, verdict: 'approved' | 'rejected', reason?: string): Promise<void> {
-    await this.client.supabase.functions.invoke('photo-review-decision', { body: { trip_id: tripId, verdict, reason } });
+    await this.invoke('photo-review-decision', { trip_id: tripId, verdict, ...(reason ? { reason } : {}) });
   }
   async sendCommand(vehicleId: string, kind: string, payload: Record<string, unknown> = {}): Promise<Command> {
     const res = await this.client.edge.adminCommand({ vehicle_id: vehicleId, kind, payload });
     return { id: res.command_id } as unknown as Command;
   }
   async setVehicleStatus(vehicleId: string, status: string, reason: string): Promise<void> {
-    await this.client.supabase.functions.invoke('vehicle-status', { body: { vehicle_id: vehicleId, status, reason } });
+    await this.invoke('vehicle-status', { vehicle_id: vehicleId, status, reason });
   }
   async adminCharge(input: AdminChargeInput): Promise<void> {
     await this.client.edge.adminCharge(input);
@@ -327,10 +333,10 @@ export class SupabaseDataSource implements DataSource {
     await this.client.edge.adminRefund({ payment_id: paymentId, amount_cents: amountCents, reason });
   }
   async setUserBlocked(userId: string, blocked: boolean, reason: string): Promise<void> {
-    await this.client.supabase.functions.invoke('admin-block-user', { body: { user_id: userId, blocked, reason } });
+    await this.invoke('admin-block-user', { user_id: userId, blocked, reason });
   }
   async creditWallet(userId: string, amountCents: number, reason: string): Promise<void> {
-    await this.client.supabase.functions.invoke('admin-credit-wallet', { body: { user_id: userId, amount_cents: amountCents, reason } });
+    await this.invoke('admin-credit-wallet', { user_id: userId, amount_cents: amountCents, reason });
   }
   async saveZoneVersion(zones: Zone[], reason: string): Promise<number> {
     const city_id = zones[0]?.city_id ?? '';

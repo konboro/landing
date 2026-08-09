@@ -55,6 +55,19 @@ const VIEWS: Record<string, ViewSpec> = {
     search: ['iccid', 'imsi', 'msisdn', 'provider_sim_id', 'device_imei', 'vehicle_code', 'label', 'plan_name'],
     defaultSort: { field: 'data_pct_used', asc: false },
   },
+  // Both are built on the same service_role-only SIM tables as v_sim_inventory
+  // (migration 00210 revokes them from anon/authenticated), so they have to come
+  // through here rather than straight from the panel's anon client.
+  v_sim_alerts: {
+    permission: 'sims.read',
+    search: ['iccid', 'msisdn', 'label', 'vehicle_code', 'device_imei'],
+    defaultSort: { field: 'severity_rank', asc: true },
+  },
+  v_sim_cost_summary: {
+    permission: 'sims.read',
+    search: [],
+    defaultSort: { field: 'month', asc: false },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],
