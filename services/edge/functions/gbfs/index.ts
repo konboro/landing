@@ -24,6 +24,27 @@ function feed(data: unknown): Response {
   });
 }
 
+/**
+ * The self-referencing URLs GBFS consumers (city authorities, aggregators)
+ * follow, so they have to be publicly resolvable.
+ *
+ * Neither request-derived source works behind the Supabase edge proxy:
+ *   - `req.url` is the INTERNAL url — scheme http, pathname `/gbfs`, missing
+ *     the public `/functions/v1` prefix;
+ *   - `x-forwarded-host` is `edge-runtime.supabase.com`, the runtime host,
+ *     which answers 401 INVALID_DENO_SUBHOST to the outside world.
+ *
+ * `SUPABASE_URL` is injected into every edge function and is the real public
+ * origin, so build from that. `GBFS_PUBLIC_BASE_URL` overrides it when the
+ * feeds are served from a custom domain.
+ */
+function publicBase(): string {
+  const override = Deno.env.get('GBFS_PUBLIC_BASE_URL');
+  if (override) return override.replace(/\/+$/, '');
+  const origin = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/+$/, '');
+  return `${origin}/functions/v1/gbfs`;
+}
+
 Deno.serve(async (req: Request) => {
   const pre = handlePreflight(req);
   if (pre) return pre;
@@ -33,7 +54,7 @@ Deno.serve(async (req: Request) => {
   const parts = url.pathname.split('/').filter(Boolean);
   const idx = parts.indexOf('gbfs');
   const which = idx >= 0 && parts.length > idx + 1 ? parts[idx + 1] : 'gbfs';
-  const base = `${url.origin}${parts.slice(0, idx + 1).join('/') ? '/' + parts.slice(0, idx + 1).join('/') : ''}`;
+  const base = publicBase();
 
   switch (which) {
     case 'gbfs': {

@@ -1,0 +1,77 @@
+# Supabase CLI config.
+#
+# Edge functions live in services/edge/functions/ (the monorepo layout, see
+# CLAUDE.md), not the CLI default supabase/functions/. Per-function
+# `entrypoint` points the CLI at the real files so nothing has to be moved or
+# symlinked, and relative `../../_shared/*` imports keep resolving.
+
+project_id = "pyferakmgtafifffqjat"
+
+[functions.admin-charge]
+entrypoint = "../services/edge/functions/admin-charge/index.ts"
+
+[functions.admin-refund]
+entrypoint = "../services/edge/functions/admin-refund/index.ts"
+
+[functions.admin-sim-detail]
+entrypoint = "../services/edge/functions/admin-sim-detail/index.ts"
+
+[functions.admin-user-profile]
+entrypoint = "../services/edge/functions/admin-user-profile/index.ts"
+
+[functions.admin-vehicle-history]
+entrypoint = "../services/edge/functions/admin-vehicle-history/index.ts"
+
+[functions.damage-report]
+entrypoint = "../services/edge/functions/damage-report/index.ts"
+
+[functions.gbfs]
+entrypoint = "../services/edge/functions/gbfs/index.ts"
+verify_jwt = false
+
+[functions.payments-buy-package]
+entrypoint = "../services/edge/functions/payments-buy-package/index.ts"
+
+[functions.payments-pay-debt]
+entrypoint = "../services/edge/functions/payments-pay-debt/index.ts"
+
+[functions.payments-setup-intent]
+entrypoint = "../services/edge/functions/payments-setup-intent/index.ts"
+
+[functions.payments-webhook]
+entrypoint = "../services/edge/functions/payments-webhook/index.ts"
+verify_jwt = false
+
+[functions.photo-review]
+entrypoint = "../services/edge/functions/photo-review/index.ts"
+
+[functions.sim-command]
+entrypoint = "../services/edge/functions/sim-command/index.ts"
+
+[functions.sim-sync]
+entrypoint = "../services/edge/functions/sim-sync/index.ts"
+
+[functions.sumsub-applicant]
+entrypoint = "../services/edge/functions/sumsub-applicant/index.ts"
+
+[functions.sumsub-webhook]
+entrypoint = "../services/edge/functions/sumsub-webhook/index.ts"
+verify_jwt = false
+
+[functions.trips-end]
+entrypoint = "../services/edge/functions/trips-end/index.ts"
+
+[functions.trips-pause]
+entrypoint = "../services/edge/functions/trips-pause/index.ts"
+
+[functions.trips-reserve]
+entrypoint = "../services/edge/functions/trips-reserve/index.ts"
+
+[functions.trips-start]
+entrypoint = "../services/edge/functions/trips-start/index.ts"
+
+[functions.vehicle-command]
+entrypoint = "../services/edge/functions/vehicle-command/index.ts"
+
+[functions.zones-save]
+entrypoint = "../services/edge/functions/zones-save/index.ts"
