@@ -391,6 +391,12 @@ export const en = {
     reportVehicle: 'Report a scooter problem',
     inbox: 'Message center',
     noMessages: 'No messages yet',
+    liveChat: 'Live chat',
+    liveChatHint: 'Talk to our team — replies land in your message center',
+    chatEmpty: 'Send us a message and an agent will pick it up.',
+    chatPlaceholder: 'Type a message…',
+    chatSend: 'Send',
+    emergency: 'In an emergency',
   },
   reaction: {
     title: 'Quick reaction check',

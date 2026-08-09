@@ -11,6 +11,8 @@ import type {
   AdminChargeInput,
   AuditInput,
   SearchResult,
+  MessageThread,
+  ChatMessage,
 } from './api';
 import { runQuery, delay, type Page, type QueryParams } from './query';
 import { getMockDb } from './mock/db';
@@ -448,6 +450,71 @@ export class MockDataSource implements DataSource {
       after: { status: sim.status, plan_name: sim.plan_name },
     });
     return delay(sim, 420);
+  }
+
+  /* ---------- Message centre ---------- */
+
+  /** Seeded on first read so the queue is not empty in a demo. */
+  private chat: ChatMessage[] | null = null;
+
+  private chatSeed(): ChatMessage[] {
+    if (this.chat) return this.chat;
+    const who = this.db.customers.slice(0, 2);
+    const now = Date.now();
+    this.chat = who.flatMap((c, i) => [
+      {
+        id: `m-${i}-1`,
+        user_id: c.id,
+        sender: 'rider' as const,
+        body: i === 0
+          ? 'Hi — the scooter I ended ended charged me twice, can you check?'
+          : 'The scooter at Ermou would not unlock. I was charged nothing but wanted to flag it.',
+        created_at: new Date(now - (i + 1) * 3600_000).toISOString(),
+        staff_id: null,
+      },
+    ]);
+    return this.chat;
+  }
+
+  async listMessageThreads(): Promise<MessageThread[]> {
+    const rows = this.chatSeed();
+    const byUser = new Map<string, MessageThread>();
+    for (const m of [...rows].reverse()) {
+      const existing = byUser.get(m.user_id);
+      if (existing) {
+        if (m.sender === 'rider' && existing.last_sender === 'rider') existing.unanswered += 1;
+        continue;
+      }
+      const c = this.db.customers.find((x) => x.id === m.user_id);
+      byUser.set(m.user_id, {
+        user_id: m.user_id,
+        full_name: c?.full_name ?? null,
+        phone: c?.phone ?? null,
+        last_body: m.body,
+        last_at: m.created_at,
+        last_sender: m.sender,
+        unanswered: m.sender === 'rider' ? 1 : 0,
+      });
+    }
+    return delay([...byUser.values()].sort((a, b) => (a.last_at < b.last_at ? 1 : -1)), 200);
+  }
+
+  async getMessageThread(userId: string): Promise<ChatMessage[]> {
+    return delay(this.chatSeed().filter((m) => m.user_id === userId), 160);
+  }
+
+  async replyToMessage(userId: string, body: string): Promise<ChatMessage> {
+    const msg: ChatMessage = {
+      id: `m-reply-${this.chatSeed().length + 1}`,
+      user_id: userId,
+      sender: 'staff',
+      body,
+      created_at: new Date().toISOString(),
+      staff_id: 'mock-staff',
+    };
+    this.chat = [...this.chatSeed(), msg];
+    await this.logAudit({ action: 'messages.reply', entity: 'inbox_messages', entity_id: msg.id, reason: null });
+    return delay(msg, 200);
   }
 
   /* ---------- White-label branding ---------- */

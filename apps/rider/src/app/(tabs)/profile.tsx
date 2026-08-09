@@ -32,7 +32,7 @@ export default function ProfileScreen() {
 
   const [stats, setStats] = useState<LifetimeStats | null>(null);
   const [prefs, setPrefs] = useState<NotifPrefs | null>(null);
-  const [sheet, setSheet] = useState<null | 'lang' | 'notif' | 'personal' | 'emergency' | 'consents' | 'delete'>(null);
+  const [sheet, setSheet] = useState<null | 'lang' | 'notif' | 'personal' | 'consents' | 'delete'>(null);
   const [draft, setDraft] = useState<Partial<RiderUser>>({});
   const [devOpen, setDevOpen] = useState(false);
 
@@ -126,9 +126,10 @@ export default function ProfileScreen() {
         <ListRow icon="bell" title={t('profile.notifications')} onPress={() => setSheet('notif')} />
         <Divider />
         <ListRow icon="check" title={t('profile.consents')} onPress={() => setSheet('consents')} />
-        <Divider />
-        <ListRow icon="crash" title={t('profile.emergency')} subtitle={user?.emergency_contact ?? t('profile.emergencyHint')} onPress={() => { setDraft({ emergency_contact: user?.emergency_contact ?? '' }); setSheet('emergency'); }} />
       </SectionCard>
+      {/* The emergency contact used to sit here. It lives in Help now, beside
+          the crash check-in and the support channels — it is something you
+          reach for during an incident, not a profile preference. */}
 
       <SectionCard>
         <ListRow icon="scan" title={t('profile.tutorialReplay')} onPress={() => router.push('/onboarding/tutorial')} />
@@ -181,15 +182,6 @@ export default function ProfileScreen() {
           <TextField label="Date of birth" placeholder="YYYY-MM-DD" value={draft.date_of_birth ?? ''} onChangeText={(v) => setDraft((d) => ({ ...d, date_of_birth: v }))} />
           <TextField label="Address" value={draft.address ?? ''} onChangeText={(v) => setDraft((d) => ({ ...d, address: v }))} />
           <Button title={t('common.save')} onPress={() => save(draft).then(() => setSheet(null))} />
-        </View>
-      </Sheet>
-
-      {/* emergency sheet */}
-      <Sheet visible={sheet === 'emergency'} onClose={() => setSheet(null)} title={t('profile.emergency')}>
-        <View style={{ gap: theme.space.md }}>
-          <Banner tone="neutral" icon="info" title={t('profile.emergencyHint')} />
-          <TextField label={t('profile.emergency')} keyboardType="phone-pad" value={draft.emergency_contact ?? ''} onChangeText={(v) => setDraft((d) => ({ ...d, emergency_contact: v }))} />
-          <Button title={t('common.save')} onPress={() => save({ emergency_contact: draft.emergency_contact ?? null }).then(() => setSheet(null))} />
         </View>
       </Sheet>
 

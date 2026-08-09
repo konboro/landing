@@ -14,22 +14,28 @@ export type Permission =
   | 'tasks.manage'
   | 'settings.edit'
   | 'team.manage'
-  | 'verification.review';
+  | 'verification.review'
+  // Message centre. Reading a conversation and answering it are separate:
+  // a reply goes out under the operator's name, so it is a narrower grant.
+  | 'messages.read'
+  | 'messages.reply';
 
 const ALL: Permission[] = [
   'payments.charge', 'payments.refund', 'users.block', 'users.credit', 'zones.edit',
   'vehicles.command', 'vehicles.status', 'debts.writeoff', 'tasks.manage', 'settings.edit',
-  'team.manage', 'verification.review',
+  'team.manage', 'verification.review', 'messages.read', 'messages.reply',
 ];
 
+// Mirrors migration 00290 — keep the two in step, since the server check is
+// what actually enforces this and the client copy only shapes the UI.
 const ROLE_PERMS: Record<StaffRole, Permission[]> = {
   owner: ALL,
   admin: ALL,
-  support: ['users.block', 'users.credit', 'payments.refund', 'verification.review', 'debts.writeoff'],
-  ops_manager: ['vehicles.command', 'vehicles.status', 'tasks.manage', 'zones.edit'],
+  support: ['users.block', 'users.credit', 'payments.refund', 'verification.review', 'debts.writeoff', 'messages.read', 'messages.reply'],
+  ops_manager: ['vehicles.command', 'vehicles.status', 'tasks.manage', 'zones.edit', 'messages.read', 'messages.reply'],
   ops: ['vehicles.command', 'vehicles.status', 'tasks.manage'],
-  accountant: ['payments.charge', 'payments.refund', 'debts.writeoff'],
-  readonly: [],
+  accountant: ['payments.charge', 'payments.refund', 'debts.writeoff', 'messages.read'],
+  readonly: ['messages.read'],
 };
 
 export interface CurrentStaff {
@@ -43,6 +49,8 @@ interface AuthCtx {
   staff: CurrentStaff;
   setRole: (role: StaffRole) => void;
   can: (p: Permission) => boolean;
+  /** Cities this deployment operates in (from `admin-me`). Empty in mock mode. */
+  cities: Array<{ id: string; name: string }>;
   /** Live mode only: true while the session is being resolved. */
   loading: boolean;
   /** Live mode only: null when signed out, a message when sign-in failed. */
@@ -68,6 +76,7 @@ function MockAuthProvider({ children }: { children: ReactNode }) {
     staff: { id: 'staff-owner', name: 'Konstantinos', role, cityScope: [] },
     setRole,
     can: (p: Permission) => ROLE_PERMS[role].includes(p),
+    cities: [],
     loading: false,
     authError: null,
     signIn: async () => {},
@@ -86,6 +95,7 @@ function MockAuthProvider({ children }: { children: ReactNode }) {
 function LiveAuthProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<CurrentStaff | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [cities, setCities] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -109,6 +119,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
         cityScope: me.staff.city_scope ?? [],
       });
       setPermissions(me.permissions ?? []);
+      setCities(me.cities ?? []);
       setAuthError(null);
     } catch (e) {
       // A valid Supabase user who is not staff must not get in.
@@ -126,6 +137,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
     staff: staff ?? { id: '', name: '', role: 'readonly', cityScope: [] },
     setRole: () => {},           // role is server-assigned in live mode
     can: (p: Permission) => permissions.includes('*') || permissions.includes(p),
+    cities,
     loading,
     authError,
     isAuthenticated: staff !== null,
@@ -149,7 +161,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
       setStaff(null);
       setPermissions([]);
     },
-  }), [staff, permissions, loading, authError, resolve]);
+  }), [staff, permissions, cities, loading, authError, resolve]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

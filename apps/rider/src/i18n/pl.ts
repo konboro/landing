@@ -393,6 +393,12 @@ export const pl: Dict = {
     reportVehicle: 'Zgłoś problem z hulajnogą',
     inbox: 'Centrum wiadomości',
     noMessages: 'Brak wiadomości',
+    liveChat: 'Czat na żywo',
+    liveChatHint: 'Napisz do nas — odpowiedzi trafiają do centrum wiadomości',
+    chatEmpty: 'Napisz do nas, a konsultant się tym zajmie.',
+    chatPlaceholder: 'Napisz wiadomość…',
+    chatSend: 'Wyślij',
+    emergency: 'W nagłym wypadku',
   },
   reaction: {
     title: 'Szybki test reakcji',

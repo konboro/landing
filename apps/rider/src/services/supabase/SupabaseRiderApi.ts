@@ -43,6 +43,7 @@ import {
   type NotifPrefs,
   type FaqEntry,
   type InboxItem,
+  type ChatMessage,
   type LngLat,
   type TripDetail,
   type CostBreakdown,
@@ -924,6 +925,59 @@ export class SupabaseRiderApi implements RiderApi {
 
   async markInboxRead(id: string): Promise<void> {
     await this.client.supabase.from('inbox_messages').update({ read_at: new Date().toISOString() }).eq('id', id);
+  }
+
+  /* ---- Live chat (message centre, kind = 'chat') ---- */
+
+  async getChat(): Promise<ChatMessage[]> {
+    const id = await this.userId();
+    const { data, error } = await this.client.supabase
+      .from('inbox_messages')
+      .select('id, sender, body, created_at')
+      .eq('user_id', id)
+      .eq('kind', 'chat')
+      .order('created_at', { ascending: true }) // oldest first — a transcript
+      .limit(200);
+    if (error) throw new RiderApiError('chat_failed', error.message);
+    return (data ?? []) as ChatMessage[];
+  }
+
+  async sendChatMessage(body: string): Promise<ChatMessage> {
+    const id = await this.userId();
+    // sender/kind are pinned here AND enforced by the RLS WITH CHECK, so a
+    // rider cannot post a turn that looks like it came from support.
+    const { data, error } = await this.client.supabase
+      .from('inbox_messages')
+      .insert({ user_id: id, body, kind: 'chat', sender: 'rider', title: '' })
+      .select('id, sender, body, created_at')
+      .single();
+    if (error) throw new RiderApiError('chat_send_failed', error.message);
+    return data as ChatMessage;
+  }
+
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void {
+    // Filtering server-side on user_id keeps other riders' traffic off this
+    // socket entirely rather than discarding it on the device.
+    const channel = this.client.supabase
+      .channel('rider-chat')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inbox_messages' },
+        (payload: { new?: Record<string, unknown> }) => {
+          const row = payload.new;
+          if (!row || row.kind !== 'chat') return;
+          onMessage({
+            id: String(row.id),
+            sender: row.sender as ChatMessage['sender'],
+            body: String(row.body ?? ''),
+            created_at: String(row.created_at),
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void this.client.supabase.removeChannel(channel);
+    };
   }
 
   async recordReaction(ms: number, passed: boolean): Promise<void> {

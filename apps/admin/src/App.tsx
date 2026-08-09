@@ -22,6 +22,7 @@ import { PricingPage } from '@/pages/Pricing';
 import { MarketingPage } from '@/pages/Marketing';
 import { FleetMaintenancePage } from '@/pages/FleetMaintenance';
 import { ConnectivityPage } from '@/pages/Connectivity';
+import { MessagesPage } from '@/pages/Messages';
 import { FinancePage } from '@/pages/Finance';
 import { ContentPage } from '@/pages/Content';
 import { TeamPage } from '@/pages/Team';
@@ -54,6 +55,7 @@ export function App() {
                     <Route path="/vehicles/:id" element={<VehicleDetailPage />} />
                     <Route path="/customers" element={<CustomersPage />} />
                     <Route path="/customers/:id" element={<CustomerDetailPage />} />
+                    <Route path="/messages" element={<MessagesPage />} />
                     <Route path="/analytics" element={<AnalyticsPage />} />
                     <Route path="/zones" element={<ZonesPage />} />
                     <Route path="/pricing" element={<PricingPage />} />

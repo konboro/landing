@@ -32,6 +32,7 @@ import {
   type NotifPrefs,
   type FaqEntry,
   type InboxItem,
+  type ChatMessage,
   type LngLat,
   type TripDetail,
   type CostBreakdown,
@@ -1029,6 +1030,50 @@ export class MockRiderApi implements RiderApi {
   async markInboxRead(id: string): Promise<void> {
     await wait(60);
     this.s.inbox = this.s.inbox.map((m) => (m.id === id ? { ...m, read: true } : m));
+  }
+
+  /* -------------------------------- live chat ----------------------------- */
+
+  private chat: ChatMessage[] = [];
+  private chatListeners = new Set<(m: ChatMessage) => void>();
+
+  async getChat(): Promise<ChatMessage[]> {
+    await wait(120);
+    return this.chat.map((m) => ({ ...m }));
+  }
+
+  async sendChatMessage(body: string): Promise<ChatMessage> {
+    await wait(150);
+    const mine: ChatMessage = {
+      id: `chat-${this.chat.length + 1}`,
+      sender: 'rider',
+      body,
+      created_at: new Date().toISOString(),
+    };
+    this.chat.push(mine);
+
+    // Demo mode answers itself after a beat so the screen can be shown without
+    // a backend and still look alive. Never runs in supabase mode.
+    setTimeout(() => {
+      const reply: ChatMessage = {
+        id: `chat-${this.chat.length + 1}`,
+        sender: 'staff',
+        agent_name: 'Penny Support',
+        body: 'Thanks for the message — an agent will be with you shortly.',
+        created_at: new Date().toISOString(),
+      };
+      this.chat.push(reply);
+      this.chatListeners.forEach((fn) => fn(reply));
+    }, 1400);
+
+    return mine;
+  }
+
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void {
+    this.chatListeners.add(onMessage);
+    return () => {
+      this.chatListeners.delete(onMessage);
+    };
   }
 
   /* ------------------------------ reaction test --------------------------- */

@@ -124,6 +124,29 @@ export interface SimSyncResult {
   provider: string;
 }
 
+/* ---------- Message centre (rider ↔ support live chat) ---------- */
+
+/** One rider's conversation, folded to a single row for the queue list. */
+export interface MessageThread {
+  user_id: UUID;
+  full_name: string | null;
+  phone: string | null;
+  last_body: string;
+  last_at: string;
+  last_sender: 'rider' | 'staff' | 'system';
+  /** Rider turns since the last staff reply — 0 means nothing is waiting. */
+  unanswered: number;
+}
+
+export interface ChatMessage {
+  id: UUID;
+  user_id: UUID;
+  sender: 'rider' | 'staff' | 'system';
+  body: string;
+  created_at: string;
+  staff_id: UUID | null;
+}
+
 /** Brand override as stored in `app_config.brand` — the exact JSON shape
  *  `brandFromConfig()` accepts. Kept as a loose record so a brand gaining new
  *  tokens does not need a panel release. */
@@ -179,6 +202,11 @@ export interface DataSource {
   getSimCostSummary(): Promise<SimCostSummary[]>;
   syncSims(): Promise<SimSyncResult>;
   simCommand(input: SimCommandInput): Promise<SimInventoryRow>;
+
+  // Message centre (edge fn `admin-messages`)
+  listMessageThreads(): Promise<MessageThread[]>;
+  getMessageThread(userId: string): Promise<ChatMessage[]>;
+  replyToMessage(userId: string, body: string): Promise<ChatMessage>;
 
   // White-label branding (`app_config.brand`)
   getBrandConfig(): Promise<BrandConfig | null>;

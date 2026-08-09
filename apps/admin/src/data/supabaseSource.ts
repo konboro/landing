@@ -16,6 +16,8 @@ import type {
   AdminChargeInput,
   AuditInput,
   SearchResult,
+  MessageThread,
+  ChatMessage,
 } from './api';
 import type { Page, QueryParams } from './query';
 import type { MockDb } from './mock/db';
@@ -36,6 +38,8 @@ import type {
   SimCostSummary,
   SimInventoryRow,
 } from '@/types/domain';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function notImpl(method: string): never {
   throw new Error(
@@ -136,7 +140,15 @@ export class SupabaseDataSource implements DataSource {
   async listZones(): Promise<Zone[]> {
     const { data, error } = await this.client.supabase.from('zones').select('*').eq('active', true);
     if (error) throw error;
-    return (data ?? []) as Zone[];
+    // PostgREST serialises the PostGIS geometry column as GeoJSON, but adds a
+    // `crs` member that `Zone.geom` (a plain GeoJSON polygon) does not have.
+    // Strip it: it travels back into `apply_zone_version` → ST_GeomFromGeoJSON
+    // on save, which only wants type + coordinates.
+    return (data ?? []).map((row) => {
+      const z = row as Zone & { geom?: { type: string; coordinates: unknown } | null };
+      if (!z.geom) return z;
+      return { ...z, geom: { type: z.geom.type, coordinates: z.geom.coordinates } };
+    }) as Zone[];
   }
   async getPanelData(): Promise<MockDb> { return notImpl('getPanelData'); }
 
@@ -287,6 +299,30 @@ export class SupabaseDataSource implements DataSource {
     return res.sim;
   }
 
+  /* ---- Message centre ----
+     All three go through `admin-messages`: a reply must be written with
+     service_role so a staff turn cannot be forged from the rider app, whose
+     RLS policy only permits inserting `sender = 'rider'`. */
+
+  async listMessageThreads(): Promise<MessageThread[]> {
+    const res = await this.invoke<{ threads: MessageThread[] }>('admin-messages', { section: 'list' });
+    return res.threads ?? [];
+  }
+
+  async getMessageThread(userId: string): Promise<ChatMessage[]> {
+    const res = await this.invoke<{ messages: ChatMessage[] }>('admin-messages', {
+      section: 'thread', user_id: userId,
+    });
+    return res.messages ?? [];
+  }
+
+  async replyToMessage(userId: string, body: string): Promise<ChatMessage> {
+    const res = await this.invoke<{ message: ChatMessage }>('admin-messages', {
+      section: 'reply', user_id: userId, body,
+    });
+    return res.message;
+  }
+
   /* ---- White-label branding (`app_config.brand`) ---- */
 
   async getBrandConfig(): Promise<BrandConfig | null> {
@@ -339,7 +375,14 @@ export class SupabaseDataSource implements DataSource {
     await this.invoke('admin-credit-wallet', { user_id: userId, amount_cents: amountCents, reason });
   }
   async saveZoneVersion(zones: Zone[], reason: string): Promise<number> {
-    const city_id = zones[0]?.city_id ?? '';
+    // `apply_zone_version(p_city uuid, …)` takes the city from this one field
+    // and ignores every zone's own city_id. Picking zones[0] blindly breaks the
+    // moment the first entry is a zone drawn in the panel, whose city_id is
+    // whatever the editor guessed — so take the first one that is really a uuid.
+    const city_id = zones.find((z) => UUID_RE.test(z.city_id ?? ''))?.city_id ?? zones[0]?.city_id ?? '';
+    if (!UUID_RE.test(city_id)) {
+      throw new Error('Cannot save zones: no city id on any zone. Draw inside an existing city, or reload the page so the city list is available.');
+    }
     const res = await this.client.edge.saveZoneVersion({ city_id, zones, reason });
     return res.version;
   }

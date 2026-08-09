@@ -12,6 +12,7 @@ export const NAV: NavItem[] = [
   { to: '/rides', label: 'Rides', icon: '🛴', group: 'Operate' },
   { to: '/vehicles', label: 'Vehicles', icon: '🔋', group: 'Operate' },
   { to: '/customers', label: 'Customers', icon: '👤', group: 'Operate' },
+  { to: '/messages', label: 'Message centre', icon: '💬', group: 'Operate' },
 
   { to: '/analytics', label: 'Analytics', icon: '📈', group: 'Insight' },
 

@@ -447,6 +447,21 @@ export interface InboxItem {
   created_at: string;
 }
 
+/**
+ * One turn of the rider ↔ support conversation. Stored in the same message
+ * centre as the inbox (`inbox_messages`, kind `chat`) so a conversation is
+ * never split across two systems.
+ */
+export interface ChatMessage {
+  id: string;
+  /** `rider` = written here, `staff` = a human replied, `system` = automated. */
+  sender: 'rider' | 'staff' | 'system';
+  body: string;
+  created_at: string;
+  /** Display name of the agent who replied, when the backend supplies one. */
+  agent_name?: string | null;
+}
+
 /* --------------------------------- The API --------------------------------- */
 
 export interface RiderApi {
@@ -545,6 +560,15 @@ export interface RiderApi {
   ): Promise<{ id: string }>;
   getInbox(): Promise<InboxItem[]>;
   markInboxRead(id: string): Promise<void>;
+
+  /* live chat — the same message centre as the inbox, filtered to `chat` */
+  getChat(): Promise<ChatMessage[]>;
+  sendChatMessage(body: string): Promise<ChatMessage>;
+  /**
+   * Push new turns as they arrive. Returns an unsubscribe function that the
+   * caller MUST run on unmount, or the realtime channel leaks between screens.
+   */
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void;
 
   /* reaction test */
   recordReaction(ms: number, passed: boolean): Promise<void>;
