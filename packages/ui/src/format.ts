@@ -1,6 +1,10 @@
 // Shared formatting — money, duration, distance, dates. Locale-aware.
 
-export function formatMoney(cents: number, currency = 'EUR', locale = 'el-GR'): string {
+// The default locale is English. It used to be 'el-GR', and because almost no
+// caller passes one, every date and amount in the app rendered in Greek
+// regardless of the chosen language — most visibly in ride detail. Callers that
+// genuinely want a rider's own locale still pass it explicitly.
+export function formatMoney(cents: number, currency = 'EUR', locale = 'en-GB'): string {
   return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(cents / 100);
 }
 
@@ -23,7 +27,7 @@ export function formatSoc(pct: number | null | undefined): string {
   return `${Math.round(pct)}%`;
 }
 
-export function formatDateTime(iso: string | null | undefined, locale = 'el-GR'): string {
+export function formatDateTime(iso: string | null | undefined, locale = 'en-GB'): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString(locale, {
     year: 'numeric',

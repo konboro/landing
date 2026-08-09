@@ -67,7 +67,9 @@ export function MapboxFleetMap(props: FleetMapProps) {
         if (typeof e?.properties?.zoom === 'number') setZoom(e.properties.zoom);
       }}
       scaleBarEnabled={false}
-      compassEnabled
+      // Compass off: it sat in the top-right under the messages button, and a
+      // rider never rotates the map away from north in normal use.
+      compassEnabled={false}
     >
       <Mapbox.Camera
         ref={cameraRef}

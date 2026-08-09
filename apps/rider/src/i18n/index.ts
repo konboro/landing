@@ -29,7 +29,10 @@ function detectDeviceLang(): Lang {
   } catch {
     /* fall through */
   }
-  return 'el'; // Greece-first default
+  // English, not Greek. A device set to any language we do not ship landed on
+  // Greek here, so the app could come up in Greek on a phone that never asked
+  // for it. Greek and Polish still win when the device actually requests them.
+  return 'en';
 }
 
 interface I18nState {

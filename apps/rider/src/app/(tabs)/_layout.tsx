@@ -20,6 +20,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      initialRouteName="map"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.color.primary,
@@ -49,9 +50,13 @@ export default function TabsLayout() {
         tabBarItemStyle: { paddingTop: 2 },
       }}
     >
-      <Tabs.Screen name="map" options={{ title: t('tabs.map'), tabBarIcon: icon('map') }} />
+      {/* Declaration order IS tab order. The map sits dead centre — it is the
+          screen riders return to, and the middle slot is the easiest to hit
+          one-handed. `initialRouteName` above keeps it the landing screen even
+          though it is no longer first in the list. */}
       <Tabs.Screen name="wallet" options={{ title: t('tabs.wallet'), tabBarIcon: icon('wallet') }} />
       <Tabs.Screen name="history" options={{ title: t('tabs.history'), tabBarIcon: icon('history') }} />
+      <Tabs.Screen name="map" options={{ title: t('tabs.map'), tabBarIcon: icon('map') }} />
       <Tabs.Screen name="profile" options={{ title: t('tabs.profile'), tabBarIcon: icon('profile') }} />
       <Tabs.Screen name="support" options={{ title: t('tabs.support'), tabBarIcon: icon('help') }} />
     </Tabs>

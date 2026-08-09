@@ -13,7 +13,7 @@ import { useTrip } from '../../store/trip';
 import { useFlags } from '../../store/flags';
 import { FleetMap } from '../../components/map/FleetMap';
 import {
-  T, Row, Card, Button, Badge, Sheet, Banner, Icon, type IconName,
+  T, Row, Button, Badge, Sheet, Banner, Icon, type IconName,
 } from '../../components/ui';
 
 export default function MapScreen() {
@@ -156,15 +156,10 @@ export default function MapScreen() {
         focus={focus}
       />
 
-      {/* top bar */}
+      {/* Top bar — messages only. The city + "N available" pill was removed:
+          the city is obvious from the map itself and the count changed on every
+          pan, so it read as noise over the fleet rather than as information. */}
       <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <Card style={styles.cityPill} padded={false} elevated>
-          <Row style={{ paddingHorizontal: 12, paddingVertical: 8 }} gap={8}>
-            <Icon name="location" size={16} color={theme.color.primary} />
-            <T variant="body" style={{ fontWeight: '700' }}>{city?.name ?? 'Athens'}</T>
-            <Badge label={`${vehicles.length} ${t('map.available')}`} tone="success" />
-          </Row>
-        </Card>
         <Pressable style={styles.iconPill} onPress={() => router.push('/inbox')}>
           <Icon name="inbox" size={20} />
           {inboxUnread > 0 ? <View style={styles.dot}><T variant="caption" color={theme.color.onPrimary} style={styles.dotTxt}>{inboxUnread}</T></View> : null}
@@ -285,8 +280,8 @@ function Stat({ icon, label, value }: { icon: IconName; label: string; value: st
 
 const useStyles = makeStyles((t) => ({
   fill: { flex: 1, backgroundColor: t.color.bg },
-  topBar: { position: 'absolute', left: t.space.lg, right: t.space.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cityPill: { borderRadius: t.radius.pill },
+  // Only the messages button lives up here now, so it sits flush right.
+  topBar: { position: 'absolute', left: t.space.lg, right: t.space.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   iconPill: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: t.color.surface,
     alignItems: 'center', justifyContent: 'center', ...t.shadow.card,
