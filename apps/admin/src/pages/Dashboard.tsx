@@ -50,6 +50,24 @@ function Tile({ value, label }: { value: string; label: string }) {
   );
 }
 
+/**
+ * Every state a vehicle can be in, in the order an operator scans them: what is
+ * earning, what is blocked, what is lost. Keys are the `vehicle_status` enum
+ * (migration 00020); labels are the words ops actually use — `in_trip` reads as
+ * "In use", `low_battery` as "Discharged".
+ */
+const VEHICLE_STATUSES: Array<{ key: string; label: string }> = [
+  { key: 'available', label: 'Available' },
+  { key: 'in_trip', label: 'In use' },
+  { key: 'reserved', label: 'Reserved' },
+  { key: 'low_battery', label: 'Discharged' },
+  { key: 'maintenance', label: 'Maintenance' },
+  { key: 'transport', label: 'Transport' },
+  { key: 'offline', label: 'Offline' },
+  { key: 'stolen', label: 'Stolen' },
+  { key: 'decommissioned', label: 'Decommissioned' },
+];
+
 /** Local YYYY-MM-DD — the operator's day, not UTC's. */
 function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -100,11 +118,22 @@ export function DashboardPage() {
           && payDay(x as { created_at?: string | null }) === day)
         .reduce((s, x) => s + Number((x as { amount_cents?: number }).amount_cents ?? 0), 0);
 
-    const byStatus = new Map<string, number>();
+    // Count every status the fleet CAN be in, not only the ones that happen to
+    // occur today. A missing "Stolen" tile reads as "not tracked"; a tile
+    // showing 0 reads as "none right now", which is the useful answer.
+    const counted = new Map<string, number>();
     for (const v of vehicles) {
-      const s = String((v as { status?: string }).status ?? 'unknown');
-      byStatus.set(s, (byStatus.get(s) ?? 0) + 1);
+      const s = String((v as { status?: string }).status ?? '');
+      counted.set(s, (counted.get(s) ?? 0) + 1);
     }
+    const byStatus = VEHICLE_STATUSES.map((s) => [s.label, counted.get(s.key) ?? 0] as const);
+
+    // "Disconnected" is not a status — a vehicle can be `available` and still
+    // have no live GPRS session. The view exposes session_online, so this is a
+    // real count rather than a guess.
+    const disconnected = vehicles.filter(
+      (v) => (v as { session_online?: boolean }).session_online === false,
+    ).length;
 
     // "No rides in 72 h" — a rebalancing candidate. Computed from the real ride
     // history, so it is empty when there is no history rather than invented.
@@ -138,7 +167,8 @@ export function DashboardPage() {
       newYesterday: countOn(customers, (c) => isoDay((c as { created_at?: string | null }).created_at), yesterday),
       newAvg: perDay(customers, (c) => isoDay((c as { created_at?: string | null }).created_at)),
 
-      byStatus: [...byStatus.entries()].sort((a, b) => b[1] - a[1]),
+      byStatus,
+      disconnected,
       fleetTotal: vehicles.length,
 
       tasksToday: countOn(tasks, (t) => isoDay((t as { created_at?: string | null }).created_at), today),
@@ -199,9 +229,10 @@ export function DashboardPage() {
       <Section icon="🛵" title="Vehicles" tint="rgba(255,138,76,.18)" to="/vehicles" />
       <div className="grid grid-kpi">
         <Tile value={loading ? '—' : formatNumber(m.fleetTotal)} label="Fleet total" />
-        {m.byStatus.map(([status, count]) => (
-          <Tile key={status} value={formatNumber(count)} label={titleCase(status)} />
+        {m.byStatus.map(([label, count]) => (
+          <Tile key={label} value={loading ? '—' : formatNumber(count)} label={label} />
         ))}
+        <Tile value={loading ? '—' : formatNumber(m.disconnected)} label="Disconnected" />
       </div>
 
       {/* ── Tasks & damages ───────────────────────────────────────────────── */}
