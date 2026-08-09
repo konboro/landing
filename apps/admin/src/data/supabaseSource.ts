@@ -15,13 +15,16 @@ import type {
   CustomerDetail,
   AdminChargeInput,
   AuditInput,
+  BroadcastInput,
+  BroadcastResult,
+  CreateVehicleInput,
   SearchResult,
   MessageThread,
   ChatMessage,
 } from './api';
 import type { Page, QueryParams } from './query';
 import type { MockDb } from './mock/db';
-import type { Command, VehicleAlert, Zone } from '@penny/db-types';
+import type { Command, VehicleAlert, Zone, TripEvent, LngLat } from '@penny/db-types';
 import type {
   KpiSnapshot,
   RideRow,
@@ -29,6 +32,11 @@ import type {
   CustomerRow,
   VerificationItem,
   AuditLogEntry,
+  Payment,
+  Debt,
+  LedgerEntry,
+  DamageReport,
+  Referral,
   UserProfileFull,
   UserRideHistoryRow,
   VehicleRideHistoryRow,
@@ -37,6 +45,8 @@ import type {
   SimAlert,
   SimCostSummary,
   SimInventoryRow,
+  BroadcastRow,
+  CustomerGroupRow,
 } from '@/types/domain';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -122,7 +132,36 @@ export class SupabaseDataSource implements DataSource {
   async listRides(params: QueryParams): Promise<Page<RideRow>> {
     return this.listFrom<RideRow>('v_admin_rides', params);
   }
-  async getRide(_id: string): Promise<RideDetail | null> { return notImpl('getRide'); }
+  async getRide(id: string): Promise<RideDetail | null> {
+    // One ride, read through the same view the list uses so the row shape is
+    // identical and the detail page never disagrees with the table it came from.
+    const res = await this.invoke<{ rows: RideRow[] }>('admin-list', {
+      view: 'v_admin_rides', limit: 1, offset: 0, filters: { id },
+    });
+    const ride = res.rows?.[0];
+    if (!ride) return null;
+
+    const [events, payments, route] = await Promise.all([
+      this.invoke<{ rows: TripEvent[] }>('admin-list', {
+        view: 'trip_events', limit: 200, offset: 0, filters: { trip_id: id },
+        sort: [{ field: 'at', dir: 'asc' }],
+      }).then((r) => r.rows ?? []).catch(() => [] as TripEvent[]),
+      this.invoke<{ rows: Payment[] }>('admin-list', {
+        view: 'payments', limit: 50, offset: 0, filters: { trip_id: id },
+      }).then((r) => r.rows ?? []).catch(() => [] as Payment[]),
+      // trip_routes stores ONE row per trip whose `path` is the whole LineString,
+      // not a row per GPS point — so this reads a single row and unpacks it.
+      this.invoke<{ rows: Array<{ path?: { coordinates?: LngLat[] } }> }>('admin-list', {
+        view: 'trip_routes', limit: 1, offset: 0, filters: { trip_id: id },
+      }).then((r) => (r.rows?.[0]?.path?.coordinates ?? []) as LngLat[])
+        .catch(() => [] as LngLat[]),
+    ]);
+
+    // Telemetry for the speed/battery chart is per-device and time-ranged;
+    // the ride page renders the route without it rather than blocking on a
+    // query across the partitioned telemetry table.
+    return { ride, events, route, telemetry: [], payments };
+  }
   async listVerification(): Promise<VerificationItem[]> {
     const res = await this.invoke<{ rows: VerificationItem[] }>('admin-list', {
       view: 'v_ride_verification_queue', limit: 200, offset: 0,
@@ -132,11 +171,71 @@ export class SupabaseDataSource implements DataSource {
   async listVehicles(params: QueryParams): Promise<Page<VehicleRow>> {
     return this.listFrom<VehicleRow>('v_admin_vehicles', params);
   }
-  async getVehicle(_id: string): Promise<VehicleDetail | null> { return notImpl('getVehicle'); }
+  async getVehicle(id: string): Promise<VehicleDetail | null> {
+    const res = await this.invoke<{ rows: VehicleRow[] }>('admin-list', {
+      view: 'v_admin_vehicles', limit: 1, offset: 0, filters: { id },
+    });
+    const vehicle = res.rows?.[0];
+    if (!vehicle) return null;
+
+    const rows = async <T,>(view: string, filters: Record<string, unknown>, limit = 100, sort?: string) =>
+      this.invoke<{ rows: T[] }>('admin-list', {
+        view, limit, offset: 0, filters,
+        ...(sort ? { sort: [{ field: sort, dir: 'desc' }] } : {}),
+      }).then((r) => r.rows ?? []).catch(() => [] as T[]);
+
+    const [commands, alerts, rides, damage, devices] = await Promise.all([
+      rows<Command>('commands', { vehicle_id: id }, 100, 'created_at'),
+      rows<VehicleAlert>('vehicle_alerts', { vehicle_id: id }, 100, 'created_at'),
+      rows<RideRow>('v_admin_rides', { vehicle_id: id }, 25, 'started_at'),
+      rows<DamageReport>('damage_reports', { vehicle_id: id }, 50, 'created_at'),
+      rows<MockDb['devices'][number]>('devices', { vehicle_id: id }, 1),
+    ]);
+
+    return {
+      vehicle,
+      // Same reasoning as the ride page: telemetry lives in the partitioned
+      // table and is fetched by the chart when it is actually shown.
+      telemetry: [],
+      commands, alerts, rides, damage,
+      device: devices[0] ?? null,
+    };
+  }
   async listCustomers(params: QueryParams): Promise<Page<CustomerRow>> {
     return this.listFrom<CustomerRow>('v_admin_customers', params);
   }
-  async getCustomer(_id: string): Promise<CustomerDetail | null> { return notImpl('getCustomer'); }
+  async getCustomer(id: string): Promise<CustomerDetail | null> {
+    const res = await this.invoke<{ rows: CustomerRow[] }>('admin-list', {
+      view: 'v_admin_customers', limit: 1, offset: 0, filters: { id },
+    });
+    const customer = res.rows?.[0];
+    if (!customer) return null;
+
+    const rows = async <T,>(view: string, filters: Record<string, unknown>, limit = 100, sort?: string) =>
+      this.invoke<{ rows: T[] }>('admin-list', {
+        view, limit, offset: 0, filters,
+        ...(sort ? { sort: [{ field: sort, dir: 'desc' }] } : {}),
+      }).then((r) => r.rows ?? []).catch(() => [] as T[]);
+
+    const [rides, payments, debts, referrals, accounts] = await Promise.all([
+      rows<RideRow>('v_admin_rides', { user_id: id }, 50, 'started_at'),
+      rows<Payment>('payments', { user_id: id }, 100, 'created_at'),
+      rows<Debt>('debts', { user_id: id }, 50, 'created_at'),
+      rows<Referral>('referrals', { referrer_id: id }, 50, 'created_at'),
+      // ledger_entries has no user column — it is keyed by account, so the
+      // rider's own accounts have to be resolved first. Without this the page
+      // would be showing the whole company's book under one customer.
+      rows<{ id: string }>('ledger_accounts', { owner_id: id }, 20),
+    ]);
+
+    const ownAccounts = new Set(accounts.map((a) => a.id));
+    const ledger = ownAccounts.size
+      ? (await rows<LedgerEntry>('ledger_entries', {}, 500, 'created_at'))
+          .filter((e) => ownAccounts.has(String((e as unknown as { account_id?: string }).account_id ?? '')))
+      : [];
+
+    return { customer, rides, payments, debts, ledger, referrals };
+  }
   async listZones(): Promise<Zone[]> {
     const { data, error } = await this.client.supabase.from('zones').select('*').eq('active', true);
     if (error) throw error;
@@ -150,7 +249,105 @@ export class SupabaseDataSource implements DataSource {
       return { ...z, geom: { type: z.geom.type, coordinates: z.geom.coordinates } };
     }) as Zone[];
   }
-  async getPanelData(): Promise<MockDb> { return notImpl('getPanelData'); }
+  /**
+   * The catalogue payload behind Pricing / Marketing / Finance / Fleet / Team /
+   * Settings / Content / Analytics.
+   *
+   * One call to `admin-panel-data` (service_role, staff-checked) instead of ~40
+   * from the browser — most of these tables are deliberately unreadable with the
+   * anon key. KPIs and the SIM fleet come from their own endpoints and are
+   * merged in, so nothing is fetched twice.
+   *
+   * Collections with no backing table yet resolve to empty, never to invented
+   * rows: an empty page is the truth, a populated fake one is not.
+   */
+  async getPanelData(): Promise<MockDb> {
+    const [panel, kpis, sims] = await Promise.all([
+      this.invoke<Record<string, unknown>>('admin-panel-data', {}),
+      this.getKpis(),
+      this.getSims({ page: 1, pageSize: 500 }).then((p) => p.rows).catch(() => []),
+    ]);
+
+    const arr = <T,>(k: string): T[] => (Array.isArray(panel[k]) ? (panel[k] as T[]) : []);
+    const rec = <T,>(k: string): Record<string, T> =>
+      (panel[k] && typeof panel[k] === 'object' ? (panel[k] as Record<string, T>) : {});
+
+    return {
+      cities: arr('cities'),
+      models: arr('models'),
+      batteryCurves: arr('batteryCurves'),
+      vehicles: arr('vehicles'),
+      devices: arr('devices'),
+
+      sims,
+      // Per-SIM usage/events are loaded on demand by the detail drawer
+      // (`admin-sim-detail`) rather than shipped with every panel load.
+      simUsage: {},
+      simEvents: {},
+      simAlerts: await this.getSimAlerts().catch(() => []),
+      simCostSummary: await this.getSimCostSummary().catch(() => []),
+      simLastSyncAt: null,
+
+      brandConfig: (await this.getBrandConfig().catch(() => null)) as MockDb['brandConfig'],
+
+      customers: arr('customers'),
+      rides: arr('rides'),
+      // Detail-level data has dedicated endpoints; carrying it here would make
+      // every panel load pay for data one page might open.
+      rideExtras: {},
+      userProfiles: {},
+      sumsub: {},
+      userTimelines: {},
+      vehicleTimelines: {},
+      tripEvents: rec('tripEvents'),
+
+      payments: arr('payments'),
+      debts: arr('debts'),
+      zones: arr('zones'),
+      zoneVersions: arr('zoneVersions'),
+      alerts: arr('alerts'),
+      commands: arr('commands'),
+      opsTasks: arr('opsTasks'),
+      damageReports: arr('damageReports'),
+      staff: arr('staff'),
+      kpis,
+      ledgerAccounts: arr('ledgerAccounts'),
+      ledgerEntries: arr('ledgerEntries'),
+      invoices: arr('invoices'),
+      corporate: arr('corporate'),
+      notificationRules: arr('notificationRules'),
+      notificationLog: arr('notificationLog'),
+      promos: arr('promos'),
+      groups: arr('groups'),
+      campaigns: arr('campaigns'),
+      loyalty: arr('loyalty'),
+      referrals: arr('referrals'),
+      pois: arr('pois'),
+      pricingPlans: arr('pricingPlans'),
+      packages: arr('packages'),
+      subscriptions: arr('subscriptions'),
+      addons: arr('addons'),
+      penalties: arr('penalties'),
+      translations: arr('translations'),
+      appConfig: arr('appConfig'),
+      tutorials: arr('tutorials'),
+      faq: arr('faq'),
+
+      heatCells: arr('heatCells'),
+      revenueByDay: arr('revenueByDay'),
+      // Cohorts, funnel and demand grid need analytics events we do not collect
+      // yet (docs/08). Empty until that pipeline exists — the pages render their
+      // own "no data" state.
+      cohorts: [],
+      funnel: [],
+      demandCells: [],
+
+      scanLog: arr('scanLog'),
+      maintenanceLog: arr('maintenanceLog'),
+      batterySwaps: arr('batterySwaps'),
+      auditLog: arr('auditLog'),
+    } as MockDb;
+  }
 
   /* ---- Rich profile / history / KYC (dedicated edge functions) ----
      These three edge fns are service_role-side: they join the admin-only
@@ -342,7 +539,64 @@ export class SupabaseDataSource implements DataSource {
     await this.invoke('admin-app-config', { key: 'brand', value: config, reason });
   }
 
-  async search(_q: string): Promise<SearchResult[]> { return notImpl('search'); }
+  /** Global search (cmd-k): rider by phone/email/name, vehicle by code, ride by id. */
+  async search(q: string): Promise<SearchResult[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+
+    const find = async <T,>(view: string, limit = 5) =>
+      this.invoke<{ rows: T[] }>('admin-list', { view, limit, offset: 0, search: term })
+        .then((r) => r.rows ?? [])
+        .catch(() => [] as T[]);
+
+    const [customers, vehicles, rides] = await Promise.all([
+      find<CustomerRow>('v_admin_customers'),
+      find<VehicleRow>('v_admin_vehicles'),
+      find<RideRow>('v_admin_rides'),
+    ]);
+
+    return [
+      ...customers.map((c) => ({
+        kind: 'customer' as const,
+        id: c.id,
+        label: c.full_name || c.phone || c.email || c.id,
+        sub: [c.phone, c.email].filter(Boolean).join(' · '),
+        to: `/customers/${c.id}`,
+      })),
+      ...vehicles.map((v) => ({
+        kind: 'vehicle' as const,
+        id: v.id,
+        label: v.code,
+        sub: [v.model_name, v.status].filter(Boolean).join(' · '),
+        to: `/vehicles/${v.id}`,
+      })),
+      ...rides.map((r) => ({
+        kind: 'ride' as const,
+        id: r.id,
+        label: `${r.vehicle_code ?? 'ride'} · ${(r.started_at ?? '').slice(0, 16).replace('T', ' ')}`,
+        sub: r.user_name || r.user_phone || '',
+        to: `/rides/${r.id}`,
+      })),
+    ];
+  }
+
+  /* ---- Notifications / pop-ups / push (docs/12) ---- */
+
+  async listCustomerGroups(): Promise<CustomerGroupRow[]> {
+    const res = await this.invoke<{ rows: CustomerGroupRow[] }>('admin-list', {
+      view: 'v_admin_customer_groups', limit: 200, offset: 0,
+    });
+    return res.rows ?? [];
+  }
+  async listBroadcasts(params: QueryParams): Promise<Page<BroadcastRow>> {
+    return this.listFrom<BroadcastRow>('v_admin_broadcasts', params);
+  }
+  async previewBroadcast(input: BroadcastInput): Promise<BroadcastResult> {
+    return this.client.edge.adminBroadcast({ ...input, preview: true });
+  }
+  async sendBroadcast(input: BroadcastInput): Promise<BroadcastResult> {
+    return this.client.edge.adminBroadcast(input);
+  }
   async listAudit(params: QueryParams): Promise<Page<AuditLogEntry>> {
     return this.listFrom<AuditLogEntry>('audit_log', params);
   }
@@ -361,6 +615,29 @@ export class SupabaseDataSource implements DataSource {
   }
   async setVehicleStatus(vehicleId: string, status: string, reason: string): Promise<void> {
     await this.invoke('vehicle-status', { vehicle_id: vehicleId, status, reason });
+  }
+  async listVehicleModels(): Promise<Array<{ id: string; name: string }>> {
+    // `vehicle_models` is one of the few fleet tables readable with the anon
+    // key (policy vehicle_models_read) — the rider app needs it too.
+    const { data, error } = await this.client.supabase.from('vehicle_models').select('id, name').order('name');
+    if (error) throw error;
+    return (data ?? []) as Array<{ id: string; name: string }>;
+  }
+  async createVehicle(input: CreateVehicleInput): Promise<{ id: string; code: string }> {
+    const res = await this.client.edge.adminCreateVehicle({
+      code: input.code,
+      model_id: input.model_id,
+      city_id: input.city_id ?? null,
+      plate: input.plate ?? null,
+      vin: input.vin ?? null,
+      notes: input.notes ?? null,
+      imei: input.imei ?? null,
+      status: input.status,
+    });
+    return { id: res.vehicle.id, code: res.vehicle.code };
+  }
+  async removeVehicle(vehicleId: string, reason: string, mode: 'decommission' | 'purge'): Promise<void> {
+    await this.client.edge.adminDeleteVehicle({ vehicle_id: vehicleId, reason, mode });
   }
   async adminCharge(input: AdminChargeInput): Promise<void> {
     await this.client.edge.adminCharge(input);

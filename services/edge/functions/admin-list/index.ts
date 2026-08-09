@@ -68,10 +68,85 @@ const VIEWS: Record<string, ViewSpec> = {
     search: [],
     defaultSort: { field: 'month', asc: false },
   },
+  // Broadcast history. Gated on the send permission rather than a read one:
+  // the rows spell out who was targeted with what, which is not something a
+  // support agent needs in order to answer one rider.
+  v_admin_broadcasts: {
+    permission: 'notifications.send',
+    search: ['title', 'body', 'audience_label', 'created_by_name'],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  v_admin_customer_groups: {
+    permission: 'customers.read',
+    search: ['name'],
+    defaultSort: { field: 'name', asc: true },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],
     defaultSort: { field: 'at', asc: false },
+  },
+
+  /* ---- Detail pages ----
+     Ride / vehicle / customer detail read these filtered by a single parent id.
+     They are service_role-only tables, so the panel cannot query them directly;
+     each still demands the same permission as the list it hangs off. */
+  trip_events: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'at', asc: true },
+  },
+  // One row per trip holding the whole path as a LineString — not one row per
+  // GPS point, which is why this sorts on updated_at and not a timestamp.
+  trip_routes: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'updated_at', asc: false },
+  },
+  payments: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  commands: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  vehicle_alerts: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  damage_reports: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  devices: {
+    permission: 'vehicles.read',
+    search: ['imei', 'iccid', 'phone_number'],
+    defaultSort: { field: 'imei', asc: true },
+  },
+  ledger_accounts: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  ledger_entries: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  debts: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  referrals: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
   },
 };
 
