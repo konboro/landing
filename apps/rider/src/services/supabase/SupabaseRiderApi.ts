@@ -88,7 +88,9 @@ function makeClient(): PennyClient {
 }
 
 function vehicleToMap(v: PublicVehicle, model_name = 'Penny'): MapVehicle {
-  const [lng, lat] = v.pos.coordinates;
+  // v_public_vehicles projects the position as plain lng/lat columns, not a
+  // GeoJSON point — reading v.pos.coordinates here crashed the map.
+  const { lng, lat } = v;
   return {
     vehicle_id: v.vehicle_id,
     code: v.code,

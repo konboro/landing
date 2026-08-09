@@ -152,13 +152,23 @@ export interface VehicleState {
   zone_cache: Record<string, unknown> | null;
 }
 
-/** Rider-facing projection of vehicle_state (no IMEI, no alarms). */
+/**
+ * Rider-facing projection of vehicle_state (no IMEI, no alarms) — a row of
+ * `v_public_vehicles`, the only vehicle feed riders may read (`vehicle_state`
+ * itself is default-deny; see migration 00140).
+ *
+ * The view projects the position as two plain numbers, not a GeoJSON point.
+ * This type declared `pos: GeoPoint`, which nothing ever returned, so the map
+ * threw "Cannot read property 'coordinates' of undefined" for every rider.
+ * Keep these fields in step with the view definition.
+ */
 export interface PublicVehicle {
   vehicle_id: UUID;
   code: string;
   model_id: UUID;
   kind: VehicleKind;
-  pos: GeoPoint;
+  lng: number;
+  lat: number;
   soc_pct: number;
   range_m: number;
   max_speed_kmh: number;
