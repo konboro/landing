@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { evaluateZones, canEndHere, type ZoneLike } from '@penny/geo';
+import { evaluateZones, canEndHere, OPERATING_CITY, type ZoneLike } from '@penny/geo';
 import { formatMoney, formatDuration, formatDistance, co2SavedKg } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
@@ -35,7 +35,7 @@ export default function EndRideScreen() {
 
   React.useEffect(() => { api.getZones().then(setZones); /* eslint-disable-next-line */ }, []);
 
-  const endPos: [number, number] = trip?.route[trip.route.length - 1] ?? trip?.start_pos ?? [23.7275, 37.9838];
+  const endPos: [number, number] = trip?.route[trip.route.length - 1] ?? trip?.start_pos ?? OPERATING_CITY.center;
   const ev = useMemo(() => evaluateZones(endPos, zones as unknown as ZoneLike[]), [endPos, zones]);
   const zoneCheck = canEndHere(ev);
 

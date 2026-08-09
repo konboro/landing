@@ -11,6 +11,22 @@ export interface Point {
   coordinates: LngLat;
 }
 
+/**
+ * Where the service operates today: Thessaloniki, centred on Aristotelous
+ * Square. Used as the map fallback before a city or a GPS fix arrives, and as
+ * the anchor for the mock fixtures.
+ *
+ * Deliberately one constant. This was the Athens coordinate pair copy-pasted
+ * into a dozen files across all three apps, so changing city meant hunting
+ * literals. Real per-city centres still come from `cities.center` in the DB;
+ * this is only the fallback.
+ */
+export const OPERATING_CITY = {
+  name: 'Thessaloniki',
+  center: [22.9444, 40.6401] as LngLat,
+  tz: 'Europe/Athens',
+} as const;
+
 const R = 6371000; // earth radius, metres
 const toRad = (d: number) => (d * Math.PI) / 180;
 

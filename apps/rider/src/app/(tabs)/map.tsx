@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { haversine } from '@penny/geo';
+import { haversine, OPERATING_CITY } from '@penny/geo';
 import { formatDistance } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics, LocationSvc } from '../../lib/native';
@@ -67,7 +67,7 @@ export default function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const center: LngLat = userPos ?? city?.center ?? [23.7275, 37.9838];
+  const center: LngLat = userPos ?? city?.center ?? OPERATING_CITY.center;
 
   const requestLocation = async () => {
     flags.setAsked('askedLocation');

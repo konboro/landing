@@ -1,5 +1,5 @@
 // Central mock "database" for the Admin panel. Deterministically generated
-// so the panel behaves like a real operating Athens fleet without Supabase.
+// so the panel behaves like a real operating Thessaloniki fleet without Supabase.
 import { Rng } from '@/lib/rng';
 import { ATHENS_CENTER, jitterPoint, boxPolygon, buildRoute } from './geoutil';
 import { ATHENS_AREAS, RATING_TAGS, type RideExtra } from './history';
@@ -176,9 +176,8 @@ function build(): MockDb {
 
   /* ---------- Models + battery curves ---------- */
   const models: VehicleModel[] = [
-    { id: 'model-g30', name: 'Segway Max G30', kind: 'scooter', battery_curve_id: 'bc-g30', max_speed_kmh: 25, deposit_cents: 0, requires_licence: false, photo_url: null },
-    { id: 'model-es400', name: 'Okai ES400B', kind: 'scooter', battery_curve_id: 'bc-es400', max_speed_kmh: 25, deposit_cents: 0, requires_licence: false, photo_url: null },
-    { id: 'model-ebike', name: 'Penny e-Bike C1', kind: 'ebike', battery_curve_id: 'bc-ebike', max_speed_kmh: 25, deposit_cents: 0, requires_licence: false, photo_url: null },
+    // One model — the fleet is EFUN Pusa only.
+    { id: 'model-pusa', name: 'EFUN Pusa', kind: 'scooter', battery_curve_id: 'bc-pusa', max_speed_kmh: 25, deposit_cents: 0, requires_licence: false, photo_url: null },
   ];
   const batteryCurves: BatteryCurve[] = models.map((m) => ({
     id: m.battery_curve_id!,
@@ -484,7 +483,7 @@ function build(): MockDb {
   /* ---------- Zones ---------- */
   const zc = cities[0]!.center.coordinates;
   const zones: Zone[] = [
-    { id: 'zone-op', city_id: 'city-athens', kind: 'operating', geom: { type: 'Polygon', coordinates: boxPolygon(zc, 6000, 5000) }, rules: {}, active: true, valid_from: null, valid_to: null, version: 3, created_by: 'staff-owner', name: 'Athens operating area' },
+    { id: 'zone-op', city_id: 'city-athens', kind: 'operating', geom: { type: 'Polygon', coordinates: boxPolygon(zc, 6000, 5000) }, rules: {}, active: true, valid_from: null, valid_to: null, version: 3, created_by: 'staff-owner', name: 'Thessaloniki operating area' },
     { id: 'zone-park-1', city_id: 'city-athens', kind: 'parking', geom: { type: 'Polygon', coordinates: boxPolygon(jitterPoint(zc, 1200, rng), 400, 300, rng) }, rules: {}, active: true, valid_from: null, valid_to: null, version: 3, created_by: 'staff-owner', name: 'Syntagma parking' },
     { id: 'zone-paid-1', city_id: 'city-athens', kind: 'paid_parking', geom: { type: 'Polygon', coordinates: boxPolygon(jitterPoint(zc, 1500, rng), 350, 300, rng) }, rules: { fee_cents: 200 }, active: true, valid_from: null, valid_to: null, version: 3, created_by: 'staff-owner', name: 'Kolonaki paid' },
     { id: 'zone-station-1', city_id: 'city-athens', kind: 'parking_station', geom: { type: 'Polygon', coordinates: boxPolygon(jitterPoint(zc, 900, rng), 120, 90, rng) }, rules: { station_capacity: 12 }, active: true, valid_from: null, valid_to: null, version: 3, created_by: 'staff-owner', name: 'Monastiraki station' },
@@ -498,7 +497,7 @@ function build(): MockDb {
   const zoneVersions = [
     { version: 3, created_at: isoDaysAgo(2, rng), created_by: 'Owner', note: 'Added Plaka slow zone', count: zones.length },
     { version: 2, created_at: isoDaysAgo(28, rng), created_by: 'Ops Manager', note: 'Extended operating area north', count: 9 },
-    { version: 1, created_at: isoDaysAgo(120, rng), created_by: 'Owner', note: 'Initial Athens zones', count: 7 },
+    { version: 1, created_at: isoDaysAgo(120, rng), created_by: 'Owner', note: 'Initial Thessaloniki zones', count: 7 },
   ];
 
   /* ---------- Alerts + commands ---------- */

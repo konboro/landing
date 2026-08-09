@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { evaluateZones, type ZoneLike } from '@penny/geo';
+import { evaluateZones, OPERATING_CITY, type ZoneLike } from '@penny/geo';
 import { formatMoney, formatDuration, formatDistance } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
@@ -39,7 +39,7 @@ export default function ActiveRideScreen() {
   if (!trip) return <Screen><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
 
   const paused = trip.status === 'paused';
-  const pos: [number, number] = trip.route[trip.route.length - 1] ?? trip.start_pos ?? [23.7275, 37.9838];
+  const pos: [number, number] = trip.route[trip.route.length - 1] ?? trip.start_pos ?? OPERATING_CITY.center;
   const ev = evaluateZones(pos, zones as unknown as ZoneLike[]);
 
   const doShare = async () => {

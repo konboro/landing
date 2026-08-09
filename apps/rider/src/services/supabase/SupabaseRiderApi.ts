@@ -13,7 +13,7 @@ import type {
   PricingSnapshot,
   KycStatus,
 } from '@penny/db-types';
-import { estimateRangeM } from '@penny/geo';
+import { estimateRangeM, OPERATING_CITY } from '@penny/geo';
 import type { Lang } from '../../i18n';
 import { uuid } from '../../lib/ids';
 import {
@@ -383,12 +383,12 @@ export class SupabaseRiderApi implements RiderApi {
 
   async getCity(): Promise<City> {
     const { data } = await this.client.supabase.from('cities').select('*').limit(1).maybeSingle();
-    if (!data) return { id: '', name: 'Athens', center: [23.7275, 37.9838], default_zoom: 14, station_mode: false };
+    if (!data) return { id: '', name: 'Athens', center: OPERATING_CITY.center, default_zoom: 14, station_mode: false };
     const d = data as any;
     return {
       id: d.id,
       name: d.name,
-      center: d.center?.coordinates ?? [23.7275, 37.9838],
+      center: d.center?.coordinates ?? OPERATING_CITY.center,
       default_zoom: d.default_zoom ?? 14,
       station_mode: !!d.station_mode,
     };

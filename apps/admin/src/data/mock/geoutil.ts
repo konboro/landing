@@ -2,7 +2,10 @@ import { Rng } from '@/lib/rng';
 import type { LngLat } from '@penny/db-types';
 import type { TelemetrySample } from '@/types/domain';
 
-export const ATHENS_CENTER: LngLat = [23.7275, 37.9838];
+// The operating city. Kept under the old export name so the many call sites
+// that anchor mock geometry on it keep working; the value is Thessaloniki.
+export const ATHENS_CENTER: LngLat = [22.9444, 40.6401];
+export const CITY_CENTER: LngLat = ATHENS_CENTER;
 
 function seedFromString(s: string): number {
   let h = 2166136261;
