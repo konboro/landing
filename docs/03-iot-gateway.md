@@ -63,6 +63,21 @@ Provider: SMS API supporting Greek network (e.g., Twilio/Vonage) OR a GSM modem 
 
 `PORT=5027 DB_URL PGMQ_QUEUE=commands SMS_PROVIDER_KEYS CMD_TIMEOUT_MS=8000 CMD_SMS_ESCALATE_MS=5000 SESSION_IDLE_CLOSE_S=300 METRICS_PORT=9100`
 
+**`PGMQ_QUEUE` must match the queue the database sends to.** `enqueue_vehicle_command()`
+pushes onto `commands`; the gateway defaults to the same name. If they ever
+diverge, commands sit at `queued` forever and nothing unlocks — the queue is
+created explicitly in migration 00240 so this is verifiable:
+`select queue_name from pgmq.list_queues();`
+
+**`DB_URL` on Supabase: use the pooler, not the direct host.**
+`db.<ref>.supabase.co` resolves to **IPv6 only** on current projects, so an
+IPv4-only VPS cannot reach it. Use session mode (5432 — not transaction mode
+6543, which breaks the prepared statements pgx relies on):
+
+```
+postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+```
+
 ## Testing
 
 - `testdata/*.hex` — captured real frames (bench phase produces these). Table-driven parse tests.
