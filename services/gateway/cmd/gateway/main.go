@@ -64,7 +64,10 @@ func main() {
 func buildStore(ctx context.Context, cfg config.Config) store.Store {
 	if cfg.DBURL == "" {
 		log.Printf("[gateway] WARNING: DB_URL empty; using in-memory fake store (no persistence)")
-		return store.NewFake()
+		log.Printf("[gateway] bench mode: any IMEI may connect — point a scooter or cmd/simdevice here")
+		f := store.NewFake()
+		f.SetAutoRegister(true) // otherwise nothing can handshake: the fake store starts empty
+		return f
 	}
 	pg, err := store.NewPG(ctx, cfg.DBURL, cfg.PGMQQueue)
 	if err != nil {

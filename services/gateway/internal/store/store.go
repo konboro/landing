@@ -5,6 +5,7 @@ package store
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -105,13 +106,14 @@ type Store interface {
 
 // FakeStore is a thread-safe in-memory Store.
 type FakeStore struct {
-	mu        sync.Mutex
-	devices   map[string]Device // keyed by IMEI
-	queue     []Command
-	Telemetry []Telemetry
-	States    map[string]VehicleState
-	Alerts    []Alert
-	CmdStatus map[string]string // command id -> latest status
+	mu           sync.Mutex
+	devices      map[string]Device // keyed by IMEI
+	autoRegister bool              // bench mode: adopt unknown IMEIs
+	queue        []Command
+	Telemetry    []Telemetry
+	States       map[string]VehicleState
+	Alerts       []Alert
+	CmdStatus    map[string]string // command id -> latest status
 }
 
 // NewFake returns an empty FakeStore.
@@ -121,6 +123,20 @@ func NewFake() *FakeStore {
 		States:    map[string]VehicleState{},
 		CmdStatus: map[string]string{},
 	}
+}
+
+// SetAutoRegister makes DeviceByIMEI accept an unknown IMEI by registering it
+// on the spot instead of rejecting the handshake.
+//
+// This is for the DB-less bench mode only (`DB_URL` empty). Without it the
+// fake store starts with zero devices, so nothing can connect at all and
+// `pnpm gateway:run` is useless for a bench session. Production runs on
+// PGStore, which always checks `devices` for real — an unknown IMEI is
+// rejected there, as Hard Rule #7 requires.
+func (f *FakeStore) SetAutoRegister(on bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.autoRegister = on
 }
 
 // AddDevice registers a device so DeviceByIMEI can find it.
@@ -154,7 +170,20 @@ func (f *FakeStore) DeviceByIMEI(_ context.Context, imei string) (Device, error)
 	defer f.mu.Unlock()
 	d, ok := f.devices[imei]
 	if !ok {
-		return Device{}, ErrNotFound{IMEI: imei}
+		if !f.autoRegister {
+			return Device{}, ErrNotFound{IMEI: imei}
+		}
+		// Bench mode: adopt the device so a real scooter (or simdevice) can be
+		// pointed at a laptop with no database and still complete a handshake.
+		d = Device{
+			ID:        "bench-" + imei,
+			IMEI:      imei,
+			VehicleID: "bench-vehicle-" + imei,
+			Model:     "fmb930",
+			Status:    "bench",
+		}
+		f.devices[imei] = d
+		log.Printf("[store] bench mode: auto-registered unknown IMEI %s", imei)
 	}
 	return d, nil
 }

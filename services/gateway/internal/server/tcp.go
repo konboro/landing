@@ -124,6 +124,7 @@ func (s *Server) dispatch(ctx context.Context, sess *session.Session, dev store.
 			log.Printf("[server] ack imei=%s: %v", sess.IMEI, err)
 			return
 		}
+		s.metrics.TelemetryRecords(len(recs))
 		// Notify any pending command of the latest DOUT state (last record wins).
 		if len(recs) > 0 {
 			st := s.adapter.InterpretIO(recs[len(recs)-1].IO)

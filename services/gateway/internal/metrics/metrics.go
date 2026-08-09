@@ -11,14 +11,15 @@ import (
 
 // Metrics holds the gateway's counters and gauges.
 type Metrics struct {
-	unlockTotal   atomic.Int64
-	unlockSuccess atomic.Int64
-	parseErrors   atomic.Int64
-	cmdLatencySum atomic.Int64 // milliseconds
-	cmdLatencyCnt atomic.Int64
-	cmdSent       atomic.Int64
-	cmdAcked      atomic.Int64
-	smsFallback   atomic.Int64
+	unlockTotal      atomic.Int64
+	unlockSuccess    atomic.Int64
+	parseErrors      atomic.Int64
+	telemetryRecords atomic.Int64
+	cmdLatencySum    atomic.Int64 // milliseconds
+	cmdLatencyCnt    atomic.Int64
+	cmdSent          atomic.Int64
+	cmdAcked         atomic.Int64
+	smsFallback      atomic.Int64
 
 	mu             sync.Mutex
 	sessionsActive func() int // gauge callback
@@ -38,6 +39,11 @@ func (m *Metrics) SetSessionsGauge(f func() int) {
 
 // ParseError increments the parse error counter.
 func (m *Metrics) ParseError() { m.parseErrors.Add(1) }
+
+// TelemetryRecords counts AVL records successfully parsed and handed to the
+// ingest layer. This is the number to watch on the bench: if sessions are up
+// but this stays flat, the device is connecting but not reporting.
+func (m *Metrics) TelemetryRecords(n int) { m.telemetryRecords.Add(int64(n)) }
 
 // CmdSent increments commands sent.
 func (m *Metrics) CmdSent() { m.cmdSent.Add(1) }
@@ -105,6 +111,9 @@ func (m *Metrics) Text() string {
 	add("# HELP gateway_parse_errors_total AVL frames rejected (bad CRC/format).\n")
 	add("# TYPE gateway_parse_errors_total counter\n")
 	add("gateway_parse_errors_total %d\n", m.parseErrors.Load())
+	add("# HELP gateway_telemetry_records_total AVL records parsed and ingested.\n")
+	add("# TYPE gateway_telemetry_records_total counter\n")
+	add("gateway_telemetry_records_total %d\n", m.telemetryRecords.Load())
 
 	add("gateway_cmd_sent_total %d\n", m.cmdSent.Load())
 	add("gateway_cmd_acked_total %d\n", m.cmdAcked.Load())
