@@ -14,6 +14,7 @@ import {
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { useTheme, makeStyles } from '../../brand';
 import type { RiderTheme } from '../../brand';
+import { Backdrop } from './Backdrop';
 
 type TVariant = 'display' | 'title' | 'heading' | 'subtitle' | 'body' | 'caption' | 'label' | 'mono';
 
@@ -87,7 +88,11 @@ export function Screen({
   const styles = useStyles(theme);
   const paddedStyle = padded ? { paddingHorizontal: theme.space.lg } : null;
   return (
-    <SafeAreaView edges={edges} style={[styles.screen, { backgroundColor: bg ?? theme.color.bg }]}>
+    <SafeAreaView edges={edges} style={[styles.screen, bg ? { backgroundColor: bg } : null]}>
+      {/* The sky backdrop is the default ground for every screen. A screen that
+          owns its own surface (camera, QR scanner, the full-bleed map) passes an
+          explicit `bg` and opts out. */}
+      {bg ? null : <Backdrop />}
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
@@ -191,8 +196,8 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   card: {
     backgroundColor: t.color.surface,
-    borderRadius: t.radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: t.color.border,
+    // Rounder than the old `radius.lg`, and borderless: over the sky backdrop a
+    // hairline border read as a seam, so the shadow alone lifts the card.
+    borderRadius: t.radius.xl,
   },
 }));

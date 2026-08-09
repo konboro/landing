@@ -21,11 +21,15 @@ export type ThemeMode = 'light' | 'dark';
  * be loadable anywhere (edge function, script, native, web) with no imports.
  */
 const ramp = {
-  blue50: '#eef4ff',
-  blue400: '#5a82f7',
-  blue500: '#2f5be0',
-  blue600: '#1f43b8',
-  blue700: '#183492',
+  // Keep in step with `palette` in tokens.ts — sampled from the logo.
+  blue50: '#eff8ff',
+  blue400: '#54b8fa',
+  blue500: '#35aef7',
+  blue600: '#1f8fd6',
+  blue700: '#1a71ab',
+  /** The logo's lime "y" — accent only, never the success colour. */
+  lime500: '#5de617',
+  lime100: '#e8fbd9',
   green400: '#3fce7a',
   green500: '#1faa59',
   amber500: '#e8a317',
@@ -47,6 +51,16 @@ export interface BrandColors {
   primaryDark: string;
   primarySoft: string;
   onPrimary: string;
+
+  /**
+   * The brand's accent — Penny's lime "y". Logo mark, live/active dots and
+   * small emphasis; never a large fill. Deliberately separate from `success`
+   * so an accent-coloured control never reads as "confirmed". Other brands
+   * inherit Penny's through `createBrand()` unless they override it.
+   */
+  accent: string;
+  /** Tint of `accent`, for chips and soft badges. */
+  accentSoft: string;
 
   bg: string;
   surface: string;
@@ -166,15 +180,20 @@ export const pennyBrand: Brand = {
   scheme: 'penny',
   domain: 'penny.rent',
 
-  defaultLang: 'el',
+  // English is the working language of the app; Greek and Polish ship as
+  // translations and follow the device locale when it matches.
+  defaultLang: 'en',
   currency: 'EUR',
-  locale: 'el-GR',
+  locale: 'en-GB',
 
   colors: {
     primary: ramp.blue500,
     primaryDark: ramp.blue700,
     primarySoft: ramp.blue50,
     onPrimary: ramp.white,
+
+    accent: ramp.lime500,
+    accentSoft: ramp.lime100,
 
     bg: ramp.ink50,
     surface: ramp.white,

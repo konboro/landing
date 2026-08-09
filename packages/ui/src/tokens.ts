@@ -2,17 +2,30 @@
 // Pure data (no framework imports) so web (admin) and RN (rider/ops) share it.
 
 export const palette = {
-  // Penny blue brand ramp
-  blue50: '#eef4ff',
-  blue100: '#d9e6ff',
-  blue200: '#b6cdff',
-  blue300: '#8aabff',
-  blue400: '#5a82f7',
-  blue500: '#2f5be0', // primary
-  blue600: '#1f43b8',
-  blue700: '#183492',
-  blue800: '#142a75',
-  blue900: '#111f52',
+  // Penny sky-blue ramp, sampled from the logo (white "penn" + lime "y" on a
+  // sky-blue field). It replaces an indigo ramp that predated the logo and
+  // never matched it.
+  blue50: '#eff8ff',
+  blue100: '#daeeff',
+  blue200: '#b8dffe',
+  blue300: '#84cbfc',
+  blue400: '#54b8fa',
+  blue500: '#35aef7', // primary — the logo's field
+  blue600: '#1f8fd6',
+  blue700: '#1a71ab',
+  blue800: '#1a5c88',
+  blue900: '#1b4a6d',
+
+  // The logo's lime "y". Brand mark and true accents only — deliberately NOT
+  // the success colour, so a lime button never reads as "confirmed".
+  lime500: '#5de617',
+  lime600: '#4bc410',
+  lime100: '#e8fbd9',
+
+  // Indigo / violet: decorative background blobs only.
+  indigo400: '#7b8ff5',
+  indigo500: '#5f6fe0',
+  violet400: '#a08cf0',
 
   green500: '#1faa59',
   green400: '#3fce7a',
