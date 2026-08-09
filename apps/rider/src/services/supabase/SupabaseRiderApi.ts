@@ -13,7 +13,7 @@ import type {
   PricingSnapshot,
   KycStatus,
 } from '@penny/db-types';
-import { estimateRangeM, OPERATING_CITY } from '@penny/geo';
+import { estimateRangeM, OPERATING_CITY, OPERATING_BBOX } from '@penny/geo';
 import type { Lang } from '../../i18n';
 import { uuid } from '../../lib/ids';
 import {
@@ -395,13 +395,10 @@ export class SupabaseRiderApi implements RiderApi {
   }
 
   async getVehicles(): Promise<MapVehicle[]> {
-    // Whole-city bbox; screens refine by viewport. Athens default.
-    const rows = await this.client.repos.publicVehiclesInBBox({
-      minLng: 23.6,
-      minLat: 37.9,
-      maxLng: 23.85,
-      maxLat: 38.05,
-    });
+    // Whole-city bbox; screens refine by viewport. Bounds come from
+    // OPERATING_BBOX, not literals: these stayed on Athens after the move to
+    // Thessaloniki, so the query matched nothing and the map came up empty.
+    const rows = await this.client.repos.publicVehiclesInBBox(OPERATING_BBOX);
     return rows.map((r) => vehicleToMap(r));
   }
 
@@ -925,6 +922,29 @@ export class SupabaseRiderApi implements RiderApi {
 
   async markInboxRead(id: string): Promise<void> {
     await this.client.supabase.from('inbox_messages').update({ read_at: new Date().toISOString() }).eq('id', id);
+  }
+
+  /* ---- Pop-ups + push (docs/12) ---- */
+
+  async getLivePopup(): Promise<InboxItem | null> {
+    const id = await this.userId();
+    const m = await this.client.repos.livePopup(id);
+    if (!m) return null;
+    return { id: m.id, title: m.title, body: m.body, deep_link: m.deep_link, read: false, created_at: m.created_at };
+  }
+
+  async dismissPopup(id: string): Promise<void> {
+    await this.markInboxRead(id);
+  }
+
+  async registerPushToken(token: string, platform: string): Promise<void> {
+    const userId = await this.userId();
+    // `token` is unique: the same device re-registering must refresh the row,
+    // not pile up duplicates that would each get their own copy of a broadcast.
+    const { error } = await this.client.supabase
+      .from('push_tokens')
+      .upsert({ user_id: userId, token, platform, last_seen: new Date().toISOString() }, { onConflict: 'token' });
+    if (error) throw new RiderApiError('push_register_failed', error.message);
   }
 
   /* ---- Live chat (message centre, kind = 'chat') ---- */

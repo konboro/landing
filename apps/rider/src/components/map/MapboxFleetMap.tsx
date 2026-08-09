@@ -3,6 +3,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { View, Pressable, StyleSheet } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
+import { OPERATING_BBOX } from '@penny/geo';
 import { useTheme, makeStyles } from '../../brand';
 import type { RiderTheme } from '../../brand';
 import { T } from '../ui';
@@ -39,7 +40,7 @@ export function MapboxFleetMap(props: FleetMapProps) {
   const styles = useStyles(theme);
   const cameraRef = useRef<Mapbox.Camera>(null);
   const [zoom, setZoom] = useState(props.night ? 13.5 : 14.5);
-  const [bbox, setBbox] = useState<[number, number, number, number]>([23.68, 37.94, 23.78, 38.02]);
+  const [bbox, setBbox] = useState<[number, number, number, number]>([OPERATING_BBOX.minLng, OPERATING_BBOX.minLat, OPERATING_BBOX.maxLng, OPERATING_BBOX.maxLat]);
 
   const index = useMemo(() => buildIndex(props.vehicles), [props.vehicles]);
   const clusters = useMemo(() => clustersFor(index, bbox, zoom), [index, bbox, zoom]);

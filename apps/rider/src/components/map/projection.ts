@@ -1,5 +1,6 @@
 // Simple equirectangular projection for the fallback map. Good enough at city
 // scale to place vehicles/zones sensibly inside a fixed-size container.
+import { OPERATING_BBOX } from '@penny/geo';
 import type { LngLat } from '../../services/types';
 
 export interface Bounds {
@@ -17,7 +18,7 @@ export function boundsOf(points: LngLat[], pad = 0.15): Bounds {
     if (lng > maxLng) maxLng = lng;
     if (lat > maxLat) maxLat = lat;
   }
-  if (!isFinite(minLng)) return { minLng: 23.70, minLat: 37.96, maxLng: 23.76, maxLat: 38.00 };
+  if (!isFinite(minLng)) return { ...OPERATING_BBOX };
   const dLng = (maxLng - minLng) || 0.01;
   const dLat = (maxLat - minLat) || 0.01;
   return {

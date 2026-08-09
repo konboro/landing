@@ -7,14 +7,7 @@
 // Staff replies arrive over realtime; the rider's own turn is appended
 // optimistically so the bubble shows the instant Send is tapped.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  View,
-  ScrollView,
-  TextInput,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-} from 'react-native';
+import { View, ScrollView, TextInput, Pressable } from 'react-native';
 import { useTheme } from '../../brand';
 import { getApi } from '../../services';
 import { RiderApiError, type ChatMessage } from '../../services/types';
@@ -70,11 +63,9 @@ export default function ChatScreen() {
     <Screen edges={['top']} padded={false}>
       <Header title={t('support.liveChat')} />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      {/* No KeyboardAvoidingView here: <Screen> lifts the whole screen by the
+          measured keyboard overlap, and a second avoider would double the gap. */}
+      <View style={{ flex: 1 }}>
         <ScrollView
           ref={scroller}
           contentContainerStyle={{ padding: theme.space.lg, gap: theme.space.sm }}
@@ -175,7 +166,7 @@ export default function ChatScreen() {
             />
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }

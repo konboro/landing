@@ -1,5 +1,6 @@
 // Feedback + status components — Badge, ProgressBar, SocPill, Banner, Sheet.
 import React from 'react';
+import { useKeyboardOverlap } from '../../lib/useKeyboardOverlap';
 import {
   View,
   Modal,
@@ -155,10 +156,18 @@ export function Sheet({
 }) {
   const theme = useTheme();
   const styles = useStyles(theme);
+  // A sheet is a Modal, so it renders outside <Screen> and inherits none of its
+  // keyboard handling — yet sheets hold most of the app's text fields
+  // (emergency contact, personal details, promo codes). Lift it by the overlap
+  // so its Save button stays above the keyboard.
+  const overlap = useKeyboardOverlap();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.scrim} onPress={dismissable ? onClose : undefined}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+        <Pressable
+          style={[styles.sheet, overlap > 0 ? { paddingBottom: theme.space.md + overlap } : null]}
+          onPress={(e) => e.stopPropagation()}
+        >
           <View style={styles.grabber} />
           {title ? (
             <Row justify="space-between" style={{ marginBottom: theme.space.md }}>

@@ -27,6 +27,22 @@ export const OPERATING_CITY = {
   tz: 'Europe/Athens',
 } as const;
 
+/**
+ * A box comfortably around the operating city, for the initial fleet fetch
+ * before the map reports its real viewport.
+ *
+ * This existed as four bare numbers inside the rider's `getVehicles()`, still
+ * covering Athens after the move — the query returned nothing and the map came
+ * up empty even though the fleet was live. Bounds live next to the centre so
+ * the two cannot disagree again.
+ */
+export const OPERATING_BBOX = {
+  minLng: 22.75,
+  minLat: 40.50,
+  maxLng: 23.15,
+  maxLat: 40.80,
+} as const;
+
 const R = 6371000; // earth radius, metres
 const toRad = (d: number) => (d * Math.PI) / 180;
 
