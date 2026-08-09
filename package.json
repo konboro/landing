@@ -27,5 +27,11 @@
     "turbo": "^2.3.3",
     "typescript": "^5.7.3",
     "prettier": "^3.4.2"
+  },
+  "pnpm": {
+    "//": "esbuild's postinstall places its platform binary. pnpm blocks install scripts by default, so without this every `pnpm install` leaves Vite (the admin panel) without a working esbuild until someone runs `pnpm rebuild esbuild` by hand.",
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
