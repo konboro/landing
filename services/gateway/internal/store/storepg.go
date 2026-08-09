@@ -59,34 +59,52 @@ func (s *PGStore) InsertTelemetry(ctx context.Context, batch []Telemetry) error 
 	if len(batch) == 0 {
 		return nil
 	}
-	rows := make([][]any, 0, len(batch))
+	// `telemetry.pos` is a PostGIS geometry(Point,4326), not a pair of float
+	// columns. This used to CopyFrom into `pos_lng` / `pos_lat`, which do not
+	// exist — every ingest failed with 42703 and no telemetry was ever stored.
+	// Binary COPY cannot build a geometry, so the point is made in SQL.
+	//
+	// A batch is one AVL packet (a handful of records), so pipelining the
+	// inserts costs nothing next to the round trip that delivered them.
+	const q = `
+INSERT INTO telemetry
+ (device_id, vehicle_id, device_ts, server_ts, pos, speed_kmh, heading,
+  altitude, sats, ext_voltage_mv, batt_voltage_mv, din1, dout1, dout2,
+  gsm_signal, io)
+VALUES ($1,$2,$3,$4, st_setsrid(st_point($5,$6),4326), $7,$8,$9,$10,$11,$12,
+        $13,$14,$15,$16,$17)`
+
+	b := &pgx.Batch{}
 	for _, t := range batch {
 		ioJSON, _ := json.Marshal(ioStringKeys(t.IO))
-		rows = append(rows, []any{
+		b.Queue(q,
 			nullStr(t.DeviceID), nullStr(t.VehicleID), t.DeviceTs, t.ServerTs,
 			t.Lng, t.Lat, t.SpeedKmh, t.Heading, t.Altitude, t.Sats,
 			t.ExtVoltageMv, t.BattVoltageMv, t.Din1, t.Dout1, t.Dout2,
 			t.GSMSignal, ioJSON,
-		})
+		)
 	}
-	_, err := s.pool.CopyFrom(ctx,
-		pgx.Identifier{"telemetry"},
-		[]string{"device_id", "vehicle_id", "device_ts", "server_ts",
-			"pos_lng", "pos_lat", "speed_kmh", "heading", "altitude", "sats",
-			"ext_voltage_mv", "batt_voltage_mv", "din1", "dout1", "dout2",
-			"gsm_signal", "io"},
-		pgx.CopyFromRows(rows))
-	return err
+	res := s.pool.SendBatch(ctx, b)
+	defer res.Close()
+	for range batch {
+		if _, err := res.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *PGStore) UpsertVehicleState(ctx context.Context, st VehicleState) error {
+	// Same geometry mismatch as telemetry: `vehicle_state.pos` is a PostGIS
+	// point. It is what `v_public_vehicles` reads with st_x/st_y to feed the
+	// rider map, so the column stays and the gateway builds the point.
 	const q = `
 INSERT INTO vehicle_state
- (vehicle_id, pos_lng, pos_lat, soc_pct, speed_kmh, ignition, locked,
+ (vehicle_id, pos, soc_pct, speed_kmh, ignition, locked,
   last_seen, session_online, fall, power_cut, moved_while_locked)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+VALUES ($1, st_setsrid(st_point($2,$3),4326), $4,$5,$6,$7,$8,$9,$10,$11,$12)
 ON CONFLICT (vehicle_id) DO UPDATE SET
-  pos_lng=EXCLUDED.pos_lng, pos_lat=EXCLUDED.pos_lat, soc_pct=EXCLUDED.soc_pct,
+  pos=EXCLUDED.pos, soc_pct=EXCLUDED.soc_pct,
   speed_kmh=EXCLUDED.speed_kmh, ignition=EXCLUDED.ignition, locked=EXCLUDED.locked,
   last_seen=EXCLUDED.last_seen, session_online=EXCLUDED.session_online,
   fall=EXCLUDED.fall, power_cut=EXCLUDED.power_cut,
