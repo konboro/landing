@@ -38,12 +38,12 @@ export default function MoreTab() {
         <StatusLegend />
       </Card>
 
-      <MenuItem icon="⚠" label="Damage reports" onPress={() => router.push('/damage')} />
+      <MenuItem icon="alert" label="Damage reports" onPress={() => router.push('/damage')} />
       {isEnabled('opsDeployMode') ? (
-        <MenuItem icon="📍" label="Deploy mode" onPress={() => router.push('/deploy')} />
+        <MenuItem icon="place" label="Deploy mode" onPress={() => router.push('/deploy')} />
       ) : null}
-      <MenuItem icon="🔁" label="Sync & dev tools" onPress={() => router.push('/dev')} />
-      <MenuItem icon="🎓" label="Replay onboarding" onPress={() => router.push('/onboarding')} />
+      <MenuItem icon="refresh" label="Sync & dev tools" onPress={() => router.push('/dev')} />
+      <MenuItem icon="info" label="Replay onboarding" onPress={() => router.push('/onboarding')} />
 
       <Button title="Sign out" variant="danger" onPress={logout} />
       <Muted style={{ textAlign: 'center' }}>{opsName} · offline-first field service</Muted>

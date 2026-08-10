@@ -20,8 +20,17 @@ import {
   pendingCount,
   resetStuckSyncing,
 } from './outbox';
-import { getVehicle, upsertVehicle, upsertTask, upsertDamage } from './repo';
-import type { OutboxRow, SyncItemResult } from '../lib/types';
+import {
+  getVehicle,
+  upsertVehicle,
+  upsertTask,
+  upsertDamage,
+  upsertVehicleNote,
+  upsertShift,
+  upsertRide,
+  clearVehicleNotePending,
+} from './repo';
+import type { OutboxRow, SyncItemResult, VehicleNotePayload } from '../lib/types';
 
 const FLUSH_INTERVAL_MS = 8000;
 const PULL_INTERVAL_MS = 20000;
@@ -79,6 +88,12 @@ export async function flushOnce(): Promise<boolean> {
       const row = byId.get(res.id);
       if (res.status === 'applied' || res.status === 'duplicate') {
         await markDone(res.id);
+        // The note thread renders an "unsynced" marker until its row lands.
+        // Row id == note id, so a duplicate clears the flag just as well.
+        if (row?.kind === 'vehicle_note') {
+          const p = row.payload as unknown as VehicleNotePayload;
+          await clearVehicleNotePending(p.note_id ?? row.id);
+        }
         if (res.server_patch?.vehicle_id) {
           await applyServerPatch(res.server_patch);
         }
@@ -128,8 +143,21 @@ export async function pullOnce(): Promise<void> {
     for (const v of delta.vehicles) await upsertVehicle(v);
     for (const t of delta.tasks) await upsertTask(t);
     for (const d of delta.damageReports) await upsertDamage(d);
+    // Notes arrive from the server already durable — never pending, even for
+    // one we wrote ourselves and are seeing come back around.
+    const notes = delta.vehicleNotes ?? [];
+    for (const n of notes) await upsertVehicleNote({ ...n, pending: false });
+    // Rides carry the ride GPS track; without this the delta was inert and
+    // only a full bootstrap ever refreshed a route.
+    const rides = delta.rides ?? [];
+    for (const r of rides) await upsertRide(r);
+    const shifts = delta.shifts ?? [];
+    for (const s of shifts) await upsertShift(s);
     await metaSet('last_pull_at', delta.server_time);
-    if (delta.vehicles.length || delta.tasks.length || delta.damageReports.length) {
+    if (
+      delta.vehicles.length || delta.tasks.length || delta.damageReports.length ||
+      notes.length || shifts.length || rides.length
+    ) {
       useOps.getState().bumpRev();
     }
   } catch {

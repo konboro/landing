@@ -12,11 +12,18 @@ try {
 }
 
 const DB_NAME = 'penny-ops.db';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 // Schema mirrors: vehicles-in-scope, assigned tasks, zones, checklists (kept
 // inside tasks json), damage reports, status log, battery swaps, maintenance,
-// heat cells, meta, and the outbox.
+// heat cells, vehicle note threads, shifts, meta, and the outbox.
+//
+// Every table stores its row as `json` plus the few columns we filter/sort on.
+// That is what makes additive server changes (e.g. `damage_reports.part` from
+// migration 00370) need no local migration at all: the new field rides inside
+// the json blob. Genuinely new TABLES are also free — the whole schema is
+// re-applied with IF NOT EXISTS on every open, so an app that upgrades gets
+// them on next launch with its existing rows untouched.
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
 
@@ -94,6 +101,29 @@ CREATE TABLE IF NOT EXISTS rides (
   json       TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_rides_vehicle ON rides(vehicle_id, started_at DESC);
+
+-- Per-vehicle note thread. pending=1 while the outbox row for the note is still
+-- queued, so the UI can mark it "not synced yet" without inspecting the outbox.
+-- The note id IS the outbox row id, which keeps the insert idempotent.
+CREATE TABLE IF NOT EXISTS vehicle_notes (
+  id         TEXT PRIMARY KEY,
+  vehicle_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  pending    INTEGER NOT NULL DEFAULT 0,
+  json       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vnotes_vehicle ON vehicle_notes(vehicle_id, created_at DESC);
+
+-- Shifts. ended_at IS NULL is the "open shift" marker, mirroring the server's
+-- partial unique index (ops_shifts_one_open_per_staff).
+CREATE TABLE IF NOT EXISTS ops_shifts (
+  id         TEXT PRIMARY KEY,
+  staff_id   TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  ended_at   TEXT,
+  json       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_shifts_staff ON ops_shifts(staff_id, started_at DESC);
 
 CREATE TABLE IF NOT EXISTS heat_cells (
   id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,7 +203,8 @@ export async function resetDb(): Promise<void> {
     DELETE FROM vehicles; DELETE FROM tasks; DELETE FROM zones;
     DELETE FROM damage_reports; DELETE FROM status_log; DELETE FROM battery_swaps;
     DELETE FROM maintenance; DELETE FROM heat_cells; DELETE FROM outbox;
-    DELETE FROM photos;
+    DELETE FROM photos; DELETE FROM vehicle_notes; DELETE FROM ops_shifts;
+    DELETE FROM rides;
     DELETE FROM meta WHERE key='seeded';
   `);
 }

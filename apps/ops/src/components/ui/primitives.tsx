@@ -14,7 +14,8 @@ import {
   type StyleProp,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme, makeStyles } from '../brand';
+import { useTheme, makeStyles } from '../../brand';
+import { Icon, isIconName } from './Icon';
 
 export function Screen({ children, style, scroll = false, pad = true }: {
   children: React.ReactNode; style?: StyleProp<ViewStyle>; scroll?: boolean; pad?: boolean;
@@ -102,10 +103,16 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
       {loading ? (
         <ActivityIndicator color={fg} />
       ) : (
-        <Text style={[s.btnText, { color: fg }]}>
-          {icon ? `${icon}  ` : ''}
-          {title}
-        </Text>
+        // `icon` predates the vector set and older callers pass an emoji, so a
+        // known glyph name renders as SVG and anything else stays a text
+        // prefix. That way both spellings work and neither looks broken.
+        <View style={s.btnInner}>
+          {icon && isIconName(icon) ? <Icon name={icon} size={18} color={fg} strokeWidth={2} /> : null}
+          <Text style={[s.btnText, { color: fg }]}>
+            {icon && !isIconName(icon) ? `${icon}  ` : ''}
+            {title}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -182,6 +189,7 @@ const useStyles = makeStyles((t) => ({
   card: { backgroundColor: t.c.surface, borderRadius: t.radius.lg, padding: t.space.lg, gap: t.space.sm, borderWidth: 1, borderColor: t.c.border },
   pressed: { opacity: 0.7 },
   btn: { minHeight: t.tap.min, borderRadius: t.radius.md, paddingHorizontal: t.space.lg, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+  btnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   btnText: { fontSize: t.font.size.md, fontWeight: '700' },
   badge: { paddingHorizontal: t.space.sm, paddingVertical: 3, borderRadius: t.radius.sm, alignSelf: 'flex-start' },
   badgeText: { fontSize: t.font.size.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },

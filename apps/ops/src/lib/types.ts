@@ -102,6 +102,72 @@ export interface VehicleRide {
   currency: string;
   photo_review: string | null;
   end_zone_name: string | null;
+  /**
+   * The ride's real GPS trace, oldest point first, when the mirror has it
+   * (`trip_routes.path`). Optional because a ride pulled before the route was
+   * written, or one whose route row never arrived, legitimately has none.
+   *
+   * The last-ride playback MUST prefer this over any reconstruction: an
+   * operator reading an invented line as "where the scooter went" is worse
+   * than showing no line at all.
+   */
+  track?: LngLat[] | null;
+  /** Battery at the start/end of the ride, when telemetry covered it. */
+  soc_start_pct?: number | null;
+  soc_end_pct?: number | null;
+}
+
+/** A damage report as the ops app models it locally.
+ *  `part` mirrors `damage_reports.part` (migration 00370) — the component the
+ *  damage is filed against. It is optional so every existing DamageReport (and
+ *  anything the server hands back without one) stays assignable. */
+export interface OpsDamageReport extends DamageReport {
+  part?: string | null;
+}
+
+/** One entry in a vehicle's note thread (`vehicle_notes`, migration 00370).
+ *  Distinct from `OpsVehicle.notes`, which is a single overwritable field: the
+ *  thread keeps WHO wrote WHAT and WHEN, so the second mechanic on a vehicle
+ *  does not erase the first one's observation.
+ *  `pending` is local-only: true until the outbox row for it has synced. */
+export interface VehicleNote {
+  id: UUID;
+  vehicle_id: UUID;
+  staff_id: UUID | null;
+  staff_name: string | null;
+  body: string;
+  photos: string[];
+  created_at: ISOTimestamp;
+  pending?: boolean;
+}
+
+/** A work shift (`ops_shifts`, migration 00370). At most one open shift per
+ *  staff member — the server enforces it with a partial unique index, and the
+ *  local actions mirror that rule so an offline device cannot open a second. */
+export interface OpsShift {
+  id: UUID;
+  staff_id: UUID;
+  started_at: ISOTimestamp;
+  ended_at: ISOTimestamp | null;
+  tasks_completed: number;
+  note: string | null;
+}
+
+/** Counters the shift sheet shows. Derived from the mirror, never stored. */
+export interface ShiftStats {
+  openTasks: number;
+  completedThisShift: number;
+  /** Time since the open shift started; null when no shift is running. */
+  elapsedMs: number | null;
+}
+
+/** Who a task belongs to, resolved for display. `assignee_name` is only known
+ *  for the signed-in user — the app never syncs a staff directory (PII). */
+export interface TaskAssignment {
+  task_id: UUID;
+  assignee: UUID | null;
+  assignee_name: string | null;
+  is_mine: boolean;
 }
 
 // --- vehicle_status_log ---
@@ -140,6 +206,10 @@ export interface Bootstrap {
   maintenance: MaintenanceEntry[];
   rides: VehicleRide[];
   heat: HeatCell[];
+  /** Optional: a backend that predates the note thread / shifts simply omits
+   *  these, and the seeder leaves the local tables empty rather than failing. */
+  vehicleNotes?: VehicleNote[];
+  shifts?: OpsShift[];
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +217,7 @@ export interface Bootstrap {
 // ---------------------------------------------------------------------------
 export type OutboxKind =
   | 'task_claim'
+  | 'task_release'
   | 'task_progress'
   | 'task_complete'
   | 'status_change'
@@ -159,6 +230,8 @@ export type OutboxKind =
   | 'vehicle_note'
   | 'device_swap'
   | 'decommission'
+  | 'shift_start'
+  | 'shift_end'
   | 'photo_upload';
 
 export type OutboxStatus = 'pending' | 'syncing' | 'done' | 'error';
@@ -176,6 +249,9 @@ export interface OutboxRow<P = Record<string, unknown>> {
 
 // Payload shapes (kept explicit for the sync worker + mock server) -----------
 export interface TaskClaimPayload { task_id: UUID; assignee: UUID; }
+/** `assignee` is who HELD the task, so the server can reject a release from
+ *  someone who no longer owns it instead of silently unassigning. */
+export interface TaskReleasePayload { task_id: UUID; assignee: UUID | null; }
 export interface TaskProgressPayload { task_id: UUID; status: 'in_progress'; }
 export interface TaskCompletePayload {
   task_id: UUID;
@@ -215,6 +291,8 @@ export interface DamageCreatePayload {
   photos: string[];
   linked_task_id: UUID | null;
   pos: LngLat | null;
+  /** Optional so rows queued before the part catalogue existed still flush. */
+  part?: string | null;
 }
 export interface DamageUpdatePayload {
   damage_id: UUID;
@@ -236,7 +314,17 @@ export interface DeployDropPayload {
   pos: LngLat;
   photos: string[];
 }
-export interface VehicleNotePayload { vehicle_id: UUID; note: string; photos: string[]; }
+/** `note_id`/`staff_id` are optional only so outbox rows enqueued by an older
+ *  build (which had neither) still flush; new rows always carry both. The id
+ *  doubles as the `vehicle_notes` primary key, which is what makes the insert
+ *  idempotent and lets sync clear the local `pending` flag on the right row. */
+export interface VehicleNotePayload {
+  vehicle_id: UUID;
+  note: string;
+  photos: string[];
+  note_id?: UUID;
+  staff_id?: UUID | null;
+}
 export interface DeviceSwapPayload {
   vehicle_id: UUID;
   old_imei: string | null;
@@ -244,6 +332,13 @@ export interface DeviceSwapPayload {
   tests: { online: boolean; gps: boolean; unlock: boolean };
 }
 export interface DecommissionPayload { vehicle_id: UUID; reason: string; photos: string[]; }
+export interface ShiftStartPayload { shift_id: UUID; staff_id: UUID; started_at: ISOTimestamp; }
+export interface ShiftEndPayload {
+  shift_id: UUID;
+  ended_at: ISOTimestamp;
+  tasks_completed: number;
+  note: string | null;
+}
 export interface PhotoUploadPayload { local_uri: string; remote_path: string; bytes: number; }
 
 // Sync result the (mock or edge) server returns per outbox row.

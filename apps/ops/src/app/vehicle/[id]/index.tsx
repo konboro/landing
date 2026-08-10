@@ -92,7 +92,7 @@ function Sheet({ v }: { v: OpsVehicle }) {
             {v.moved_while_locked && <Badge label="moved while locked" color={c.danger} textColor={c.onDanger} />}
           </Row>
         )}
-        {v.pos && <Button title="Navigate to vehicle" icon="🧭" variant="secondary" onPress={() => navigateTo(v.pos!, v.code)} />}
+        {v.pos && <Button title="Navigate to vehicle" icon="navigate" variant="secondary" onPress={() => navigateTo(v.pos!, v.code)} />}
       </Card>
 
       {/* Last errors */}
@@ -129,19 +129,48 @@ function Sheet({ v }: { v: OpsVehicle }) {
       {/* Status + visibility + swap + damage */}
       <Card>
         <H2>Manage</H2>
-        <Button title="Full history" icon="🕓" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/history`)} />
-        <Button title="Change status" icon="🔄" onPress={() => router.push(`/vehicle/${v.id}/status`)} />
+        <Button title="Full history" icon="history" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/history`)} />
+        <Button title="Change status" icon="refresh" onPress={() => router.push(`/vehicle/${v.id}/status`)} />
         <Button
           title={v.visible ? 'Hide from rider map' : 'Make visible'}
           variant="secondary"
           onPress={() => toggleVisibility(v, !v.visible, v.visible ? 'staged' : 'unstaged')}
         />
-        <Button title="Report damage" icon="⚠" variant="secondary" onPress={() => router.push({ pathname: '/damage/new', params: { vehicleId: v.id } })} />
+        <Button title="Report damage" icon="alert" variant="secondary" onPress={() => router.push({ pathname: '/damage/new', params: { vehicleId: v.id } })} />
         {isEnabled('opsDeviceSwap') ? (
-          <Button title="Swap IoT device" icon="🔁" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/swap-device`)} />
+          <Button title="Swap IoT device" icon="refresh" variant="secondary" onPress={() => router.push(`/vehicle/${v.id}/swap-device`)} />
         ) : null}
-        {v.status === 'transport' && isEnabled('opsDeployMode') && <Button title="Deploy here (available)" icon="📍" variant="success" onPress={() => router.push('/deploy')} />}
+        {v.status === 'transport' && isEnabled('opsDeployMode') && <Button title="Deploy here (available)" icon="place" variant="success" onPress={() => router.push('/deploy')} />}
         {isAdmin && <Button title="Decommission" variant="danger" onPress={confirmDecommission} />}
+      </Card>
+
+      {/* The three per-vehicle records that live on their own screens. Without
+          these rows they were only reachable from the fleet sheet, so anyone
+          arriving here from a task or a QR scan hit a dead end. */}
+      <Card>
+        <Row>
+          <Button
+            title="Notes"
+            variant="secondary"
+            icon="note"
+            style={{ flex: 1 }}
+            onPress={() => router.push(`/vehicle/${v.id}/notes`)}
+          />
+          <Button
+            title="Damages"
+            variant="secondary"
+            icon="alert"
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: '/damage', params: { vehicleId: v.id } })}
+          />
+          <Button
+            title="Last ride"
+            variant="secondary"
+            icon="route"
+            style={{ flex: 1 }}
+            onPress={() => router.push(`/vehicle/${v.id}/last-ride`)}
+          />
+        </Row>
       </Card>
 
       {/* Free-form note */}

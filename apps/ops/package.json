@@ -8,6 +8,7 @@
     "start": "expo start --dev-client",
     "start:go": "expo start",
     "android": "expo run:android",
+    "apk": "node ./scripts/build-apk.mjs",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
     "typecheck": "tsc --noEmit",
@@ -36,6 +37,7 @@
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

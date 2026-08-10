@@ -266,7 +266,7 @@ export default function VehicleHistoryScreen() {
                   <Pill
                     label={`${KIND_LABEL[k]} (${counts[k] ?? 0})`}
                     color={kinds.includes(k) ? color.primary : undefined}
-                    textColor={kinds.includes(k) ? '#fff' : undefined}
+                    textColor={kinds.includes(k) ? color.onPrimary : undefined}
                   />
                 </Pressable>
               ))}

@@ -73,6 +73,13 @@ const LEGEND_LABELS: [string, string][] = [
   ['offline', 'Offline'],
   ['stolen', 'Stolen-suspect'],
   ['decommissioned', 'Decommissioned'],
+  // Field-service states (migration 00390). Labels are what the crew says out
+  // loud, not the enum spelling — "Discharged" is `low_battery` above, and
+  // these four are new.
+  ['charging', 'Charging'],
+  ['storage', 'Storage'],
+  ['not_ready', 'Not ready'],
+  ['needs_investigation', 'Needs investigation'],
 ];
 
 export interface OpsTheme {

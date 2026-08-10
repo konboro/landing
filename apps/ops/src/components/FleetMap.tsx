@@ -13,6 +13,7 @@ import { useTheme, makeStyles } from '../brand';
 import { StatusDot, Badge } from './ui';
 import { formatSoc } from '@penny/ui';
 import type { OpsVehicle, RebalanceZone, HeatCell } from '../lib/types';
+import type { LngLat } from '@penny/db-types';
 import { ATHENS_CENTER } from '../services/mockData';
 
 let Mapbox: any = null;
@@ -37,12 +38,22 @@ export function FleetMap({
   heat,
   layers,
   onSelect,
+  center,
+  contentInsetTop,
 }: {
   vehicles: OpsVehicle[];
   zones: RebalanceZone[];
   heat: HeatCell[];
   layers: MapLayers;
   onSelect: (v: OpsVehicle) => void;
+  /** Optional camera target (locate-me). Omitted = stay on the city centre. */
+  center?: LngLat | null;
+  /**
+   * Space to keep clear at the top. The caller may float controls over the map;
+   * the native map does not care (it draws under them by design) but the
+   * no-token fallback renders a real list that must not start underneath them.
+   */
+  contentInsetTop?: number;
 }) {
   const nativeAvailable = !!Mapbox?.MapView && hasMapboxToken;
 
@@ -53,16 +64,25 @@ export function FleetMap({
 
   if (nativeAvailable) {
     return (
-      <NativeMap vehicles={visibleVehicles} zones={zones} heat={heat} layers={layers} onSelect={onSelect} />
+      <NativeMap vehicles={visibleVehicles} zones={zones} heat={heat} layers={layers} onSelect={onSelect} center={center} />
     );
   }
-  return <FallbackMap vehicles={visibleVehicles} zones={zones} heat={heat} layers={layers} onSelect={onSelect} />;
+  return (
+    <FallbackMap
+      vehicles={visibleVehicles}
+      zones={zones}
+      heat={heat}
+      layers={layers}
+      onSelect={onSelect}
+      contentInsetTop={contentInsetTop}
+    />
+  );
 }
 
 // --- Native Mapbox path -----------------------------------------------------
-function NativeMap({ vehicles, zones, heat, layers, onSelect }: {
+function NativeMap({ vehicles, zones, heat, layers, onSelect, center }: {
   vehicles: OpsVehicle[]; zones: RebalanceZone[]; heat: HeatCell[]; layers: MapLayers;
-  onSelect: (v: OpsVehicle) => void;
+  onSelect: (v: OpsVehicle) => void; center?: LngLat | null;
 }) {
   const theme = useTheme();
   const mapStyles = useStyles(theme);
@@ -71,7 +91,13 @@ function NativeMap({ vehicles, zones, heat, layers, onSelect }: {
   return (
     <View style={{ flex: 1 }}>
       <MapView style={{ flex: 1 }} styleURL={theme.mode === 'dark' ? theme.map.night : theme.map.day} scaleBarEnabled={false}>
-        <Camera zoomLevel={12.5} centerCoordinate={ATHENS_CENTER} />
+        {/* A changed `center` re-targets the camera; zoom tightens to street
+            level because "centre on me" is asked while standing somewhere. */}
+        <Camera
+          zoomLevel={center ? 15.5 : 12.5}
+          centerCoordinate={center ?? ATHENS_CENTER}
+          animationDuration={center ? 700 : 0}
+        />
 
         {layers.showZones &&
           zones.map((z) => (
@@ -116,16 +142,16 @@ function NativeMap({ vehicles, zones, heat, layers, onSelect }: {
 }
 
 // --- Fallback path (no token / Expo Go) -------------------------------------
-function FallbackMap({ vehicles, zones, heat, layers, onSelect }: {
+function FallbackMap({ vehicles, zones, heat, layers, onSelect, contentInsetTop }: {
   vehicles: OpsVehicle[]; zones: RebalanceZone[]; heat: HeatCell[]; layers: MapLayers;
-  onSelect: (v: OpsVehicle) => void;
+  onSelect: (v: OpsVehicle) => void; contentInsetTop?: number;
 }) {
   const theme = useTheme();
   const mapStyles = useStyles(theme);
   const { c, space } = theme;
   const alarms = vehicles.filter(hasAlarm);
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, paddingTop: contentInsetTop ?? 0 }}>
       <View style={mapStyles.banner}>
         <Text style={mapStyles.bannerTitle}>Map fallback</Text>
         <Text style={mapStyles.bannerText}>

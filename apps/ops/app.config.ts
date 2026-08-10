@@ -19,7 +19,15 @@ import { resolveBuildBrand } from './src/brand/build';
  * runs in Expo Go.
  */
 const brand = resolveBuildBrand(process.env.EXPO_PUBLIC_BRAND);
-const MAPBOX_DOWNLOAD_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN ?? '';
+// Two DIFFERENT Mapbox tokens, and swapping them is a build-time 401 that reads
+// like a network problem:
+//   MAPBOX_DOWNLOAD_TOKEN      secret `sk.*`, used by Gradle to fetch the native
+//                              SDK from Mapbox's maven repo. Never shipped.
+//   EXPO_PUBLIC_MAPBOX_TOKEN   public `pk.*`, compiled into the app to render tiles.
+// This used to read the public one for both (see apps/rider/app.config.ts for
+// the correct pattern), which cannot authenticate the download.
+const MAPBOX_DOWNLOAD_TOKEN =
+  process.env.MAPBOX_DOWNLOAD_TOKEN ?? 'sk.PLACEHOLDER_MAPBOX_DOWNLOAD_TOKEN';
 
 const config: ExpoConfig = {
   name: brand.opsName,
@@ -72,8 +80,8 @@ const config: ExpoConfig = {
     [
       '@rnmapbox/maps',
       {
-        // Native builds need a download token; graceful fallback covers Expo Go.
-        RNMapboxMapsDownloadToken: MAPBOX_DOWNLOAD_TOKEN || 'PLACEHOLDER_SET_EXPO_PUBLIC_MAPBOX_TOKEN',
+        // Native builds need the SECRET download token; Expo Go never gets here.
+        RNMapboxMapsDownloadToken: MAPBOX_DOWNLOAD_TOKEN,
       },
     ],
   ],

@@ -13,17 +13,24 @@ import {
   getDamageReport,
   addStatusLog,
   addBatterySwap,
+  upsertVehicleNote,
+  getOpenShift,
+  getShiftStats,
+  upsertShift,
 } from './repo';
 import { uuid, nowIso } from '../lib/ids';
 import { useOps } from '../lib/store';
 import type { Transition } from '../lib/status-matrix';
 import type { ChecklistState } from '../lib/checklists';
 import { OpsTaskStatus, DamageStatus } from '@penny/db-types';
-import type { OpsTask, DamageReport, UUID, VehicleStatus, LngLat } from '@penny/db-types';
-import type { CommandPayload, OpsVehicle } from '../lib/types';
+import type { OpsTask, UUID, VehicleStatus, LngLat } from '@penny/db-types';
+import type { CommandPayload, OpsDamageReport, OpsVehicle } from '../lib/types';
 
 function staffId(): UUID {
   return useOps.getState().session?.staff_id ?? 'unknown-staff';
+}
+function staffName(): string | null {
+  return useOps.getState().session?.name ?? null;
 }
 function role(): string {
   return useOps.getState().session?.role ?? 'ops';
@@ -41,6 +48,18 @@ export async function claimTask(taskId: UUID): Promise<void> {
   const assignee = staffId();
   await upsertTask({ ...t, assignee, status: OpsTaskStatus.assigned });
   await enqueue('task_claim', { task_id: taskId, assignee });
+  await done();
+}
+
+/** Hand a task back to the pool. The payload carries the PREVIOUS holder so the
+ *  server can ignore a release that lost a race to someone else's claim —
+ *  otherwise a queued release from yesterday would unassign today's owner. */
+export async function releaseTask(taskId: UUID): Promise<void> {
+  const t = await getTask(taskId);
+  if (!t) return;
+  const previous = t.assignee;
+  await upsertTask({ ...t, assignee: null, status: OpsTaskStatus.open });
+  await enqueue('task_release', { task_id: taskId, assignee: previous });
   await done();
 }
 
@@ -171,9 +190,12 @@ export async function createDamage(
   photos: string[],
   linkedTaskId: UUID | null,
   pos: LngLat | null,
+  // Trailing options object so the existing six-argument callers keep working.
+  // `part` is the component chip (DAMAGE_PARTS) -> damage_reports.part.
+  opts: { part?: string | null } = {},
 ): Promise<UUID> {
   const damage_id = uuid();
-  const report: DamageReport = {
+  const report: OpsDamageReport = {
     id: damage_id,
     vehicle_id: vehicleId,
     reporter: 'ops',
@@ -181,14 +203,19 @@ export async function createDamage(
     trip_id: null,
     description,
     photos,
-    severity: severity as DamageReport['severity'],
+    severity: severity as OpsDamageReport['severity'],
     status: DamageStatus.new,
     linked_task_id: linkedTaskId,
     penalty_payment_id: null,
+    part: opts.part ?? null,
     created_at: nowIso(),
   };
   await upsertDamage(report);
-  await enqueue('damage_create', { damage_id, vehicle_id: vehicleId, description, severity, photos, linked_task_id: linkedTaskId, pos }, { id: damage_id });
+  await enqueue(
+    'damage_create',
+    { damage_id, vehicle_id: vehicleId, description, severity, photos, linked_task_id: linkedTaskId, pos, part: opts.part ?? null },
+    { id: damage_id },
+  );
   await done();
   return damage_id;
 }
@@ -239,9 +266,63 @@ export async function deployDrop(vehicle: OpsVehicle, pos: LngLat, photos: strin
 }
 
 // --- Free-form note ---------------------------------------------------------
-export async function addVehicleNote(vehicle: OpsVehicle, note: string, photos: string[]): Promise<void> {
+/** Appends to the vehicle's note thread (`vehicle_notes`). The note is written
+ *  to the local thread immediately with pending=true, so the mechanic sees it
+ *  in a basement with no signal; sync clears the flag when the row lands.
+ *  `vehicles.notes` is still patched because the map/sheet renders that single
+ *  field as the "latest word" summary — the thread is the record, that is the
+ *  headline. Returns the note id (= the outbox row id, hence idempotent). */
+export async function addVehicleNote(vehicle: OpsVehicle, note: string, photos: string[]): Promise<UUID> {
+  const note_id = uuid();
+  const staff_id = staffId();
+  await upsertVehicleNote({
+    id: note_id,
+    vehicle_id: vehicle.id,
+    staff_id,
+    staff_name: staffName(),
+    body: note,
+    photos,
+    created_at: nowIso(),
+    pending: true,
+  });
   await patchVehicle(vehicle.id, { notes: note });
-  await enqueue('vehicle_note', { vehicle_id: vehicle.id, note, photos });
+  await enqueue('vehicle_note', { note_id, vehicle_id: vehicle.id, note, photos, staff_id }, { id: note_id });
+  await done();
+  return note_id;
+}
+
+// --- Shifts -----------------------------------------------------------------
+/** Clock in. Idempotent by design: if a shift is already open locally we return
+ *  its id instead of enqueuing a second one, because the server has a partial
+ *  unique index (one open shift per staff) that would reject the duplicate and
+ *  leave a permanently errored row in the outbox. */
+export async function startShift(): Promise<UUID> {
+  const open = await getOpenShift();
+  if (open) return open.id;
+  const shift_id = uuid();
+  const staff_id = staffId();
+  const started_at = nowIso();
+  await upsertShift({ id: shift_id, staff_id, started_at, ended_at: null, tasks_completed: 0, note: null });
+  await enqueue('shift_start', { shift_id, staff_id, started_at }, { id: shift_id });
+  await done();
+  return shift_id;
+}
+
+/** Clock out. `tasks_completed` is snapshotted from the mirror at close time —
+ *  the server column is a report of what this shift did, not a live counter. */
+export async function endShift(note?: string): Promise<void> {
+  const open = await getOpenShift();
+  if (!open) return;
+  const { completedThisShift } = await getShiftStats();
+  const ended_at = nowIso();
+  await upsertShift({ ...open, ended_at, tasks_completed: completedThisShift, note: note ?? null });
+  await enqueue(
+    'shift_end',
+    { shift_id: open.id, ended_at, tasks_completed: completedThisShift, note: note ?? null },
+    // Distinct from the shift_start row (which uses the shift id) but still
+    // stable, so a retried close is deduped rather than applied twice.
+    { id: `${open.id}:end` },
+  );
   await done();
 }
 
