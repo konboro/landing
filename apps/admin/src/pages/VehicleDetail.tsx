@@ -219,10 +219,14 @@ export function VehicleDetailPage() {
       ) : null}
 
       {tab === 'iot' ? (
+        <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+          {/* io-iot */}
+          <IoMonitor vehicleId={id!} />
         <Card>
           <CardHeader title="IoT data log" sub="Merged command + telemetry timeline" actions={<Link className="btn btn-sm" to="/fleet">Full IoT log</Link>} />
           <CommandTable commands={data.commands} />
         </Card>
+        </div>
       ) : null}
 
       {tab === 'rides' ? (
