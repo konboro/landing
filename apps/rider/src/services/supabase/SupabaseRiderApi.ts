@@ -576,20 +576,29 @@ export class SupabaseRiderApi implements RiderApi {
   /* --------------------------------- wallet ------------------------------- */
 
   async getWallet(): Promise<Wallet> {
-    const id = await this.userId();
-    const { data } = await this.client.supabase
-      .from('v_wallet_balance')
+    // `v_my_wallet_balance`, not `v_wallet_balance` — the latter does not exist.
+    // PostgREST answered with an error, the error was discarded, and the balance
+    // rendered as 0 forever: a rider could top up successfully, watch the money
+    // reach the ledger, and still be told they had nothing. The view scopes itself
+    // to auth.uid(), so no user filter is needed here.
+    const { data, error } = await this.client.supabase
+      .from('v_my_wallet_balance')
       .select('balance_cents,currency')
-      .eq('user_id', id)
       .maybeSingle();
-    const d = data as any;
+    if (error) throw new RiderApiError('wallet_unavailable', error.message);
+    const d = data as { balance_cents?: number; currency?: string } | null;
     return { balance_cents: d?.balance_cents ?? 0, currency: d?.currency ?? 'EUR' };
   }
 
   async topUp(cents: number): Promise<Wallet> {
-    const before = await this.getWallet();
-    const { client_secret } = await this.client.edge.topUp(cents);
-    const outcome = await StripeSvc.presentSheet({ kind: 'payment', clientSecret: client_secret });
+    // Both round-trips at once. Reading the balance first only to know what to
+    // compare against later added a whole request between the rider's tap and the
+    // payment sheet, for information not needed until after it closes.
+    const [before, intent] = await Promise.all([
+      this.getWallet(),
+      this.client.edge.topUp(cents),
+    ]);
+    const outcome = await StripeSvc.presentSheet({ kind: 'payment', clientSecret: intent.client_secret });
     if (outcome === 'canceled') throw new RiderApiError('canceled', 'Top-up cancelled.');
     return await this.walletAfterCredit(before.balance_cents);
   }

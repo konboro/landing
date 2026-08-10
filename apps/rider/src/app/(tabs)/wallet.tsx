@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { formatMoney } from '@penny/ui';
 import { useBrand, useTheme } from '../../brand';
-import { Haptics } from '../../lib/native';
+import { Haptics, StripeSvc } from '../../lib/native';
 import { getApi } from '../../services';
 import type { Wallet, Card as CardType, PackageProduct, SubscriptionProduct, AddonProduct, DebtView } from '../../services/types';
 import { useT } from '../../i18n';
@@ -39,6 +39,11 @@ export default function WalletScreen() {
   }, [api]);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
+
+  // Initialise the native Stripe SDK while the rider is still reading the screen.
+  // It used to happen on the first tap, inside the path between choosing an amount
+  // and the sheet appearing, which is exactly where the delay was felt.
+  useEffect(() => { void StripeSvc.init(); }, []);
 
   const money = (c: number) => formatMoney(c, wallet?.currency ?? brand.currency);
   const debtTotal = debts.reduce((a, d) => a + d.amount_cents, 0);
@@ -185,7 +190,16 @@ export default function WalletScreen() {
         <Sheet visible={topUpOpen} onClose={() => setTopUpOpen(false)} title={t('wallet.topUp')}>
           <Row wrap gap={theme.space.sm}>
             {[500, 1000, 2000, 5000].map((amt) => (
-              <Button key={amt} title={money(amt)} variant="secondary" full={false} onPress={() => run('topup', async () => { await api.topUp(amt); setTopUpOpen(false); })} />
+              <Button
+                key={amt}
+                title={money(amt)}
+                variant="secondary"
+                full={false}
+                // Close the amount sheet on the tap, not after the payment. It used
+                // to stay up for the whole round-trip, so the rider watched a dead
+                // sheet until Stripe's appeared and read the whole thing as a hang.
+                onPress={() => { setTopUpOpen(false); void run('topup', () => api.topUp(amt)); }}
+              />
             ))}
           </Row>
         </Sheet>
