@@ -48,6 +48,12 @@ type VehicleState struct {
 	VehicleID string
 	Lat       float64
 	Lng       float64
+	// HasFix is false when the record carries no GPS fix. Such a record reports
+	// 0,0 — the Atlantic off West Africa — and writing that overwrote the last
+	// known position, so the vehicle left its operating zone and vanished from the
+	// rider map. About one frame in forty arrives this way (10 of 390 measured),
+	// and any scooter parked under cover produces them.
+	HasFix bool
 	// Nil when the device reports no state of charge. The FMB930 is a generic
 	// tracker fed from a 5 V rail — it never sees the traction pack — so this is
 	// nil for the current fleet. It must not be a plain int: the zero value would

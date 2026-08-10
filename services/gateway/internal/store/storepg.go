@@ -103,9 +103,13 @@ func (s *PGStore) UpsertVehicleState(ctx context.Context, st VehicleState) error
 INSERT INTO vehicle_state
  (vehicle_id, pos, soc_pct, speed_kmh, ignition, locked,
   last_seen, session_online, fall, power_cut, moved_while_locked)
-VALUES ($1, st_setsrid(st_point($2,$3),4326), $4,$5,$6,$7,$8,$9,$10,$11,$12)
+VALUES ($1,
+  case when $13 then st_setsrid(st_point($2,$3),4326) else null end,
+  $4,$5,$6,$7,$8,$9,$10,$11,$12)
 ON CONFLICT (vehicle_id) DO UPDATE SET
-  pos=EXCLUDED.pos,
+  -- Keep the last known position when the frame has no fix. Writing the 0,0 such
+  -- a frame reports moved the vehicle off the map entirely.
+  pos=COALESCE(EXCLUDED.pos, vehicle_state.pos),
   -- Keep the last known charge when the frame carries no reading. The FMB930
   -- never sees the traction pack, so overwriting unconditionally would reset SoC
   -- on every frame and leave the vehicle permanently under min_start_soc.
@@ -116,7 +120,8 @@ ON CONFLICT (vehicle_id) DO UPDATE SET
   moved_while_locked=EXCLUDED.moved_while_locked`
 	_, err := s.pool.Exec(ctx, q,
 		st.VehicleID, st.Lng, st.Lat, st.SoCPct, st.SpeedKmh, st.Ignition, st.Locked,
-		st.LastSeen, st.SessionOnline, st.Fall, st.PowerCut, st.MovedWhileLocked)
+		st.LastSeen, st.SessionOnline, st.Fall, st.PowerCut, st.MovedWhileLocked,
+		st.HasFix)
 	return err
 }
 
