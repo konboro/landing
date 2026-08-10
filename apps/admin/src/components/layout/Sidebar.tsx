@@ -10,7 +10,13 @@ export function Sidebar({ open }: { open: boolean }) {
   const ds = useDS();
   const { brand } = useBrand();
   const { data: queue } = useQuery({ queryKey: ['verification'], queryFn: () => ds.listVerification() });
-  const pending = queue?.filter((q) => q.trip.photo_review === 'pending').length ?? 0;
+  // The mock source nests the trip; `v_ride_verification_queue` returns the
+  // column flat. Read either — and never index into a missing object: this
+  // badge is rendered on every route, so one bad row used to blank the panel.
+  const pending = queue?.filter((q) => {
+    const row = q as typeof q & { photo_review?: string };
+    return (q.trip?.photo_review ?? row.photo_review) === 'pending';
+  }).length ?? 0;
 
   return (
     <aside className={`sidebar ${open ? 'open' : ''}`}>
