@@ -12,11 +12,14 @@ import { adminClient, requireUser, requireStaff } from '../../_shared/admin.ts';
 import { readJson, str, bool, strArray } from '../../_shared/validate.ts';
 import { writeAudit } from '../../_shared/audit.ts';
 
-/** vehicle_status enum (migration 00020). Kept in step by hand — an unknown
- *  value would otherwise reach Postgres as a cast error rather than a 400. */
+/** vehicle_status enum (migrations 00020 + 00390). Kept in step by hand — an
+ *  unknown value would otherwise reach Postgres as a cast error rather than a
+ *  400. */
 const STATUSES = new Set([
   'available', 'reserved', 'in_trip', 'maintenance', 'transport',
   'low_battery', 'offline', 'stolen', 'decommissioned',
+  // Field-service states the ops app sets from the status sheet.
+  'charging', 'storage', 'not_ready', 'needs_investigation',
 ]);
 
 /** Statuses the trip engine owns. Staff must not hand-set these: `in_trip` /

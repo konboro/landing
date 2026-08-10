@@ -824,3 +824,34 @@ export interface UserProfileFull {
   form_answers: UserFormAnswer[];
   stats: UserStats;
 }
+
+/* =========================================================================
+   Broadcasts — staff-composed sends to inbox / pop-up / push (docs/12).
+   Mirrors `v_admin_broadcasts`.
+   ========================================================================= */
+
+export interface BroadcastRow {
+  id: UUID;
+  title: string;
+  body: string;
+  channels: string[];
+  category: 'transactional' | 'marketing';
+  status: 'draft' | 'sending' | 'sent' | 'failed';
+  /** Rendered server-side: "Everyone" / "Group: Students" / "Users: 3". */
+  audience_label: string;
+  recipients: number;
+  delivered: number;
+  push_sent: number;
+  push_failed: number;
+  expires_at: ISOTimestamp | null;
+  reason: string | null;
+  created_by_name: string;
+  created_at: ISOTimestamp;
+  sent_at: ISOTimestamp | null;
+}
+
+export interface CustomerGroupRow {
+  id: UUID;
+  name: string;
+  members: number;
+}

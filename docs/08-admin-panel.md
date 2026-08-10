@@ -12,6 +12,12 @@ React + Vite + Mapbox GL JS, Cloudflare Pages. Auth: Supabase (staff), role-gate
 
 **Vehicles** — table (sort by battery, last_seen, status, rides today, idle time), bulk actions, row → **Vehicle detail**: live position, telemetry graphs, IoT session log, command console (unlock/lock/locate/reboot/raw-with-permission), rides history, maintenance history, damage reports, device info (IMEI/ICCID/fw), swap device wizard, QR label print (PDF).
 
+  **Fleet membership** (permission `vehicles.manage`, separate from `vehicles.status`):
+  - *Add vehicle* — code (unique, the QR label), model, city, initial status, plate/VIN/notes, and an optional IMEI that **fits an already-provisioned device** by setting `devices.vehicle_id`. Per Hard Rule #7 the IMEI is never written onto the vehicle row, so the device can be swapped later without touching the business record. Edge fn `admin-vehicle-create`.
+  - *Decommission* — status → `decommissioned`, hidden from the rider map, device unfitted, row kept so every trip/payment that points at it still resolves. This is the normal way to take a vehicle out of the fleet.
+  - *Delete permanently* — a real row delete, allowed **only while the vehicle has no trips**; otherwise the server refuses with 409 and tells the caller to decommission. It exists for provisioning typos, not for retiring vehicles. Edge fn `admin-vehicle-delete` (`mode=decommission|purge`).
+  - Both write `audit_log` with a mandatory reason (Hard Rule #8); status changes also land in `vehicle_status_log` so ops sees the per-vehicle history without reading the global stream.
+
 **Customers** — table (search phone/email/name/legacy id; sort by rides, spend, debt, score, signup), row → **Customer detail** (requested "dokładne dane"): profile + KYC status with Sumsub deep link, documents, rides, payments & ledger, debts (retry now / write-off), penalties, disputes, devices used, referrals, loyalty, notes; actions: **charge card (reason+evidence mandatory)**, refund, credit wallet, block/unblock, force re-KYC, GDPR export/delete, impersonate-view (read-only).
 
 **Analytics** (requested "dodatkowe dane analityczne") —

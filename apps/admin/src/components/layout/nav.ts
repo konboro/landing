@@ -13,6 +13,7 @@ export const NAV: NavItem[] = [
   { to: '/vehicles', label: 'Vehicles', icon: '🔋', group: 'Operate' },
   { to: '/customers', label: 'Customers', icon: '👤', group: 'Operate' },
   { to: '/messages', label: 'Message centre', icon: '💬', group: 'Operate' },
+  { to: '/notifications', label: 'Notifications', icon: '🔔', group: 'Operate' },
 
   { to: '/analytics', label: 'Analytics', icon: '📈', group: 'Insight' },
 
