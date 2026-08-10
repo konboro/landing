@@ -45,10 +45,15 @@ type Telemetry struct {
 
 // VehicleState is the hot per-vehicle row (UPSERT target).
 type VehicleState struct {
-	VehicleID        string
-	Lat              float64
-	Lng              float64
-	SoCPct           int
+	VehicleID string
+	Lat       float64
+	Lng       float64
+	// Nil when the device reports no state of charge. The FMB930 is a generic
+	// tracker fed from a 5 V rail — it never sees the traction pack — so this is
+	// nil for the current fleet. It must not be a plain int: the zero value would
+	// be written as a real 0 %, which overwrites whatever the operator set and
+	// makes every vehicle fail the min-SoC check in trips-start.
+	SoCPct           *int
 	SpeedKmh         int
 	Ignition         bool
 	Locked           bool
@@ -94,6 +99,12 @@ type Store interface {
 	DeviceByIMEI(ctx context.Context, imei string) (Device, error)
 	InsertTelemetry(ctx context.Context, batch []Telemetry) error
 	UpsertVehicleState(ctx context.Context, st VehicleState) error
+	// MarkVehicleOffline clears session_online when a device's TCP session ends.
+	// Without it nothing ever unsets the flag — it is only ever written true — so
+	// a vehicle whose modem is gone stays "online" forever: it keeps showing on
+	// the rider map (v_public_vehicles requires session_online) and can never
+	// appear as disconnected in the panel.
+	MarkVehicleOffline(ctx context.Context, vehicleID string) error
 	InsertAlert(ctx context.Context, a Alert) error
 	// NextCommand pops the next queued command (pgmq read). ok=false if none.
 	NextCommand(ctx context.Context) (cmd Command, ok bool, err error)
@@ -199,6 +210,16 @@ func (f *FakeStore) UpsertVehicleState(_ context.Context, st VehicleState) error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.States[st.VehicleID] = st
+	return nil
+}
+
+func (f *FakeStore) MarkVehicleOffline(_ context.Context, vehicleID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if st, ok := f.States[vehicleID]; ok {
+		st.SessionOnline = false
+		f.States[vehicleID] = st
+	}
 	return nil
 }
 

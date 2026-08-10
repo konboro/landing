@@ -89,7 +89,21 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) {
 
 	sess := session.New(imei, dev, conn)
 	s.reg.Add(sess)
-	defer s.reg.Remove(sess)
+	defer func() {
+		s.reg.Remove(sess)
+		// The flag is only ever written true on ingest, so if the session end does
+		// not clear it the vehicle stays "online" for good — visible to riders on a
+		// map it is no longer on. Uses a fresh context: ctx is usually already
+		// cancelled by the time we get here.
+		if dev.VehicleID != "" {
+			offCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := s.store.MarkVehicleOffline(offCtx, dev.VehicleID); err != nil {
+				log.Printf("[server] mark offline imei=%s: %v", imei, err)
+			}
+		}
+		log.Printf("[server] session down imei=%s vehicle=%s", imei, dev.VehicleID)
+	}()
 	log.Printf("[server] session up imei=%s vehicle=%s", imei, dev.VehicleID)
 
 	for {
