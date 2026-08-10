@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { getDataSource, dataSourceMode, type DataSource } from '@/data/api';
+import { getDataSource, type DataSource } from '@/data/api';
 import { Spinner } from '@/components/ui/primitives';
 
 const Ctx = createContext<DataSource | null>(null);
@@ -23,7 +23,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
           <div style={{ fontSize: 32 }}>⚠️</div>
           <h2>Data source failed to initialize</h2>
           <p className="muted">{error}</p>
-          <p className="muted">Running mode: <b>{dataSourceMode()}</b>. Set <code className="mono">VITE_DATA_SOURCE=mock</code> to run standalone.</p>
+          <p className="muted">
+            Check <code className="mono">VITE_SUPABASE_URL</code> and{' '}
+            <code className="mono">VITE_SUPABASE_ANON_KEY</code>. There is no offline
+            mode — the panel only ever shows live data.
+          </p>
         </div>
       </div>
     );

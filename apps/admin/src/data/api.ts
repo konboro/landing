@@ -1,7 +1,7 @@
-// DataSource abstraction. MockDataSource (default) runs the panel standalone;
-// SupabaseDataSource wires @penny/api-client + edge functions for production.
+// DataSource abstraction. There is one implementation — SupabaseDataSource,
+// wiring @penny/api-client + edge functions against the live project.
 import type { Page, QueryParams } from './query';
-import type { MockDb } from './mock/db';
+import type { PanelData } from './panelData';
 import type {
   Command,
   VehicleAlert,
@@ -33,6 +33,8 @@ import type {
   SimEvent,
   SimInventoryRow,
   SimUsageDay,
+  BroadcastRow,
+  CustomerGroupRow,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -51,7 +53,7 @@ export interface VehicleDetail {
   alerts: VehicleAlert[];
   rides: RideRow[];
   damage: DamageReport[];
-  device: MockDb['devices'][number] | null;
+  device: PanelData['devices'][number] | null;
 }
 
 export interface CustomerDetail {
@@ -68,6 +70,52 @@ export interface VehicleHistory {
   stats: VehicleStats;
   rides: Page<VehicleRideHistoryRow>;
   timeline: TimelineEvent[];
+}
+
+export type BroadcastChannel = 'inbox' | 'popup' | 'push';
+
+export type BroadcastAudience =
+  | { kind: 'all' }
+  | { kind: 'group'; group_id: string }
+  | { kind: 'users'; user_ids: string[] };
+
+export interface BroadcastInput {
+  title: string;
+  body: string;
+  deep_link?: string | null;
+  channels: BroadcastChannel[];
+  /** 'marketing' is consent-filtered per recipient, server-side. */
+  category: 'transactional' | 'marketing';
+  audience: BroadcastAudience;
+  /** Pop-ups only: stop interrupting after this instant. */
+  expires_at?: string | null;
+  reason?: string;
+}
+
+/** What a send (or a dry run) reached. */
+export interface BroadcastResult {
+  broadcast_id?: string;
+  preview?: boolean;
+  recipients: number;
+  reach?: Record<BroadcastChannel, number>;
+  delivered?: number;
+  push_sent?: number;
+  push_failed?: number;
+  push_devices?: number;
+  errors?: string[];
+}
+
+export interface CreateVehicleInput {
+  code: string;
+  model_id: UUID;
+  city_id?: string | null;
+  plate?: string | null;
+  vin?: string | null;
+  notes?: string | null;
+  /** Links an already-provisioned device by IMEI (Hard Rule #7: the IMEI lives
+   *  on `devices`, never on the vehicle row). */
+  imei?: string | null;
+  status?: string;
 }
 
 export interface AdminChargeInput {
@@ -153,7 +201,7 @@ export interface ChatMessage {
 export type BrandConfig = Record<string, unknown>;
 
 export interface DataSource {
-  readonly kind: 'mock' | 'supabase';
+  readonly kind: 'supabase';
 
   // Dashboard
   getKpis(): Promise<KpiSnapshot>;
@@ -173,6 +221,12 @@ export interface DataSource {
   getVehicle(id: string): Promise<VehicleDetail | null>;
   sendCommand(vehicleId: string, kind: string, payload?: Record<string, unknown>): Promise<Command>;
   setVehicleStatus(vehicleId: string, status: string, reason: string): Promise<void>;
+  /** Models + cities for the "add vehicle" form. */
+  listVehicleModels(): Promise<Array<{ id: string; name: string }>>;
+  createVehicle(input: CreateVehicleInput): Promise<{ id: string; code: string }>;
+  /** `decommission` keeps the row and every trip pointing at it; `purge`
+   *  really deletes and is refused server-side once the vehicle has history. */
+  removeVehicle(vehicleId: string, reason: string, mode: 'decommission' | 'purge'): Promise<void>;
 
   // Vehicle — exhaustive history (edge fn `admin-vehicle-history`)
   getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory>;
@@ -217,10 +271,17 @@ export interface DataSource {
   saveZoneVersion(zones: Zone[], reason: string): Promise<number>;
 
   // Everything else (pricing, marketing, fleet, finance, team, settings, analytics)
-  getPanelData(): Promise<MockDb>;
+  getPanelData(): Promise<PanelData>;
 
   // Global search
   search(q: string): Promise<SearchResult[]>;
+
+  // Notifications / pop-ups / push (docs/12)
+  listCustomerGroups(): Promise<CustomerGroupRow[]>;
+  listBroadcasts(params: QueryParams): Promise<Page<BroadcastRow>>;
+  /** `preview` resolves the audience and reports reach without sending. */
+  previewBroadcast(input: BroadcastInput): Promise<BroadcastResult>;
+  sendBroadcast(input: BroadcastInput): Promise<BroadcastResult>;
 
   // Audit
   logAudit(input: AuditInput): Promise<AuditLogEntry>;
@@ -237,20 +298,14 @@ export interface SearchResult {
 
 let instance: DataSource | null = null;
 
+// There is exactly one data source: the live project. The mock source is gone on
+// purpose — it used to be the DEFAULT whenever VITE_DATA_SOURCE was unset, so a
+// deploy that merely forgot the variable served a panel full of invented rides,
+// revenue and customers with nothing on screen saying so. A panel that cannot
+// reach the backend has to look broken, not busy.
 export async function getDataSource(): Promise<DataSource> {
   if (instance) return instance;
-  const mode = (import.meta.env.VITE_DATA_SOURCE ?? 'mock') as 'mock' | 'supabase';
-  if (mode === 'supabase') {
-    const { SupabaseDataSource } = await import('./supabaseSource');
-    instance = new SupabaseDataSource();
-  } else {
-    const { MockDataSource } = await import('./mockSource');
-    instance = new MockDataSource();
-  }
+  const { SupabaseDataSource } = await import('./supabaseSource');
+  instance = new SupabaseDataSource();
   return instance;
-}
-
-// Convenience for non-async call sites once initialized.
-export function dataSourceMode(): 'mock' | 'supabase' {
-  return (import.meta.env.VITE_DATA_SOURCE ?? 'mock') as 'mock' | 'supabase';
 }

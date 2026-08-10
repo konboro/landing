@@ -30,11 +30,6 @@ export interface AdminAuth {
 
 let cached: AdminAuth | null = null;
 
-/** True when the panel is pointed at a real Supabase project. */
-export function isLiveMode(): boolean {
-  return (import.meta.env.VITE_DATA_SOURCE ?? 'mock') === 'supabase';
-}
-
 export function getSupabaseAuth(): AdminAuth {
   if (cached) return cached;
 

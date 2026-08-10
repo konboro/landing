@@ -23,7 +23,7 @@ import type {
   ChatMessage,
 } from './api';
 import type { Page, QueryParams } from './query';
-import type { MockDb } from './mock/db';
+import type { PanelData } from './panelData';
 import type { Command, VehicleAlert, Zone, TripEvent, LngLat } from '@penny/db-types';
 import type {
   KpiSnapshot,
@@ -189,7 +189,7 @@ export class SupabaseDataSource implements DataSource {
       rows<VehicleAlert>('vehicle_alerts', { vehicle_id: id }, 100, 'created_at'),
       rows<RideRow>('v_admin_rides', { vehicle_id: id }, 25, 'started_at'),
       rows<DamageReport>('damage_reports', { vehicle_id: id }, 50, 'created_at'),
-      rows<MockDb['devices'][number]>('devices', { vehicle_id: id }, 1),
+      rows<PanelData['devices'][number]>('devices', { vehicle_id: id }, 1),
     ]);
 
     return {
@@ -261,7 +261,7 @@ export class SupabaseDataSource implements DataSource {
    * Collections with no backing table yet resolve to empty, never to invented
    * rows: an empty page is the truth, a populated fake one is not.
    */
-  async getPanelData(): Promise<MockDb> {
+  async getPanelData(): Promise<PanelData> {
     const [panel, kpis, sims] = await Promise.all([
       this.invoke<Record<string, unknown>>('admin-panel-data', {}),
       this.getKpis(),
@@ -288,7 +288,7 @@ export class SupabaseDataSource implements DataSource {
       simCostSummary: await this.getSimCostSummary().catch(() => []),
       simLastSyncAt: null,
 
-      brandConfig: (await this.getBrandConfig().catch(() => null)) as MockDb['brandConfig'],
+      brandConfig: (await this.getBrandConfig().catch(() => null)) as PanelData['brandConfig'],
 
       customers: arr('customers'),
       rides: arr('rides'),
@@ -346,7 +346,7 @@ export class SupabaseDataSource implements DataSource {
       maintenanceLog: arr('maintenanceLog'),
       batterySwaps: arr('batterySwaps'),
       auditLog: arr('auditLog'),
-    } as MockDb;
+    } as PanelData;
   }
 
   /* ---- Rich profile / history / KYC (dedicated edge functions) ----
