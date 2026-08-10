@@ -98,9 +98,10 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     all(admin, 'trip_events', { order: 'at', limit: 1000 }),
   ]);
 
-  // `penalties` is not a table — it is a jsonb catalogue inside app_config.
-  const penaltiesRow = appConfig.find((r) => r.key === 'penalties');
-  const penalties = Array.isArray(penaltiesRow?.value) ? penaltiesRow!.value : [];
+  // Its own table since migration 00490. It used to be a jsonb object under
+  // app_config.penalties, read here through an Array.isArray guard it could
+  // never satisfy — so the catalogue rendered empty whatever was configured.
+  const penalties = await all(admin, 'penalties', { order: 'code', asc: true });
 
   // trip_events keyed by trip, the shape the ride timeline expects.
   const tripEvents: Record<string, unknown[]> = {};

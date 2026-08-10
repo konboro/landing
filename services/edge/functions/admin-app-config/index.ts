@@ -21,7 +21,9 @@ const WRITABLE_KEYS = new Set([
   'night_hours',
   'photo_ai_threshold',
   'hold_cents',
-  'penalties',
+  // 'penalties' lived here until migration 00490 and is now its own table,
+  // edited through admin-write. Left out deliberately: re-adding the key would
+  // recreate a second catalogue that nothing reads.
   'station_mode',
 ]);
 

@@ -49,9 +49,15 @@ Free minutes (config, default 10, then per-min reserve fee), max 15 min → auto
 
 `pricing_plans.dynamic` jsonb: `{happy_hours:[{dow,from,to,multiplier}], demand:{enabled,cell_size_m,thresholds}}`. Demand multiplier computed per grid cell from live idle-vehicle density vs trailing demand; shown BEFORE unlock (transparency; cap 1.5×).
 
-## Penalties catalogue (config table `app_config.penalties`)
+## Penalties catalogue (table `penalties`)
 
 bad parking, no_go riding, abandoned outside operating zone (recovery fee tiers by distance), damage (from damage_reports after review). All penalties = `payments.kind='penalty'` with photo evidence + appeal path.
+
+Row per penalty: `code` (stable key used in charges and appeals), `label`, `tiers_cents int[]` (escalation by offence count, first tier may be 0 for a warning), `requires_photo`, `appealable`, `active`. Edited in Admin → Pricing → Penalties through `admin-write`, so each change is audited individually.
+
+Moved out of `app_config.penalties` in migration 00490. The jsonb object there could not carry the per-penalty flags this table needs, and one blob meant one audit entry for the whole catalogue. The configured amounts were imported unchanged.
+
+The catalogue is **advisory**: nothing charges from it automatically. A penalty is raised by `admin-charge` with an explicit amount and a mandatory reason, so editing a tier changes what operators are shown, not what anyone is billed.
 
 ## Heatmaps (requested)
 
