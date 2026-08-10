@@ -13,8 +13,9 @@ import type {
   PricingSnapshot,
   KycStatus,
 } from '@penny/db-types';
-import { estimateRangeM, OPERATING_CITY, OPERATING_BBOX } from '@penny/geo';
+import { estimateRangeM, haversine, OPERATING_CITY, OPERATING_BBOX } from '@penny/geo';
 import type { Lang } from '../../i18n';
+import { ZONE_COLUMNS, normalizeZoneRows, type RawZoneRow } from '../zones';
 import { uuid } from '../../lib/ids';
 import { StripeSvc } from '../../lib/native';
 import {
@@ -236,6 +237,10 @@ function monthLabel(key: string, short = false): string {
 export class SupabaseRiderApi implements RiderApi {
   readonly source = 'supabase' as const;
   private _client: PennyClient | null = null;
+  private _cities: Promise<City[]> | null = null;
+  /** Last position a screen resolved a city against — lets `getZones()` pick the
+   *  right city without every caller having to thread a position through. */
+  private lastKnownPos: LngLat | null = null;
 
   private get client(): PennyClient {
     if (!this._client) this._client = makeClient();
@@ -390,6 +395,8 @@ export class SupabaseRiderApi implements RiderApi {
   async logout(): Promise<void> {
     await this.client.supabase.auth.signOut();
     this._client = null;
+    this._cities = null;
+    this.lastKnownPos = null;
   }
 
   async deleteAccount(): Promise<void> {
@@ -399,17 +406,82 @@ export class SupabaseRiderApi implements RiderApi {
 
   /* --------------------------------- fleet -------------------------------- */
 
-  async getCity(): Promise<City> {
-    const { data } = await this.client.supabase.from('cities').select('*').limit(1).maybeSingle();
-    if (!data) return { id: '', name: 'Athens', center: OPERATING_CITY.center, default_zoom: 14, station_mode: false };
-    const d = data as any;
-    return {
-      id: d.id,
-      name: d.name,
-      center: d.center?.coordinates ?? OPERATING_CITY.center,
-      default_zoom: d.default_zoom ?? 14,
-      station_mode: !!d.station_mode,
-    };
+  async getCity(pos?: LngLat): Promise<City> {
+    if (pos) this.lastKnownPos = pos;
+    const cities = await this.cities();
+    if (cities.length === 0) {
+      return {
+        id: '',
+        // The fallback is the operating city, not a hard-coded 'Athens' — that
+        // literal outlived the move to Thessaloniki and mislabelled the map.
+        name: OPERATING_CITY.name,
+        center: OPERATING_CITY.center,
+        default_zoom: 14,
+        station_mode: false,
+      };
+    }
+    // `.limit(1)` with no ordering picked whichever row Postgres happened to
+    // return, which is the wrong city the moment there is more than one. When
+    // we know where the rider is, the nearest centre is the answer; otherwise
+    // fall back to a stable, ordered pick rather than an arbitrary one.
+    const anchor = pos ?? this.lastKnownPos;
+    if (!anchor) return cities[0]!;
+    return cities.reduce((best, c) =>
+      haversine(anchor, c.center) < haversine(anchor, best.center) ? c : best,
+    );
+  }
+
+  /** `cities` is tiny and effectively static for a session — read it once. */
+  private async cities(): Promise<City[]> {
+    if (!this._cities) {
+      this._cities = (async () => {
+        const { data, error } = await this.client.supabase
+          .from('cities')
+          .select('id,name,center,default_zoom')
+          .order('name');
+        if (error) return [];
+        return ((data ?? []) as Record<string, unknown>[]).map((d) => {
+          const centre = (d.center as { coordinates?: LngLat } | null)?.coordinates;
+          return {
+            id: String(d.id ?? ''),
+            name: String(d.name ?? OPERATING_CITY.name),
+            center: Array.isArray(centre) ? centre : OPERATING_CITY.center,
+            default_zoom: typeof d.default_zoom === 'number' ? d.default_zoom : 14,
+            // No `cities.station_mode` column exists yet (docs/04 describes
+            // station-mode cities; the schema has not caught up). Reading a
+            // missing column would fail the whole read, so it stays false here
+            // and the server remains the only thing that enforces it.
+            station_mode: false,
+          };
+        });
+      })();
+    }
+    return this._cities;
+  }
+
+  /**
+   * Zones for the rider's city that are in force right now.
+   *
+   * Was `select(...).eq('active', true)` and nothing else: every zone of every
+   * city, whatever its validity window, downloaded to every rider. Both filters
+   * are pushed into the query so the rows never travel, and re-applied in
+   * `normalizeZoneRows` so a source that skips one cannot leak past it.
+   *
+   * UX only. The trip-end and unlock decisions stay in the edge functions
+   * (Hard Rule #3) — nothing here is allowed to overrule the server's answer.
+   */
+  async getZones(): Promise<MapZone[]> {
+    const city = await this.getCity();
+    const nowIso = new Date().toISOString();
+    let q = this.client.supabase.from('zones').select(ZONE_COLUMNS).eq('active', true);
+    if (city.id) q = q.eq('city_id', city.id);
+    // Two `.or(...)` groups: PostgREST ANDs them, so this is
+    // (valid_from IS NULL OR valid_from <= now) AND (valid_to IS NULL OR valid_to >= now).
+    const { data, error } = await q
+      .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
+      .or(`valid_to.is.null,valid_to.gte.${nowIso}`);
+    if (error) throw new RiderApiError('zones_unavailable', error.message);
+    return normalizeZoneRows((data ?? []) as RawZoneRow[], { cityId: city.id || null });
   }
 
   async getVehicles(): Promise<MapVehicle[]> {
@@ -423,20 +495,6 @@ export class SupabaseRiderApi implements RiderApi {
   async getVehicle(code: string): Promise<MapVehicle | null> {
     const all = await this.getVehicles();
     return all.find((v) => v.code.toUpperCase() === code.toUpperCase()) ?? null;
-  }
-
-  async getZones(): Promise<MapZone[]> {
-    const { data } = await this.client.supabase
-      .from('zones')
-      .select('id,kind,name,geom,rules')
-      .eq('active', true);
-    return ((data ?? []) as any[]).map((z) => ({
-      id: z.id,
-      kind: z.kind,
-      name: z.name ?? null,
-      geom: z.geom,
-      rules: z.rules ?? {},
-    }));
   }
 
   async getPois(): Promise<MapPoi[]> {

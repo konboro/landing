@@ -18,6 +18,7 @@ import Svg, { Polygon as SvgPolygon, Circle as SvgCircle } from 'react-native-sv
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { LngLat } from '@penny/db-types';
+import { haversine, OPERATING_CITY } from '@penny/geo';
 import { useTheme, makeStyles, withAlpha, type OpsTheme } from '../../brand';
 import {
   BottomSheet,
@@ -33,8 +34,41 @@ import { useMirror } from '../../lib/useMirror';
 import { getZones, getHeatCells } from '../../offline/repo';
 import { hasMapboxToken, env } from '../../lib/env';
 import { getCurrentPos } from '../../lib/geoloc';
-import { ATHENS_CENTER } from '../../services/mockData';
 import type { HeatCell, RebalanceZone } from '../../lib/types';
+import {
+  zoneLayerOf,
+  sortZonesForDrawing,
+  ZONE_LAYER_ORDER,
+  type ZoneLayerKey,
+} from '../../lib/zones';
+
+/**
+ * Where the map looks before it has anything of its own to look at.
+ *
+ * This screen used to open on `ATHENS_CENTER` from the mock data module —
+ * literally Athens, 300 km from the live fleet in Thessaloniki. A crew opening
+ * Place saw an empty map of the wrong city. `OPERATING_CITY` is the one constant
+ * that moved with the service (`packages/geo`), and it is only a fallback: the
+ * camera prefers the zones and cells actually loaded.
+ */
+const CITY_FALLBACK: LngLat = [...OPERATING_CITY.center] as LngLat;
+
+/**
+ * How far from the map's anchor a zone may sit and still stretch the auto-fit
+ * bounds. The live database holds a 202 km² test zone centred on Wrocław filed
+ * against the Thessaloniki city id; without this the schematic view scaled from
+ * Greece to Poland and every real zone shrank to a dot. FRAMING ONLY — a far
+ * zone is still drawn, still listed and still counted.
+ */
+const FRAME_RADIUS_M = 150_000;
+
+/** The subset of points allowed to set the scale. */
+function framingPoints(points: LngLat[], anchor: LngLat): LngLat[] {
+  const near = points.filter((p) => haversine(anchor, p) <= FRAME_RADIUS_M);
+  // If literally everything is far away the operator has moved, not the data —
+  // frame what there is rather than showing an empty box.
+  return near.length > 0 ? near : points;
+}
 
 // --- Mapbox guard (same degradation contract as components/FleetMap.tsx) -----
 // The native module is optional: in Expo Go, or in any build without a public
@@ -62,33 +96,15 @@ try {
 }
 
 // --- Zone classification ----------------------------------------------------
-type ZoneLayerKey = 'operating' | 'parking' | 'nogo' | 'rebalance';
+// The kind → layer mapping now lives in `lib/zones` so the main fleet map uses
+// the same four buckets this screen does.
 type ZoneLayers = Record<ZoneLayerKey, boolean>;
 
-/**
- * The mirror stores each zone as opaque JSON, so a backend that already tags a
- * row with `zones.kind` (docs/04) round-trips the field even though
- * `RebalanceZone` does not declare it. Read it when it is there; everything the
- * local mock generates is a rebalancing zone, which is the fallback.
- */
-type MirrorZone = RebalanceZone & { kind?: string };
+/** `RebalanceZone` already declares `kind` as optional; this alias is kept for
+ *  readability at the call sites that treat a zone as a mirrored row. */
+type MirrorZone = RebalanceZone;
 
-const KIND_TO_LAYER: Record<string, ZoneLayerKey> = {
-  operating: 'operating',
-  speed_limit: 'operating',
-  parking: 'parking',
-  paid_parking: 'parking',
-  parking_station: 'parking',
-  charging_station: 'parking',
-  bonus: 'parking',
-  no_go: 'nogo',
-  no_parking: 'nogo',
-  rebalancing: 'rebalance',
-};
-
-function layerOf(z: MirrorZone): ZoneLayerKey {
-  return (z.kind ? KIND_TO_LAYER[z.kind] : undefined) ?? 'rebalance';
-}
+const layerOf = zoneLayerOf;
 
 interface LayerDef {
   key: ZoneLayerKey;
@@ -204,7 +220,7 @@ function zonePoints(z: MirrorZone): LngLat[] {
 
 function zoneCenter(z: MirrorZone): LngLat {
   const b = boundsOf(zonePoints(z));
-  if (!b) return ATHENS_CENTER;
+  if (!b) return CITY_FALLBACK;
   return [(b.minLng + b.maxLng) / 2, (b.minLat + b.maxLat) / 2];
 }
 
@@ -248,7 +264,7 @@ export default function PlaceTab() {
   // One sheet at a time: BottomSheet is a Modal, and two stacked modals on
   // Android eat each other's back-button handling.
   const [sheet, setSheet] = useState<'summary' | 'layers' | null>(null);
-  const [center, setCenter] = useState<LngLat>(ATHENS_CENTER);
+  const [center, setCenter] = useState<LngLat | null>(null);
   const [locating, setLocating] = useState(false);
 
   const drawnZones = useMemo(() => zones.filter((z) => layers[layerOf(z)]), [zones, layers]);
@@ -266,6 +282,22 @@ export default function PlaceTab() {
   );
   const busiest = useMemo(() => [...heat].sort((a, b) => b.idle_count - a.idle_count).slice(0, 8), [heat]);
   const totalIdle = useMemo(() => heat.reduce((s, h) => s + h.idle_count, 0), [heat]);
+
+  /**
+   * Where the camera points: the operator's own fix if they asked for it, else
+   * the middle of the zones actually loaded, else the operating city. Never a
+   * hard-coded Athens — that constant outlived the move to Thessaloniki and
+   * opened this screen 300 km from the fleet.
+   */
+  const mapCenter: LngLat = useMemo(() => {
+    if (center) return center;
+    const pts = zones.flatMap(zonePoints);
+    if (pts.length === 0) return CITY_FALLBACK;
+    // Anchored on the city so one mis-filed foreign polygon cannot drag the
+    // opening view abroad.
+    const b = boundsOf(framingPoints(pts, CITY_FALLBACK));
+    return b ? [(b.minLng + b.maxLng) / 2, (b.minLat + b.maxLat) / 2] : CITY_FALLBACK;
+  }, [center, zones]);
 
   const locateMe = useCallback(() => {
     setLocating(true);
@@ -291,9 +323,9 @@ export default function PlaceTab() {
   return (
     <View style={st.root}>
       {nativeAvailable ? (
-        <NativeCanvas mode={mode} zones={drawnZones} heat={heat} center={center} layers={layers} />
+        <NativeCanvas mode={mode} zones={drawnZones} heat={heat} center={mapCenter} layers={layers} />
       ) : (
-        <FallbackCanvas mode={mode} zones={drawnZones} heat={heat} />
+        <FallbackCanvas mode={mode} zones={drawnZones} heat={heat} anchor={mapCenter} />
       )}
 
       {/* --- floating chrome --------------------------------------------- */}
@@ -423,7 +455,12 @@ function NativeCanvas({
       <Camera zoomLevel={12.5} centerCoordinate={center} animationDuration={600} />
 
       {mode === 'place'
-        ? LAYER_DEFS.filter((d) => layers[d.key]).map((def) => {
+        ? // Sorted, not in LAYER_DEFS order: that put `rebalance` last and so
+          // painted a rebalancing zone on top of the no-go areas inside it.
+          LAYER_DEFS.filter((d) => layers[d.key])
+            .slice()
+            .sort((a, b) => ZONE_LAYER_ORDER.indexOf(a.key) - ZONE_LAYER_ORDER.indexOf(b.key))
+            .map((def) => {
             const group = zones.filter((z) => layerOf(z) === def.key);
             if (group.length === 0) return null;
             const tint = def.color(theme);
@@ -514,10 +551,13 @@ function FallbackCanvas({
   mode,
   zones,
   heat,
+  anchor,
 }: {
   mode: 'place' | 'heatmap';
   zones: MirrorZone[];
   heat: HeatCell[];
+  /** What "nearby" means when deciding which shapes may set the scale. */
+  anchor: LngLat;
 }) {
   const theme = useTheme();
   const st = useStyles(theme);
@@ -529,8 +569,10 @@ function FallbackCanvas({
 
   const shown = useMemo(() => {
     const pts: LngLat[] = mode === 'place' ? zones.flatMap(zonePoints) : heat.map((h) => h.center);
-    return boundsOf(pts.length > 0 ? pts : [ATHENS_CENTER]);
-  }, [mode, zones, heat]);
+    // A single foreign polygon used to set the scale for the whole plot; see
+    // FRAME_RADIUS_M. Everything is still drawn, only the fit is anchored.
+    return boundsOf(pts.length > 0 ? framingPoints(pts, anchor) : [anchor]);
+  }, [mode, zones, heat, anchor]);
 
   const project = useMemo(() => {
     if (!shown || box.w === 0 || box.h === 0) return null;
@@ -559,7 +601,7 @@ function FallbackCanvas({
       {project && box.w > 0 ? (
         <Svg width={box.w} height={box.h} style={st.plot}>
           {mode === 'place'
-            ? zones.map((z) => {
+            ? sortZonesForDrawing(zones).map((z) => {
                 const def = LAYER_DEFS.find((d) => d.key === layerOf(z)) ?? LAYER_DEFS[3]!;
                 const tint = def.color(theme);
                 return z.geom.coordinates.map((ring, ri) => (

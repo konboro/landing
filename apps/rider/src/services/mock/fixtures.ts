@@ -151,6 +151,23 @@ export function makeZones(): MapZone[] {
       geom: { type: 'Polygon', coordinates: rect(22.9455, 40.6291, 0.003, 0.002) },
       rules: { station_capacity: 12 },
     },
+    // The last two kinds `zone_kind` can hold. They were missing here, so mock
+    // mode could never show that the map styled only eight of the ten — a
+    // charging station drew as nothing and a rebalancing zone drew as parking.
+    {
+      id: 'zone-charging-kamara',
+      kind: 'charging_station',
+      name: 'Kamara charging station',
+      geom: { type: 'Polygon', coordinates: rect(22.9519, 40.6330, 0.0025, 0.002) },
+      rules: { station_capacity: 8 },
+    },
+    {
+      id: 'zone-rebalancing-west',
+      kind: 'rebalancing',
+      name: 'West waterfront rebalancing',
+      geom: { type: 'Polygon', coordinates: rect(22.9250, 40.6300, 0.008, 0.005) },
+      rules: { target_count: 10 },
+    },
   ];
 }
 

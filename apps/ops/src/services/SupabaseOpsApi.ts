@@ -131,7 +131,7 @@ const SEL = {
   alerts: 'id,vehicle_id,kind,payload,created_at',
   tasks:
     'id,kind,vehicle_id,zone_id,priority,status,assignee,due_at,checklist,photos,notes,created_by,completed_at,created_at',
-  zones: 'id,city_id,kind,name,geom,rules,active',
+  zones: 'id,city_id,kind,name,geom,rules,active,valid_from,valid_to',
   damage:
     'id,vehicle_id,reporter,user_id,trip_id,description,photos,severity,status,linked_task_id,penalty_payment_id,part,created_at',
   statusLog: 'id,vehicle_id,from_status,to_status,by,role,reason,photos,pos,at',
@@ -191,6 +191,25 @@ async function rows<T>(label: string, q: PromiseLike<QueryResult>): Promise<T[]>
     console.warn(`[ops] read failed: ${label} — ${(e as Error).message}`);
     return [];
   }
+}
+
+/**
+ * The `zones` read, with all three filters in the query rather than in the app.
+ *
+ * `city_scope` is null for a national operator, which legitimately means "every
+ * city" — so an empty scope adds no filter, and a set one restricts. The window
+ * uses two `.or(...)` groups; PostgREST ANDs them, giving
+ * (valid_from IS NULL OR valid_from <= now) AND (valid_to IS NULL OR valid_to >= now).
+ */
+function zoneQuery(db: PennyClient['supabase'], session: StaffSession) {
+  const nowIso = new Date().toISOString();
+  let q = db.from('zones').select(SEL.zones).eq('active', true);
+  const scope = session.city_scope;
+  if (scope && scope.length > 0) q = q.in('city_id', scope);
+  return q
+    .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
+    .or(`valid_to.is.null,valid_to.gte.${nowIso}`)
+    .limit(CAP.zones);
 }
 
 export class SupabaseOpsApi implements OpsApi {
@@ -263,8 +282,11 @@ export class SupabaseOpsApi implements OpsApi {
       rows<OpsTask>('ops_tasks', db.from('ops_tasks').select(SEL.tasks)
         .order('priority', { ascending: false }).order('created_at', { ascending: false }).limit(CAP.tasks)),
       // Inactive zones are drafts and retired versions; drawing them would put
-      // rules on the map that the server does not enforce.
-      rows<ZoneRow>('zones', db.from('zones').select(SEL.zones).eq('active', true).limit(CAP.zones)),
+      // rules on the map that the server does not enforce. Same for a zone whose
+      // validity window has not opened or has already closed, and for another
+      // city's — a crew scoped to one city was downloading every city's
+      // geometry and drawing it over their own.
+      rows<ZoneRow>('zones', zoneQuery(db, session)),
       rows<DamageRow>('damage_reports', db.from('damage_reports').select(SEL.damage)
         .order('created_at', { ascending: false }).limit(CAP.damage)),
       rows<StatusLogRow>('vehicle_status_log', db.from('vehicle_status_log').select(SEL.statusLog)
@@ -289,8 +311,9 @@ export class SupabaseOpsApi implements OpsApi {
       vehicles: fleet,
       tasks: taskRows.map(toTask),
       // Counts and demand are computed against the fleet we just read; see
-      // buildZones for what the DB does and does not store.
-      zones: buildZones(zoneRows, fleet),
+      // buildZones for what the DB does and does not store. The scope and the
+      // window are re-applied there so the mirrored copy carries the same rule.
+      zones: buildZones(zoneRows, fleet, { cityScope: session.city_scope }),
       damageReports: damageRows.map(toDamage),
       statusLog: statusRows.map(toStatusLog),
       batterySwaps: swapRows.map(toSwap),

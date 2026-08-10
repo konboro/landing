@@ -12,6 +12,7 @@ import { useT } from '../../i18n';
 import { useTrip } from '../../store/trip';
 import { useFlags } from '../../store/flags';
 import { FleetMap } from '../../components/map/FleetMap';
+import { ZoneLegend } from '../../components/map/ZoneLegend';
 import {
   T, Row, Button, Badge, Sheet, Banner, Icon, type IconName,
 } from '../../components/ui';
@@ -32,6 +33,7 @@ export default function MapScreen() {
   const [city, setCity] = useState<City | null>(null);
   const [vehicles, setVehicles] = useState<MapVehicle[]>([]);
   const [zones, setZones] = useState<MapZone[]>([]);
+  const [zonesFailed, setZonesFailed] = useState(false);
   const [pois, setPois] = useState<MapPoi[]>([]);
   const [userPos, setUserPos] = useState<LngLat | null>(null);
   const [selected, setSelected] = useState<MapVehicle | null>(null);
@@ -47,18 +49,22 @@ export default function MapScreen() {
   useEffect(() => {
     let unsub = () => {};
     (async () => {
-      const [c, vs, zs, ps, inbox] = await Promise.all([
+      // Settled, not `all`. One rejected read (zones now throws rather than
+      // silently returning an empty list) used to take the whole screen with it:
+      // `setLoading(false)` never ran and the map sat under a spinner forever.
+      const [c, vs, zs, ps, inbox] = await Promise.allSettled([
         api.getCity(),
         api.getVehicles(),
         api.getZones(),
         api.getPois(),
         api.getInbox(),
       ]);
-      setCity(c);
-      setVehicles(vs);
-      setZones(zs);
-      setPois(ps);
-      setInboxUnread(inbox.filter((m) => !m.read).length);
+      if (c.status === 'fulfilled') setCity(c.value);
+      if (vs.status === 'fulfilled') setVehicles(vs.value);
+      if (zs.status === 'fulfilled') setZones(zs.value);
+      else setZonesFailed(true);
+      if (ps.status === 'fulfilled') setPois(ps.value);
+      if (inbox.status === 'fulfilled') setInboxUnread(inbox.value.filter((m) => !m.read).length);
       setLoading(false);
       unsub = api.onVehiclesChange(setVehicles);
       if (!flags.askedLocation) setLocPrompt(true);
@@ -165,6 +171,23 @@ export default function MapScreen() {
           {inboxUnread > 0 ? <View style={styles.dot}><T variant="caption" color={theme.color.onPrimary} style={styles.dotTxt}>{inboxUnread}</T></View> : null}
         </Pressable>
       </View>
+
+      {/* Zone legend, under the top bar and only while the zone layer is on.
+          Without it the fills were unlabelled colour and "no parking" looked
+          much like "no riding". */}
+      {showLayers && zones.length > 0 ? (
+        <View style={[styles.legendWrap, { top: insets.top + 60 }]} pointerEvents="box-none">
+          <ZoneLegend zones={zones} />
+        </View>
+      ) : null}
+
+      {/* A failed zone read is not "this city has no rules" — say so, because
+          every zone banner downstream goes quiet when the list is empty. */}
+      {zonesFailed ? (
+        <View style={[styles.legendWrap, { top: insets.top + 60 }]}>
+          <Banner tone="neutral" icon="info" title={t('ride.zoneUnknown')} body={t('ride.zoneUnknownBody')} />
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.loading} pointerEvents="none"><ActivityIndicator color={theme.color.primary} /></View>
@@ -291,6 +314,7 @@ const useStyles = makeStyles((t) => ({
     backgroundColor: t.color.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   dotTxt: { fontWeight: '700', fontSize: 10 },
+  legendWrap: { position: 'absolute', left: t.space.lg, right: t.space.lg },
   loading: { position: 'absolute', top: 120, alignSelf: 'center' },
   sideControls: { position: 'absolute', right: t.space.lg, gap: t.space.md },
   round: { width: 46, height: 46, borderRadius: 23, backgroundColor: t.color.surface, alignItems: 'center', justifyContent: 'center', ...t.shadow.card },

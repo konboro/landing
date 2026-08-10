@@ -5,10 +5,10 @@ import { View, Pressable, StyleSheet } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import { OPERATING_BBOX } from '@penny/geo';
 import { useTheme, makeStyles } from '../../brand';
-import type { RiderTheme } from '../../brand';
 import { T } from '../ui';
 import { Icon } from '../ui/Icon';
 import { buildIndex, clustersFor } from './cluster';
+import { sortForDrawing, zoneStyle } from './zoneStyle';
 import type { FleetMapProps } from './types';
 
 const token = process.env.EXPO_PUBLIC_MAPBOX_TOKEN;
@@ -18,21 +18,6 @@ if (token) {
   } catch {
     /* ignore */
   }
-}
-
-function zoneFill(theme: RiderTheme, kind: string): string {
-  const c = theme.color;
-  const map: Record<string, string> = {
-    parking: c.zoneParking,
-    parking_station: c.zoneParking,
-    no_parking: c.zoneNoParking,
-    no_go: c.zoneNoGo,
-    bonus: c.zoneBonus,
-    paid_parking: c.zonePaidParking,
-    speed_limit: c.zoneSpeedLimit,
-    operating: c.zoneOperating,
-  };
-  return map[kind] ?? 'transparent';
 }
 
 export function MapboxFleetMap(props: FleetMapProps) {
@@ -45,17 +30,42 @@ export function MapboxFleetMap(props: FleetMapProps) {
   const index = useMemo(() => buildIndex(props.vehicles), [props.vehicles]);
   const clusters = useMemo(() => clustersFor(index, bbox, zoom), [index, bbox, zoom]);
 
-  const zoneFeatures = useMemo(
-    () => ({
-      type: 'FeatureCollection' as const,
-      features: (props.showZones === false ? [] : props.zones).map((z) => ({
-        type: 'Feature' as const,
-        properties: { kind: z.kind, color: zoneFill(theme, z.kind) },
-        geometry: z.geom,
-      })),
-    }),
-    [props.zones, props.showZones, theme],
-  );
+  /**
+   * One source per kind, emitted in draw order.
+   *
+   * The old code put every zone in a single source with one fill layer and one
+   * line layer above it. Mapbox then drew all fills first and all outlines
+   * after, so the city-wide `operating` outline was painted OVER a no-go zone's
+   * fill, and any zone whose kind had no colour became `'transparent'` — fetched
+   * and then invisible. Splitting by kind lets each get its real paint, and
+   * `sortForDrawing` guarantees restrictions land on top of what contains them.
+   */
+  const zoneGroups = useMemo(() => {
+    const zones = props.showZones === false ? [] : props.zones;
+    const order: string[] = [];
+    const byKind = new Map<string, typeof zones>();
+    for (const z of sortForDrawing(theme, zones)) {
+      const group = byKind.get(z.kind);
+      if (group) group.push(z);
+      else {
+        byKind.set(z.kind, [z]);
+        order.push(z.kind);
+      }
+    }
+    return order.map((kind) => ({
+      kind,
+      style: zoneStyle(theme, kind),
+      shape: {
+        type: 'FeatureCollection' as const,
+        features: byKind.get(kind)!.map((z) => ({
+          type: 'Feature' as const,
+          id: z.id,
+          properties: { kind: z.kind, name: z.name ?? '' },
+          geometry: z.geom,
+        })),
+      },
+    }));
+  }, [props.zones, props.showZones, theme]);
 
   return (
     <Mapbox.MapView
@@ -81,6 +91,39 @@ export function MapboxFleetMap(props: FleetMapProps) {
       />
       {props.userPos ? <Mapbox.UserLocation visible /> : null}
 
+      {/* Zones first: later children paint on top, and the rider's own route
+          must not end up buried under a zone fill. */}
+      {zoneGroups.map((g) => (
+        <Mapbox.ShapeSource key={g.kind} id={`zones-${g.kind}`} shape={g.shape as any}>
+          {[
+            // `operating` is outline-only, so it contributes no fill layer at
+            // all rather than a transparent one. Built as an array because
+            // ShapeSource's children are typed as elements, not `null`.
+            ...(g.style.fill === 'transparent'
+              ? []
+              : [
+                  <Mapbox.FillLayer
+                    key="fill"
+                    id={`zones-fill-${g.kind}`}
+                    style={{ fillColor: g.style.fill, fillOpacity: 1 } as any}
+                  />,
+                ]),
+            <Mapbox.LineLayer
+              key="line"
+              id={`zones-line-${g.kind}`}
+              style={
+                {
+                  lineColor: g.style.stroke,
+                  lineWidth: g.style.strokeWidth,
+                  lineOpacity: 0.9,
+                  ...(g.style.dashed ? { lineDasharray: [3, 2] } : {}),
+                } as any
+              }
+            />,
+          ]}
+        </Mapbox.ShapeSource>
+      ))}
+
       {props.route && props.route.length > 1 ? (
         <Mapbox.ShapeSource
           id="trip-route"
@@ -101,11 +144,6 @@ export function MapboxFleetMap(props: FleetMapProps) {
           />
         </Mapbox.ShapeSource>
       ) : null}
-
-      <Mapbox.ShapeSource id="zones" shape={zoneFeatures as any}>
-        <Mapbox.FillLayer id="zones-fill" style={{ fillColor: ['get', 'color'], fillOpacity: 0.6 } as any} />
-        <Mapbox.LineLayer id="zones-line" style={{ lineColor: ['get', 'color'], lineWidth: 1.5 } as any} />
-      </Mapbox.ShapeSource>
 
       {clusters.map((c) =>
         c.count > 1 ? (

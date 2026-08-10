@@ -11,6 +11,7 @@
 // gateway has never had a fix for) arrives as null, so every read of a position
 // has to survive that.
 import { pointInPolygon } from '@penny/geo';
+import { isZoneInForce } from '../lib/zones';
 import type {
   DamageReport,
   LngLat,
@@ -86,6 +87,9 @@ export interface ZoneRow {
   geom: GeoJson | null;
   rules: Record<string, unknown> | null;
   active: boolean;
+  /** Null on either side = unbounded. Selected by nobody before this. */
+  valid_from: string | null;
+  valid_to: string | null;
 }
 
 export interface StatusLogRow {
@@ -311,12 +315,24 @@ const DEMANDS: ReadonlySet<string> = new Set(['low', 'medium', 'high']);
 
 /** `zones` rows the ops app draws, with the rebalance counters it shows.
  *
- *  `kind` is not part of `RebalanceZone` but the Place screen reads it when it
- *  is there, so it is carried through rather than dropped. */
-export function buildZones(rows: ZoneRow[], vehicles: OpsVehicle[]): (RebalanceZone & { kind: string })[] {
+ *  `kind`, `city_id` and the validity window are carried through onto the
+ *  mirrored object: the Place screen buckets by kind, and the window has to
+ *  survive into SQLite or an offline crew keeps seeing an expired zone. */
+export function buildZones(
+  rows: ZoneRow[],
+  vehicles: OpsVehicle[],
+  opts: { cityScope?: string[] | null; nowMs?: number } = {},
+): (RebalanceZone & { kind: string })[] {
   const parked = vehicles.filter((v) => v.pos && !IN_USE.has(v.status));
+  const nowMs = opts.nowMs ?? Date.now();
+  const scope = opts.cityScope && opts.cityScope.length > 0 ? new Set(opts.cityScope) : null;
   const out: (RebalanceZone & { kind: string })[] = [];
   for (const z of rows) {
+    // Belt-and-braces on the query's own filters, so a caller that forgets one
+    // still cannot put another city's geometry (or a zone that is not in force)
+    // in front of a crew.
+    if (scope && z.city_id && !scope.has(z.city_id)) continue;
+    if (!isZoneInForce(z, nowMs)) continue;
     const geom = toPolygon(z.geom);
     if (!geom) continue; // a zone with no polygon cannot be drawn or counted
     const rules = z.rules ?? {};
@@ -338,6 +354,9 @@ export function buildZones(rows: ZoneRow[], vehicles: OpsVehicle[]): (RebalanceZ
       // rather than inventing a tier from the current headcount.
       demand: (DEMANDS.has(demandRaw) ? demandRaw : 'medium') as RebalanceZone['demand'],
       kind: z.kind,
+      city_id: z.city_id ?? null,
+      valid_from: z.valid_from ?? null,
+      valid_to: z.valid_to ?? null,
     });
   }
   return out;

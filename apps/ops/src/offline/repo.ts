@@ -21,6 +21,7 @@ import type { OpsTask, UUID, VehicleStatus } from '@penny/db-types';
 import { OpsTaskStatus } from '@penny/db-types';
 import { useOps } from '../lib/store';
 import { nowIso } from '../lib/ids';
+import { isZoneInForce } from '../lib/zones';
 
 // Shifts and task assignment are inherently "mine" — the screens ask for the
 // open shift, not for a staff id they would have to carry around. So this one
@@ -50,6 +51,16 @@ export async function seedFromBootstrap(b: Bootstrap): Promise<void> {
         [t.id, t.kind, t.status, t.vehicle_id, t.assignee, t.priority, t.created_by, JSON.stringify(t), b.server_time],
       );
     }
+    // Zones are REPLACED as a set, not merged row by row.
+    //
+    // Every other table here is append-mostly, so `INSERT OR REPLACE` is right
+    // for them. Zones are not: the snapshot is the complete list of what is in
+    // force, and a row that is gone from it has been deleted, deactivated, moved
+    // out of this crew's city scope, or has run past its validity window. Merging
+    // left those rows in SQLite forever — a no-go zone the operator retired
+    // months ago kept being drawn on the field map, and nothing short of "reset &
+    // reseed" could remove it. Deleting first makes the mirror match the server.
+    await db.runAsync(`DELETE FROM zones`);
     for (const z of b.zones) {
       await db.runAsync(`INSERT OR REPLACE INTO zones(id,json) VALUES(?,?)`, [z.id, JSON.stringify(z)]);
     }
@@ -135,10 +146,18 @@ export async function getTask(id: UUID): Promise<OpsTask | null> {
   return row ? parse<OpsTask>(row.json) : null;
 }
 
+/**
+ * Zones from the mirror, filtered to those in force RIGHT NOW.
+ *
+ * The window is re-checked on every read rather than only at seed time. A crew
+ * can be offline for a whole shift, and a zone that expires at noon has to stop
+ * being drawn at noon — not at the next successful sync.
+ */
 export async function getZones(): Promise<RebalanceZone[]> {
   const db = await getDb();
   const rows = await db.getAllAsync<{ json: string }>('SELECT json FROM zones');
-  return rows.map((r) => parse<RebalanceZone>(r.json));
+  const now = Date.now();
+  return rows.map((r) => parse<RebalanceZone>(r.json)).filter((z) => isZoneInForce(z, now));
 }
 
 export async function getDamageReports(): Promise<OpsDamageReport[]> {

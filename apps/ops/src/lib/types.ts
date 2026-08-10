@@ -48,6 +48,12 @@ export interface VehicleError {
 }
 
 // --- Rebalancing zone with target counts (docs/07 feature 1) ---
+//
+// Despite the name this carries EVERY `zones` row the crew is shown, not just
+// rebalancing ones — the Place screen buckets them by `kind`. The three fields
+// below were previously dropped on the way into the mirror, which is how a
+// zone scheduled for next month could be drawn today and never expire: the
+// offline copy had nothing left to re-check the window against.
 export interface RebalanceZone {
   id: UUID;
   name: string;
@@ -55,6 +61,13 @@ export interface RebalanceZone {
   target_count: number;
   current_count: number;
   demand: 'low' | 'medium' | 'high';
+  /** `zone_kind`. Optional: the local mock generates rebalancing zones only. */
+  kind?: string;
+  /** Kept so the mirror can tell whose city a cached zone belongs to. */
+  city_id?: UUID | null;
+  /** Validity window, null on either side meaning unbounded. */
+  valid_from?: ISOTimestamp | null;
+  valid_to?: ISOTimestamp | null;
 }
 
 // --- Idle heatmap cell ---
