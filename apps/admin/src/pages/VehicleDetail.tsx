@@ -11,6 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { MapView, type MapMarker } from '@/components/map/MapView';
 import { LineTrend, chartPalette } from '@/components/charts/Charts';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { IoMonitor } from '@/components/vehicle/IoMonitor';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/feedback';
 import { Qr } from '@/components/ui/Qr';
@@ -183,9 +184,12 @@ export function VehicleDetailPage() {
       ) : null}
 
       {tab === 'telemetry' ? (
+        <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+          <IoMonitor vehicleId={id!} />
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <Card><CardHeader title="Speed & battery" /><div className="card-pad"><LineTrend data={telemetry} xKey="t" series={[{ key: 'speed', name: 'Speed km/h', color: chartPalette[0]! }, { key: 'soc', name: 'Battery %', color: chartPalette[1]! }]} /></div></Card>
           <Card><CardHeader title="Voltage & GSM" /><div className="card-pad"><LineTrend data={telemetry} xKey="t" series={[{ key: 'volts', name: 'Batt V', color: chartPalette[4]! }, { key: 'gsm', name: 'GSM signal', color: chartPalette[2]! }]} /></div></Card>
+        </div>
         </div>
       ) : null}
 

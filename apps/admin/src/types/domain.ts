@@ -855,3 +855,24 @@ export interface CustomerGroupRow {
   name: string;
   members: number;
 }
+
+/** One telemetry frame's digital lines, as `v_vehicle_io` reports them.
+ *  A line is `null` unless its AVL element was actually present in the frame —
+ *  `*_reported` is what distinguishes "low" from "never measured". */
+export interface VehicleIoFrame {
+  vehicle_id: UUID;
+  device_id: UUID | null;
+  device_ts: ISOTimestamp | null;
+  at: ISOTimestamp;
+  din1: boolean | null;
+  dout1: boolean | null;
+  dout2: boolean | null;
+  din1_reported: boolean;
+  dout1_reported: boolean;
+  dout2_reported: boolean;
+  speed_kmh: number | null;
+  ext_voltage_mv: number | null;
+  batt_voltage_mv: number | null;
+  gsm_signal: number | null;
+  io: Record<string, number>;
+}

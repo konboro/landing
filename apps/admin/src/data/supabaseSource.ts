@@ -40,6 +40,7 @@ import type {
   UserProfileFull,
   UserRideHistoryRow,
   VehicleRideHistoryRow,
+  VehicleIoFrame,
   SumsubProfileBundle,
   TimelineEvent,
   SimAlert,
@@ -395,6 +396,12 @@ export class SupabaseDataSource implements DataSource {
     return this.invoke<SumsubProfileBundle>('sumsub-applicant', { user_id: userId, refresh: Boolean(opts?.refresh) });
   }
 
+  async getVehicleIo(vehicleId: string, limit = 1): Promise<VehicleIoFrame[]> {
+    const res = await this.invoke<{ rows: VehicleIoFrame[] }>('admin-list', {
+      view: 'v_vehicle_io', limit, offset: 0, filters: { vehicle_id: vehicleId },
+    });
+    return res.rows ?? [];
+  }
   async getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory> {
     return this.invoke<VehicleHistory>('admin-vehicle-history', {
       vehicle_id: vehicleId, ...SupabaseDataSource.pageBody(params),

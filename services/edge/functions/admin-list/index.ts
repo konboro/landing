@@ -81,6 +81,14 @@ const VIEWS: Record<string, ViewSpec> = {
     search: ['name'],
     defaultSort: { field: 'name', asc: true },
   },
+  // Digital lines per telemetry frame. Polled by the vehicle IO monitor, so
+  // keep the default sort newest-first — the panel asks for limit 1 to get
+  // "now" and a larger limit for the recent trace.
+  v_vehicle_io: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'at', asc: false },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],

@@ -26,6 +26,7 @@ import type {
   UserRideHistoryRow,
   VehicleRideHistoryRow,
   VehicleStats,
+  VehicleIoFrame,
   SumsubProfileBundle,
   TimelineEvent,
   SimAlert,
@@ -229,6 +230,9 @@ export interface DataSource {
   removeVehicle(vehicleId: string, reason: string, mode: 'decommission' | 'purge'): Promise<void>;
 
   // Vehicle — exhaustive history (edge fn `admin-vehicle-history`)
+  /** Digital lines (DIN1/DOUT1/DOUT2) newest-first. Each value is null
+   *  unless its AVL element was in the frame — see `VehicleIoFrame`. */
+  getVehicleIo(vehicleId: string, limit?: number): Promise<VehicleIoFrame[]>;
   getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory>;
   getVehicleRides(vehicleId: string, params: QueryParams): Promise<Page<VehicleRideHistoryRow>>;
   getVehicleTimeline(vehicleId: string, params: QueryParams): Promise<Page<TimelineEvent>>;

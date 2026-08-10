@@ -51,10 +51,17 @@ if (!existsSync(androidDir)) {
 
 console.log(`Building release APK (${abis})…`);
 execFileSync(
-  process.platform === 'win32' ? 'gradlew.bat' : './gradlew',
+  join(androidDir, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'),
   ['assembleRelease', `-PreactNativeArchitectures=${abis}`, '--no-daemon'],
   {
     cwd: androidDir,
+    // Two Windows traps in one line above: Node refuses to spawn a bare .bat
+    // (EINVAL) so it needs a shell, and once a shell resolves the command
+    // through PATH a relative 'gradlew.bat' stops being found. An absolute
+    // path satisfies both, and POSIX must not get the shell or the argument
+    // list is re-split on spaces.
+    shell: process.platform === 'win32',
+
     stdio: 'inherit',
     env: { ...process.env, EXPO_NO_METRO_WORKSPACE_ROOT: '1' },
   },
