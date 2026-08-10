@@ -120,6 +120,25 @@ const TABLES: Record<string, TableSpec> = {
     entity: 'app_content',
   },
 
+  // Which events page whom, on which channel, how often. Editable because the
+  // right throttle for a low-battery alert is something operations learns by
+  // running the fleet, not something that belongs in a migration.
+  notification_rules: {
+    permission: 'settings.edit',
+    columns: ['event_kind', 'condition', 'channels', 'recipients', 'throttle_s', 'digest', 'quiet_hours', 'active'],
+    deletable: false, softDeleteColumn: 'active',
+    entity: 'notification_rule',
+  },
+  translations: {
+    permission: 'settings.edit',
+    columns: ['lang', 'ns', 'key', 'value'],
+    // Keyed by (lang, ns, key) — the same string in three languages is three
+    // rows, which is the whole shape of a translation table.
+    pk: ['lang', 'ns', 'key'],
+    deletable: true,
+    entity: 'translation',
+  },
+
   /* ---- Team ---- */
   corporate_accounts: {
     permission: 'team.manage',

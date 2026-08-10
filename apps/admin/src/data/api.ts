@@ -116,7 +116,8 @@ export type ConfigKey = string | Record<string, string>;
 export type ConfigTable =
   | 'pricing_plans' | 'packages' | 'subscriptions' | 'addons' | 'penalties'
   | 'promo_codes' | 'customer_groups' | 'loyalty_tiers' | 'pois'
-  | 'faq_items' | 'app_content'
+  | 'faq_items' | 'app_content' | 'translations'
+  | 'notification_rules'
   | 'corporate_accounts' | 'staff';
 
 export interface CreateVehicleInput {

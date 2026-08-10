@@ -56,6 +56,41 @@ import type {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Recover the sentence the edge function actually wrote.
+ *
+ * supabase-js throws a `FunctionsHttpError` whose `.message` is always the
+ * literal "Edge Function returned a non-2xx status code" — the body, where our
+ * functions put a human explanation and a code, is left unread on
+ * `.context`. Surfacing the generic string turned every refused save in the
+ * panel into the same unhelpful toast: "permission denied", "nothing to
+ * insert" and "penalty not found" were indistinguishable.
+ *
+ * The body is a stream that can only be read once, so this is deliberately the
+ * single place that reads it.
+ */
+async function edgeError(fn: string, error: unknown): Promise<Error> {
+  const ctx = (error as { context?: unknown }).context;
+  const res = ctx instanceof Response ? ctx : undefined;
+  if (res) {
+    try {
+      const body = await res.clone().json() as { message?: string; code?: string; error?: string };
+      const message = body.message ?? body.error;
+      if (message) {
+        const err = new Error(message) as Error & { code?: string; status?: number };
+        err.code = body.code;
+        err.status = res.status;
+        return err;
+      }
+    } catch {
+      // Not JSON (a gateway timeout, a crash before the handler). Fall through
+      // to the status line, which at least distinguishes 403 from 500.
+    }
+    return new Error(`${fn} failed (HTTP ${res.status})`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
 /** A uuid goes over the wire as `id`; a composite key as `key`. */
 function configKey(key: ConfigKey): { id: string } | { key: Record<string, string> } {
   return typeof key === 'string' ? { id: key } : { key };
@@ -366,7 +401,7 @@ export class SupabaseDataSource implements DataSource {
 
   private async invoke<T>(fn: string, body: Record<string, unknown>): Promise<T> {
     const { data, error } = await this.client.supabase.functions.invoke(fn, { body });
-    if (error) throw error;
+    if (error) throw await edgeError(fn, error);
     if (data == null) throw new Error(`${fn} returned an empty payload`);
     return data as T;
   }

@@ -160,6 +160,16 @@ const VIEWS: Record<string, ViewSpec> = {
     search: ['role'],
     defaultSort: { field: 'created_at', asc: false },
   },
+  notification_rules: {
+    permission: 'settings.edit',
+    search: ['event_kind'],
+    defaultSort: { field: 'event_kind', asc: true },
+  },
+  translations: {
+    permission: 'settings.edit',
+    search: ['key', 'value'],
+    defaultSort: { field: 'key', asc: true },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],
