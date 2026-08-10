@@ -62,3 +62,38 @@ Voltage-based SoC via per-model calibration table `battery_curves(model_id, volt
 - Gateway changes: table-driven tests with real captured Codec 8E hex frames in `services/gateway/testdata/`.
 - Anything touching money or unlock flow: add/extend integration tests first.
 - Do not invent Teltonika parameter IDs — they are listed in docs/03; if one is missing, mark `TODO(verify wiki)`.
+
+## Parallel sessions — TWO agents work in this repo at once
+
+Both sessions share **one working tree on one branch**. There is no isolation,
+so the rules below are the only thing preventing lost work. This is not
+hypothetical: migration numbers have already collided three times (00310,
+00320, 00330), and a mock data source was deleted underneath a feature that
+depended on it.
+
+**Announce your area here at the start of a session.** Overwrite the line for
+your session; leave the other one alone.
+
+- Session A — admin panel, rider app, gateway, payments/Stripe
+- Session B — ops field app, notifications/broadcasts, fleet admin edge fns
+
+**Never `git add -A` / `git commit -a`.** Stage explicit paths you touched.
+The other agent almost certainly has uncommitted work in the same tree, and a
+blanket add commits it under your message.
+
+**Commit early.** Uncommitted work is the only work at risk. If you finish a
+coherent slice, commit it — do not batch a night's work into one final commit.
+
+**Migrations: claim the number by creating the file immediately.** Run
+`ls supabase/migrations | tail -3` first and take the next free number. Do not
+reserve a block "for later" — the other session will fill it while you work.
+
+**Shared code is additive-only without a heads-up**: `packages/**`,
+`services/edge/_shared/**`, `supabase/migrations/**`, root `package.json`.
+Changing a shared signature breaks the other session's in-flight files, and
+they will see it as a mysterious type error in code they never touched. If you
+must change one, say so in your final report so it reaches the human.
+
+**Typechecking during parallel work**: `npx tsc --noEmit` will show errors from
+the other session's half-written files. Do not "fix" them — you will fight an
+editor that is still typing. Verify only the files you own.
