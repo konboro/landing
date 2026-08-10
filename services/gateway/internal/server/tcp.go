@@ -112,6 +112,13 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) {
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(s.cfg.SessionIdleClose))
 		frame, err := readFrame(br)
+		if errors.Is(err, errKeepalive) {
+			// A ping carries no data and needs no reply — it exists so the link
+			// stays up between records, which is exactly what makes a
+			// server-initiated unlock possible. It still counts as activity.
+			sess.Touch()
+			continue
+		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				log.Printf("[server] read imei=%s: %v", imei, err)
@@ -155,6 +162,11 @@ func (s *Server) dispatch(ctx context.Context, sess *session.Session, dev store.
 			return
 		}
 		if typ == protocol.Codec12TypeResponse {
+			// The device's own words. Only the fact of a reply was used, as an ACK,
+			// and the text was dropped — which makes `getparam` useless, since its
+			// entire value is in the answer, and hides the reason a command was
+			// refused.
+			log.Printf("[server] codec12 response imei=%s: %s", sess.IMEI, payload)
 			sess.NotifyCodec12(payload)
 		}
 	default:
@@ -180,6 +192,10 @@ func readHandshake(br *bufio.Reader, timeout time.Duration) (string, error) {
 	return string(buf), nil
 }
 
+// errKeepalive marks a zero-length frame — the device's link ping. It is a
+// normal part of the stream, not a failure, and must never close the session.
+var errKeepalive = errors.New("server: keepalive")
+
 // readFrame reads one preamble-framed packet: [4B zero][4B len][data][4B crc].
 func readFrame(br *bufio.Reader) ([]byte, error) {
 	hdr := make([]byte, 8)
@@ -187,7 +203,16 @@ func readFrame(br *bufio.Reader) ([]byte, error) {
 		return nil, err
 	}
 	dataLen := binary.BigEndian.Uint32(hdr[4:8])
-	if dataLen == 0 || dataLen > 1<<20 {
+	if dataLen == 0 {
+		// Not a malformed packet: a zero-length frame is the device's keepalive.
+		// It was treated as a protocol violation, so the gateway hung up on the
+		// scooter every time one arrived — seven times in one afternoon, each
+		// disconnect measured at the device's ping interval. Every failed unlock
+		// today traces back to this: the command was written to a socket the
+		// gateway itself had just closed.
+		return nil, errKeepalive
+	}
+	if dataLen > 1<<20 {
 		return nil, errors.New("server: implausible data length")
 	}
 	rest := make([]byte, int(dataLen)+4)
