@@ -32,7 +32,9 @@ Free minutes (config, default 10, then per-min reserve fee), max 15 min → auto
 ## End flow (edge fn `trips-end`) — the money moment
 
 1. Position fix (device pos preferred, phone fallback + flag).
-2. Zone validation: must be inside `operating`, not in `no_parking`, and if city is in station-mode: inside `parking_station`. `paid_parking` → add fee from zone rules. `bonus` → subtract bonus.
+2. Zone validation: must be inside `operating`, not in `no_parking`, and if station-mode is on: inside `parking_station`. `paid_parking` → add fee from zone rules. `bonus` → subtract bonus.
+
+   Station mode is currently a **single global flag** — `app_config.station_mode`, read by `trips-end` — not a per-city setting; `cities` has no such column. Per-city station mode is roadmap (docs/11), so "if city is in station-mode" describes the intended end state, not today's behaviour. Clients must not branch on a per-city flag that does not exist.
 3. **Mandatory parking photo** → upload → `photo_review='pending'`.
 4. Send `lock` command → require ACK (retry/SMS). No ACK → keep `ending`, tell user "hold on", ops alert after 60 s (manual resolution; user not billed for the stuck time).
 5. Compute price from `pricing_snapshot`: unlock + minutes*rate + pause + paid_parking − bonus − promo/package/subscription perks; apply day cap; corporate → route to corporate account.
