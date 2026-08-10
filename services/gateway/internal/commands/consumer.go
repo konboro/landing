@@ -188,6 +188,15 @@ func (c *Consumer) Deliver(ctx context.Context, cmd store.Command) {
 				c.metrics.UnlockResult(true)
 			}
 			_ = c.store.MarkCommand(ctx, cmd.ID, store.StatusAcked, "gprs", "")
+			// Start the trip this unlock belongs to. Nothing else did, so the
+			// scooter opened while the app still reported failure and the trip was
+			// swept away a minute later. The device's acknowledgement is the moment
+			// the rider gets the vehicle, so it is the moment billing starts.
+			if isUnlock(cmd.Kind) && cmd.TripID != "" {
+				if err := c.store.ConfirmTripUnlock(ctx, cmd.TripID); err != nil {
+					log.Printf("[commands] confirm trip %s: %v", cmd.TripID, err)
+				}
+			}
 			c.seen[cmd.ID] = true
 			return
 		}

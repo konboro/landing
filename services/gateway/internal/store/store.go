@@ -117,6 +117,11 @@ type Store interface {
 	// MarkCommand records terminal/intermediate status transitions. It must be
 	// idempotent-safe: setting a status no lower than the current one.
 	MarkCommand(ctx context.Context, id, status, channel, errText string) error
+	// ConfirmTripUnlock starts the trip an acknowledged unlock belongs to. Without
+	// it nothing moved a trip out of `unlocking`: the scooter opened, the rider
+	// held an unlocked vehicle, and the app still reported failure. Safe to call
+	// more than once — the RPC only acts on a trip still in `unlocking`.
+	ConfirmTripUnlock(ctx context.Context, tripID string) error
 }
 
 // ---- FakeStore: in-memory implementation for tests and DB-less runs ----
@@ -131,6 +136,7 @@ type FakeStore struct {
 	States       map[string]VehicleState
 	Alerts       []Alert
 	CmdStatus    map[string]string // command id -> latest status
+	StartedTrips []string          // trip ids confirmed by an acknowledged unlock
 }
 
 // NewFake returns an empty FakeStore.
@@ -216,6 +222,13 @@ func (f *FakeStore) UpsertVehicleState(_ context.Context, st VehicleState) error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.States[st.VehicleID] = st
+	return nil
+}
+
+func (f *FakeStore) ConfirmTripUnlock(_ context.Context, tripID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.StartedTrips = append(f.StartedTrips, tripID)
 	return nil
 }
 

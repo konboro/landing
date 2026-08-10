@@ -142,6 +142,14 @@ type pgmqPayload struct {
 	CommandID string `json:"command_id"`
 }
 
+func (s *PGStore) ConfirmTripUnlock(ctx context.Context, tripID string) error {
+	// SECURITY DEFINER RPC: the gateway has no UPDATE on `trips` by design, and
+	// the trip also needs `started_at` stamped, which trip_transition does not do.
+	const q = `SELECT public.trip_unlock_confirmed($1::uuid)`
+	_, err := s.pool.Exec(ctx, q, tripID)
+	return err
+}
+
 func (s *PGStore) MarkVehicleOffline(ctx context.Context, vehicleID string) error {
 	// last_seen is deliberately left alone: it records when the vehicle last
 	// spoke, which stays true after it goes away and is what the staleness checks
