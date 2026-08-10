@@ -1,0 +1,322 @@
+[
+  {
+    "z": [
+      {
+        "name": "TEST - Wroclaw (USUN PO TESTACH)",
+        "kind": "operating",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                16.95,
+                51.05
+              ],
+              [
+                17.15,
+                51.05
+              ],
+              [
+                17.15,
+                51.18
+              ],
+              [
+                16.95,
+                51.18
+              ],
+              [
+                16.95,
+                51.05
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "Thessaloniki",
+        "kind": "operating",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.898,
+                40.648
+              ],
+              [
+                22.93,
+                40.662
+              ],
+              [
+                22.975,
+                40.652
+              ],
+              [
+                23.012,
+                40.622
+              ],
+              [
+                23.01,
+                40.592
+              ],
+              [
+                22.99,
+                40.578
+              ],
+              [
+                22.968,
+                40.596
+              ],
+              [
+                22.952,
+                40.613
+              ],
+              [
+                22.933,
+                40.628
+              ],
+              [
+                22.912,
+                40.638
+              ],
+              [
+                22.898,
+                40.648
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "Aristotelous Square Parking",
+        "kind": "parking",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.9405,
+                40.6315
+              ],
+              [
+                22.9435,
+                40.6315
+              ],
+              [
+                22.9435,
+                40.6338
+              ],
+              [
+                22.9405,
+                40.6338
+              ],
+              [
+                22.9405,
+                40.6315
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "University Parking",
+        "kind": "parking",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.9575,
+                40.63
+              ],
+              [
+                22.9625,
+                40.63
+              ],
+              [
+                22.9625,
+                40.6335
+              ],
+              [
+                22.9575,
+                40.6335
+              ],
+              [
+                22.9575,
+                40.63
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "White Tower No-Parking",
+        "kind": "no_parking",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.9465,
+                40.6252
+              ],
+              [
+                22.95,
+                40.6252
+              ],
+              [
+                22.95,
+                40.6278
+              ],
+              [
+                22.9465,
+                40.6278
+              ],
+              [
+                22.9465,
+                40.6252
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "Railway Station Rebalance Bonus",
+        "kind": "bonus",
+        "active": true,
+        "rules": {
+          "bonus_cents": 100
+        },
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.9255,
+                40.6415
+              ],
+              [
+                22.933,
+                40.6415
+              ],
+              [
+                22.933,
+                40.647
+              ],
+              [
+                22.9255,
+                40.647
+              ],
+              [
+                22.9255,
+                40.6415
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "Ano Poli Slow Zone",
+        "kind": "speed_limit",
+        "active": true,
+        "rules": {
+          "limit_kmh": 15
+        },
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.942,
+                40.642
+              ],
+              [
+                22.956,
+                40.642
+              ],
+              [
+                22.956,
+                40.65
+              ],
+              [
+                22.942,
+                40.65
+              ],
+              [
+                22.942,
+                40.642
+              ]
+            ]
+          ]
+        }
+      },
+      {
+        "name": "Port Restricted Area",
+        "kind": "no_go",
+        "active": true,
+        "rules": {},
+        "valid_from": null,
+        "valid_to": null,
+        "version": 1,
+        "geojson": {
+          "type": "Polygon",
+          "coordinates": [
+            [
+              [
+                22.9245,
+                40.635
+              ],
+              [
+                22.933,
+                40.635
+              ],
+              [
+                22.933,
+                40.6412
+              ],
+              [
+                22.9245,
+                40.6412
+              ],
+              [
+                22.9245,
+                40.635
+              ]
+            ]
+          ]
+        }
+      }
+    ]
+  }
+]

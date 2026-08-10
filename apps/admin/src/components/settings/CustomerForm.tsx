@@ -27,7 +27,11 @@ import { edgeMessage } from './edge';
                              the wording they were given
 
    `fields` is free-form jsonb; the shape written here is
-   { label, kind, required, options? } and is validated before it is sent.
+   { key, label, kind, required, options? } and is validated before it is sent.
+   The key is stamped once from the label and never rewritten, so an answer
+   stays attached to its question through a typo fix or a translation. Nothing
+   reads these answers yet — the rider app's signup fields are still hardcoded
+   — which is why the key is set now: free today, a migration later.
    -------------------------------------------------------------------------- */
 
 export interface CustomerFormRow {
@@ -38,10 +42,33 @@ export interface CustomerFormRow {
 }
 
 export interface FormField {
+  /** Immutable identifier an answer is filed under. Derived from the label the
+   *  first time a question is written and never rewritten afterwards, so fixing
+   *  a typo or translating the wording does not orphan answers already
+   *  collected. Nothing consumes these answers yet, which is exactly why the
+   *  key is being set now — it is free today and a migration later. */
+  key: string;
   label: string;
   kind: string;
   required: boolean;
   options?: string[];
+}
+
+/** `How did you hear about us?` → `how_did_you_hear_about_us`. */
+function slugify(label: string): string {
+  return label.trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+}
+
+/** Keeps a key unique within one form without ever changing an existing one. */
+function ensureKey(field: FormField, taken: Set<string>, index: number): string {
+  if (field.key) return field.key;
+  const base = slugify(field.label) || `question_${index + 1}`;
+  let key = base;
+  for (let n = 2; taken.has(key); n += 1) key = `${base}_${n}`;
+  return key;
 }
 
 const KINDS = ['text', 'email', 'tel', 'number', 'date', 'select', 'checkbox'] as const;
@@ -57,6 +84,9 @@ function readFields(v: unknown): FormField[] {
     const kind = typeof o.kind === 'string' && (KINDS as readonly string[]).includes(o.kind) ? o.kind : 'text';
     const options = Array.isArray(o.options) ? o.options.map(String) : undefined;
     return [{
+      // Forms written before keys existed have none; they keep resolving by
+      // label until the next save, which stamps one.
+      key: typeof o.key === 'string' ? o.key : '',
       label: typeof o.label === 'string' ? o.label : '',
       kind,
       required: o.required === true,
@@ -67,12 +97,18 @@ function readFields(v: unknown): FormField[] {
 
 /** What actually goes to the server — options only where the kind uses them. */
 function toPayload(fields: FormField[]): FormField[] {
-  return fields.map((f) => ({
-    label: f.label.trim(),
-    kind: f.kind,
-    required: f.required,
-    ...(HAS_OPTIONS.has(f.kind) ? { options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) } : {}),
-  }));
+  const taken = new Set(fields.map((f) => f.key).filter(Boolean));
+  return fields.map((f, i) => {
+    const key = ensureKey(f, taken, i);
+    taken.add(key);
+    return {
+      key,
+      label: f.label.trim(),
+      kind: f.kind,
+      required: f.required,
+      ...(HAS_OPTIONS.has(f.kind) ? { options: (f.options ?? []).map((o) => o.trim()).filter(Boolean) } : {}),
+    };
+  });
 }
 
 function validate(fields: FormField[]): string[] {
@@ -84,7 +120,7 @@ function validate(fields: FormField[]): string[] {
       problems.push(`“${f.label.trim() || `Question ${i + 1}`}” is a dropdown with no options.`);
     }
   });
-  // The label is what identifies an answer, so duplicates would be ambiguous.
+  // Keys are derived from labels, so two identical labels would collide.
   const seen = new Map<string, number>();
   fields.forEach((f) => {
     const k = f.label.trim().toLowerCase();
@@ -212,7 +248,7 @@ export function CustomerForm() {
               emoji="📝"
               title="No signup form yet"
               hint="Riders are asked only for name and e-mail. Add a question to start collecting more."
-              action={editable ? <Button variant="primary" onClick={() => setDraft([{ label: '', kind: 'text', required: false }])}>+ Add the first question</Button> : undefined}
+              action={editable ? <Button variant="primary" onClick={() => setDraft([{ key: '', label: '', kind: 'text', required: false }])}>+ Add the first question</Button> : undefined}
             />
           ) : (
             <>
@@ -261,7 +297,7 @@ export function CustomerForm() {
               ))}
               {editable ? (
                 <div>
-                  <Button size="sm" onClick={() => setDraft([...fields, { label: '', kind: 'text', required: false }])}>
+                  <Button size="sm" onClick={() => setDraft([...fields, { key: '', label: '', kind: 'text', required: false }])}>
                     + Add question
                   </Button>
                 </div>
