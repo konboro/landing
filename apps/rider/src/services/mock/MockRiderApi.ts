@@ -1032,6 +1032,34 @@ export class MockRiderApi implements RiderApi {
     this.s.inbox = this.s.inbox.map((m) => (m.id === id ? { ...m, read: true } : m));
   }
 
+  /* -------------------------- pop-ups + push (docs/12) --------------------- */
+
+  /** Mock mode has no server to broadcast from, so the pop-up queue is
+   *  whatever this session pushed into it (see `__queuePopup`). */
+  private popups: InboxItem[] = [];
+
+  async getLivePopup(): Promise<InboxItem | null> {
+    await wait(60);
+    return this.popups.find((p) => !p.read) ?? null;
+  }
+
+  async dismissPopup(id: string): Promise<void> {
+    await wait(60);
+    this.popups = this.popups.map((p) => (p.id === id ? { ...p, read: true } : p));
+  }
+
+  async registerPushToken(_token: string, _platform: string): Promise<void> {
+    await wait(40);
+  }
+
+  /** Test hook: drop a pop-up into the queue without a backend. */
+  __queuePopup(title: string, body: string): void {
+    this.popups.unshift({
+      id: `popup-${this.popups.length + 1}`,
+      title, body, deep_link: null, read: false, created_at: new Date().toISOString(),
+    });
+  }
+
   /* -------------------------------- live chat ----------------------------- */
 
   private chat: ChatMessage[] = [];

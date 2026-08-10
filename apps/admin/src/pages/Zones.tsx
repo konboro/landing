@@ -18,7 +18,7 @@ export function ZonesPage() {
   const ds = useDS();
   const qc = useQueryClient();
   const toast = useToast();
-  const { can } = useAuth();
+  const { can, cities } = useAuth();
   const { data: zones } = useQuery({ queryKey: ['zones'], queryFn: () => ds.listZones() });
   const { data: db } = usePanelData();
   const [draft, setDraft] = useState<Zone[] | null>(null);
@@ -26,6 +26,10 @@ export function ZonesPage() {
 
   const working = draft ?? zones ?? [];
   const dirty = draft !== null;
+
+  // A new polygon must inherit a real city: `apply_zone_version` keys the whole
+  // version off one city id, so a placeholder here fails the save server-side.
+  const newZoneCityId = working.find((z) => z.city_id)?.city_id ?? cities[0]?.id ?? '';
 
   const save = useMutation({
     mutationFn: (reason: string) => ds.saveZoneVersion(working, reason),
@@ -62,7 +66,9 @@ export function ZonesPage() {
           <div className="card-pad">
             <ZoneDrawEditor
               zones={working}
-              onCreate={(coords) => setDraft([...working, { id: `zone-new-${Date.now()}`, city_id: 'city-athens', kind: 'parking', geom: { type: 'Polygon', coordinates: coords }, rules: {}, active: true, valid_from: null, valid_to: null, version: 0, created_by: 'owner', name: 'New zone' }])}
+              // The id must be mapbox-gl-draw's own feature id, otherwise the
+              // draw.update / draw.delete events for this polygon match nothing.
+              onCreate={(coords, drawId) => setDraft([...working, { id: drawId, city_id: newZoneCityId, kind: 'parking', geom: { type: 'Polygon', coordinates: coords }, rules: {}, active: true, valid_from: null, valid_to: null, version: 0, created_by: null, name: 'New zone' }])}
               onUpdate={(id, coords) => updateZone(id, { geom: { type: 'Polygon', coordinates: coords } })}
               onDelete={(id) => setDraft(working.filter((z) => z.id !== id))}
             />

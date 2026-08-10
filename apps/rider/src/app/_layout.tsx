@@ -7,6 +7,7 @@ import { Stack } from 'expo-router';
 import { BrandProvider, useTheme } from '../brand';
 import { useSession } from '../store/session';
 import { useTrip } from '../store/trip';
+import { PopupGate } from '../components/PopupGate';
 
 export default function RootLayout() {
   return (
@@ -51,6 +52,9 @@ function AppShell() {
           <Stack.Screen name="trip/[id]" options={{ presentation: 'card' }} />
           <Stack.Screen name="report/[code]" options={{ presentation: 'modal' }} />
         </Stack>
+        {/* Outside the Stack: a broadcast pop-up interrupts whatever screen is
+            on top, and this is also where the push token gets registered. */}
+        <PopupGate />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

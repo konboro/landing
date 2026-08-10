@@ -71,7 +71,13 @@ function RealMap({ token, center, zoom, height = 360, markers = [], zones = [], 
     }
     mapRef.current = map;
     map.on('load', () => setLoaded(true));
-    map.on('error', () => { /* keep map; individual tile errors are non-fatal */ });
+    map.on('error', (e) => {
+      // Individual tile errors are non-fatal, but a rejected token is: Mapbox
+      // then paints a blank grey box forever, so drop to the fallback, which at
+      // least says what is wrong and still plots the positions.
+      const status = (e as unknown as { error?: { status?: number } }).error?.status;
+      if (status === 401 || status === 403) setFailed(true);
+    });
     return () => { map.remove(); mapRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -83,7 +89,9 @@ function RealMap({ token, center, zoom, height = 360, markers = [], zones = [], 
     const src = 'zones-src';
     const fc = {
       type: 'FeatureCollection' as const,
-      features: (zones ?? []).map((z) => ({ type: 'Feature' as const, properties: { fill: z.fill, line: z.line }, geometry: { type: 'Polygon' as const, coordinates: z.coordinates } })),
+      features: (zones ?? [])
+        .filter((z) => Array.isArray(z.coordinates) && z.coordinates.length > 0)
+        .map((z) => ({ type: 'Feature' as const, properties: { fill: z.fill, line: z.line }, geometry: { type: 'Polygon' as const, coordinates: z.coordinates } })),
     };
     const existing = map.getSource(src) as mapboxgl.GeoJSONSource | undefined;
     if (existing) { existing.setData(fc); return; }
@@ -175,7 +183,8 @@ function Legend({ legend }: { legend: Array<{ color: string; label: string }> })
  * scatter so the panel is still informative. */
 export function MapFallback({ height = 360, markers = [], zones = [], heat = [], paths = [], center, legend, toolbar }: MapViewProps) {
   const pts = [...markers.map((m) => [m.lng, m.lat] as LngLat), ...heat.map((h) => [h.lng, h.lat] as LngLat)];
-  for (const z of zones) for (const ring of z.coordinates) for (const p of ring) pts.push(p);
+  // Guarded: a zone whose geometry failed to load must not take the page down.
+  for (const z of zones) for (const ring of z.coordinates ?? []) for (const p of ring ?? []) pts.push(p);
   for (const pth of paths) for (const p of pth.coordinates) pts.push(p);
   const hasPts = pts.length > 0;
   const minLng = hasPts ? Math.min(...pts.map((p) => p[0])) : (center?.[0] ?? 23.7) - 0.05;
@@ -190,7 +199,7 @@ export function MapFallback({ height = 360, markers = [], zones = [], heat = [],
       <div className="map-fallback">
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ maxHeight: '100%' }}>
           {zones.map((z) => (
-            <polygon key={z.id} points={(z.coordinates[0] ?? []).map((p) => `${sx(p[0])},${sy(p[1])}`).join(' ')} fill={z.fill} stroke={z.line} strokeWidth={1.5} />
+            <polygon key={z.id} points={(z.coordinates?.[0] ?? []).map((p) => `${sx(p[0])},${sy(p[1])}`).join(' ')} fill={z.fill} stroke={z.line} strokeWidth={1.5} />
           ))}
           {heat.map((h, i) => <circle key={`h${i}`} cx={sx(h.lng)} cy={sy(h.lat)} r={6 + h.weight * 6} fill={colors.warning} opacity={0.12} />)}
           {paths.map((p, i) => (

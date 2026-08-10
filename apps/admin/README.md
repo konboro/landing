@@ -2,7 +2,31 @@
 
 Vite + React 18 + TypeScript (strict) + React Router + Mapbox GL JS + Recharts.
 Full Atom-parity admin panel (+ upgrades) for the Penny e-scooter platform, Athens.
-Targets **Cloudflare Pages** (SPA).
+
+## Deployment — Vercel
+
+Live: **https://penny-admin-one.vercel.app** (project `penny-admin`, scope
+`konrads-projects-7e53c7e8`).
+
+```bash
+pnpm --filter @penny/admin deploy      # build + push to production
+```
+
+The build is done **locally and uploaded**, not built on Vercel. That is on
+purpose: Vite inlines `VITE_*` at build time, so a remote build would need the
+whole pnpm workspace (the app consumes `@penny/*` as TS source via aliases) plus
+a second copy of every secret in the Vercel project. Building here means the
+artefact is exactly what was tested locally.
+
+Consequence: **`.env.local` is the deployment config.** Change a `VITE_*` value
+→ redeploy, or production keeps the old one. If you later connect the Git repo
+for CI builds, every `VITE_*` has to be added to the Vercel project's
+environment variables first.
+
+`public/vercel.json` (copied into `dist/` by Vite, alongside the Cloudflare
+`_redirects`) carries the SPA rewrite, immutable caching for `/assets/*` and the
+security headers. The Cloudflare Pages target still works — both config files
+ship, each host ignores the other's.
 
 ## Run
 

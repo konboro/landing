@@ -397,6 +397,17 @@ export function statusColor(brand: Brand, status: string, mode: ThemeMode = 'lig
     offline: c.statusOffline,
     stolen: c.statusStolen,
     decommissioned: c.textMuted,
+    // Field-service states (migration 00390). Derived from existing tokens
+    // rather than new ones so a white-label brand does not have to define four
+    // more colours to look right: charging borrows the "in trip" blue because
+    // both mean "busy, do not touch", storage and not-ready sit in the muted
+    // family because they are deliberately out of circulation, and
+    // needs-investigation takes the low-battery amber — it is a warning, not
+    // yet a fault.
+    charging: c.statusInTrip,
+    storage: c.statusOffline,
+    not_ready: c.textMuted,
+    needs_investigation: c.statusLowBattery,
   };
   return map[status] ?? c.textMuted;
 }

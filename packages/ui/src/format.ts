@@ -41,14 +41,19 @@ export function formatDateTime(iso: string | null | undefined, locale = 'en-GB')
 export function relativeTime(iso: string | null | undefined, now = Date.now()): string {
   if (!iso) return '—';
   const diff = now - new Date(iso).getTime();
-  const s = Math.round(diff / 1000);
-  if (s < 60) return `${s}s ago`;
+  // Future instants are not a hypothetical: task due dates and pop-up expiries
+  // both run through here, and the backwards-only version rendered a deadline
+  // two hours out as "-7200s ago". Same ladder, other direction.
+  const future = diff < 0;
+  const suffix = (v: string) => (future ? `in ${v}` : `${v} ago`);
+  const s = Math.round(Math.abs(diff) / 1000);
+  if (s < 60) return suffix(`${s}s`);
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return suffix(`${m}m`);
   const h = Math.round(m / 60);
-  if (h < 24) return `${h}h ago`;
+  if (h < 24) return suffix(`${h}h`);
   const d = Math.round(h / 24);
-  return `${d}d ago`;
+  return suffix(`${d}d`);
 }
 
 /** CO2 saved vs a short car trip: ~0.12 kg/km avoided. */

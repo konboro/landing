@@ -35,6 +35,15 @@ export const VehicleStatus = {
   offline: 'offline',
   stolen: 'stolen',
   decommissioned: 'decommissioned',
+  // Field-service states (migration 00390). Every rider-facing surface is an
+  // allowlist on `available`, so these are unrentable and invisible by
+  // construction — see the migration for why that matters.
+  charging: 'charging',
+  storage: 'storage',
+  not_ready: 'not_ready',
+  /** A human flagged it; the fault is not identified yet. Distinct from
+   *  `offline`, which only means the device has not reported. */
+  needs_investigation: 'needs_investigation',
 } as const;
 export type VehicleStatus = (typeof VehicleStatus)[keyof typeof VehicleStatus];
 

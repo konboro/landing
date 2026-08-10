@@ -561,6 +561,14 @@ export interface RiderApi {
   getInbox(): Promise<InboxItem[]>;
   markInboxRead(id: string): Promise<void>;
 
+  /* pop-ups + push (docs/12) */
+  /** The oldest undismissed, unexpired pop-up, or null. */
+  getLivePopup(): Promise<InboxItem | null>;
+  /** Dismissing a pop-up is the same act as reading it. */
+  dismissPopup(id: string): Promise<void>;
+  /** Store this device's Expo push token so broadcasts can reach it. */
+  registerPushToken(token: string, platform: string): Promise<void>;
+
   /* live chat — the same message centre as the inbox, filtered to `chat` */
   getChat(): Promise<ChatMessage[]>;
   sendChatMessage(body: string): Promise<ChatMessage>;

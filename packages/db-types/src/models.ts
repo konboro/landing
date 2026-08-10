@@ -374,6 +374,12 @@ export interface InboxMessage {
   deep_link: string | null;
   read_at: ISOTimestamp | null;
   created_at: ISOTimestamp;
+  /** notification = one-way system message, chat = a support conversation
+   *  turn, popup = a notification rendered as an interrupting modal. */
+  kind?: 'notification' | 'chat' | 'popup';
+  sender?: 'system' | 'rider' | 'staff';
+  /** Pop-ups only: stop showing after this instant. */
+  expires_at?: ISOTimestamp | null;
 }
 
 export interface AppConfig {
