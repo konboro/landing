@@ -221,7 +221,14 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     rides: ridesRes.data ?? [],
     total_rides: (ridesCount as { count?: number }).count ?? (ridesRes.data ?? []).length,
     payments,
-    ledger: ledgerRes.data ?? [],
+    // Flattened: the join nests the account under `ledger_accounts`, while the
+    // panel's LedgerEntry type reads a plain `account_kind`. Handing over the
+    // nested shape made the customer's Ledger tab throw on titleCase(undefined)
+    // — the same crash that blanked the Finance page.
+    ledger: (ledgerRes.data ?? []).map((e: Record<string, unknown>) => {
+      const { ledger_accounts: acct, ...rest } = e;
+      return { ...rest, account_kind: (acct as { kind?: string } | null)?.kind ?? null };
+    }),
     debts: debtsRes.data ?? [],
     penalties: payments.filter((p) => p.kind === 'penalty'),
     disputes: (ridesRes.data ?? []).filter((r: Record<string, unknown>) => r.has_dispute === true),

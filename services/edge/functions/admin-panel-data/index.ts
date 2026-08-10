@@ -71,7 +71,10 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     all(admin, 'ops_tasks', { order: 'created_at' }),
     all(admin, 'damage_reports', { order: 'created_at' }),
     all(admin, 'staff'),
-    all(admin, 'ledger_accounts'),
+    // The view, not the table: it carries the derived balance and the owner's
+    // name, both of which the panel's LedgerAccount type declares and the table
+    // has never had (migration 00500).
+    all(admin, 'v_ledger_account_balances'),
     all(admin, 'ledger_entries', { order: 'created_at', limit: 500 }),
     all(admin, 'invoices', { order: 'created_at' }),
     all(admin, 'corporate_accounts'),
@@ -107,6 +110,16 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
   // app_config.penalties, read here through an Array.isArray guard it could
   // never satisfy — so the catalogue rendered empty whatever was configured.
   const penalties = await all(admin, 'penalties', { order: 'code', asc: true });
+
+  // Each entry carries the kind of the account it hit, so the ledger explorer
+  // can label "Stripe clearing +8.00 / User wallet −8.00" without a second
+  // lookup. `account_kind` is on the panel's LedgerEntry type but not on the
+  // table — reading it raw was what crashed the whole Finance page.
+  const accountKind = new Map(ledgerAccounts.map((a) => [String(a.id), a.kind]));
+  const ledgerEntriesLabelled = ledgerEntries.map((e) => ({
+    ...e,
+    account_kind: accountKind.get(String(e.account_id)) ?? null,
+  }));
 
   // trip_events keyed by trip, the shape the ride timeline expects.
   const tripEvents: Record<string, unknown[]> = {};
@@ -153,7 +166,7 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     cities, models, batteryCurves, vehicles, devices,
     customers, rides, payments, debts,
     zones, zoneVersions, alerts, commands, opsTasks, damageReports, staff,
-    ledgerAccounts, ledgerEntries, invoices, corporate,
+    ledgerAccounts, ledgerEntries: ledgerEntriesLabelled, invoices, corporate,
     notificationRules, notificationLog,
     promos, groups, campaigns, referrals, pois,
     pricingPlans, packages, subscriptions, addons, penalties,

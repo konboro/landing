@@ -165,14 +165,23 @@ export interface LedgerAccount {
   kind: 'user_wallet' | 'penny_revenue' | 'stripe_clearing' | 'debt' | 'bonus' | 'corporate';
   owner_id: UUID | null;
   owner_label: string;
+  /** Raw sum of the account's journal entries (Hard Rule #2: derived, never
+   *  stored). Negative on a funded wallet — see `owner_balance_cents`. */
   balance_cents: number;
+  /** The same money from the holder's side, matching what the rider's app
+   *  shows. A wallet is a liability, so its journal sum is the mirror image. */
+  owner_balance_cents: number;
+  entry_count: number;
 }
 
 export interface LedgerEntry {
   id: UUID;
   txn_id: UUID;
   account_id: UUID;
-  account_kind: LedgerAccount['kind'];
+  /** Resolved server-side from `account_id`. Null only if the account row is
+   *  gone, which the ledger should never allow — rendered as a dash, not
+   *  crashed on, because this table blanked the whole Finance page once. */
+  account_kind: LedgerAccount['kind'] | null;
   delta_cents: number;
   currency: string;
   created_at: ISOTimestamp;

@@ -76,11 +76,23 @@ function Ledger({ db }: { db: DB }) {
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
       <Card>
-        <CardHeader title="Ledger accounts" sub="Balances are derived (never a mutable column)" />
+        <CardHeader title="Ledger accounts" sub="Balances are derived from the journal (never a mutable column)" />
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>Account</th><th>Kind</th><th>Balance</th></tr></thead>
-            <tbody>{db.ledgerAccounts.map((a) => <tr key={a.id}><td>{a.owner_label}</td><td>{titleCase(a.kind)}</td><td style={{ color: a.balance_cents < 0 ? colors.danger : colors.success, fontWeight: 600 }}>{formatMoney(a.balance_cents)}</td></tr>)}</tbody>
+            <thead><tr><th>Account</th><th>Kind</th><th>Entries</th><th>Balance</th><th>Journal sum</th></tr></thead>
+            <tbody>{db.ledgerAccounts.map((a) => (
+              <tr key={a.id}>
+                <td>{a.owner_label}</td>
+                <td>{titleCase(a.kind)}</td>
+                <td>{a.entry_count}</td>
+                {/* The holder's view — a rider with 80 € of credit reads 80 €
+                    here, the same figure their app shows. */}
+                <td style={{ color: a.owner_balance_cents < 0 ? colors.danger : colors.success, fontWeight: 600 }}>{formatMoney(a.owner_balance_cents)}</td>
+                {/* A wallet is a liability, so its journal sum is the mirror
+                    image. Shown so the double-entry maths stays checkable. */}
+                <td className="mono" style={{ fontSize: 12, opacity: 0.65 }} title="Raw sum of this account's entries, in ledger signs">{formatMoney(a.balance_cents)}</td>
+              </tr>
+            ))}</tbody>
           </table>
         </div>
       </Card>
@@ -95,7 +107,7 @@ function Ledger({ db }: { db: DB }) {
                 return (
                   <tr key={txn}>
                     <td className="mono">{txn}</td>
-                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{titleCase(e.account_kind)} {formatMoney(e.delta_cents)}</span>)}</td>
+                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{e.account_kind ? titleCase(e.account_kind) : '—'} {formatMoney(e.delta_cents)}</span>)}</td>
                     <td>{formatMoney(sum)}</td>
                     <td>{sum === 0 ? <Badge tone="success">Balanced</Badge> : <Badge tone="danger">Off by {formatMoney(sum)}</Badge>}</td>
                   </tr>
