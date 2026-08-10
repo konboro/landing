@@ -32,11 +32,18 @@ export default function WalletScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [w, c, p, s, a, d] = await Promise.all([
-      api.getWallet(), api.getCards(), api.getPackages(), api.getSubscriptions(), api.getAddons(), api.getDebts(),
-    ]);
-    setWallet(w); setCards(c); setPackages(p); setSubs(s); setAddons(a); setDebts(d);
-  }, [api]);
+    try {
+      const [w, c, p, s, a, d] = await Promise.all([
+        api.getWallet(), api.getCards(), api.getPackages(), api.getSubscriptions(), api.getAddons(), api.getDebts(),
+      ]);
+      setWallet(w); setCards(c); setPackages(p); setSubs(s); setAddons(a); setDebts(d);
+    } catch (e) {
+      // A failed load left `wallet` null, which renders as a balance of 0 — the
+      // same silent zero this screen already told a rider once while their money
+      // sat in the ledger. Say what went wrong instead.
+      setError((e as { message?: string })?.message ?? t('common.error'));
+    }
+  }, [api, t]);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
 
