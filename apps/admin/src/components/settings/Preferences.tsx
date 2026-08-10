@@ -1,35 +1,23 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/components/ui/Toast';
 import { Card, CardHeader, Button, Field, Input, Checkbox } from '@/components/ui/primitives';
 import { Badge } from '@/components/ui/Badge';
 import { ErrorState } from '@/components/ui/feedback';
-import { getSupabaseAuth } from '@/data/authClient';
 import { edgeMessage } from './edge';
+import { configMap, useAppConfig, useInvalidateAppConfig, writeAppConfigKeys } from './appConfig';
 
 /* --------------------------------------------------------------------------
-   Operational preferences live in `app_config` (key → jsonb).
+   Operational preferences live in `app_config` (key → jsonb), read and written
+   through the shared helpers in ./appConfig.
 
-   Reads use the anon key: migration 00140 grants SELECT on app_config to
-   anon+authenticated, because the rider and ops apps fetch these same flags at
-   boot. Writes go to the `admin-app-config` edge function, which is the only
-   path — the table is service_role-only for writes, the function enforces
-   `settings.edit`, demands a reason, and writes before/after to `audit_log`
-   (Hard Rule #8).
-
-   The KEYS below mirror that function's WRITABLE_KEYS allowlist exactly. A key
+   The KEYS below mirror `admin-app-config`'s WRITABLE_KEYS allowlist. A key
    that is not on the allowlist is refused with a 400, so rendering an input for
    one would be building a control that cannot save. Any other key found in the
    table is therefore listed read-only instead, with its value, so the operator
    can still see what the fleet is running on.
    -------------------------------------------------------------------------- */
-
-interface AppConfigRow {
-  key: string;
-  value: unknown;
-  updated_at: string | null;
-}
 
 type PrefKind = 'int' | 'ratio' | 'cents' | 'bool' | 'window';
 
@@ -65,6 +53,10 @@ const GROUPS: Array<{ title: string; sub: string; prefs: PrefSpec[] }> = [
         key: 'hold_cents', label: 'Pre-authorisation hold', kind: 'cents',
         min: 0, help: 'Amount held on the card before a trip starts. Released when the ride is charged.',
       },
+      {
+        key: 'max_telemetry_age_s', label: 'Treat a vehicle as offline after', kind: 'int', unit: 's',
+        min: 0, help: 'How stale the last telemetry frame may be before the vehicle stops counting as online for a trip start.',
+      },
     ],
   },
   {
@@ -95,8 +87,10 @@ const GROUPS: Array<{ title: string; sub: string; prefs: PrefSpec[] }> = [
 ];
 
 const SPECS = GROUPS.flatMap((g) => g.prefs);
-/** `brand` is on the same allowlist but belongs to the Branding editor. */
-const HANDLED_ELSEWHERE = new Set(['brand']);
+/** On the same allowlist, but each has its own editor: `brand` is the Branding
+ *  tab, the two reaction-test keys are the Reaction test tab. Listing them as
+ *  "not editable from the panel" here would be a lie in the other direction. */
+const HANDLED_ELSEWHERE = new Set(['brand', 'reaction_test_required', 'reaction_test']);
 
 function readWindow(v: unknown): { from: string; to: string } {
   const o = (v ?? {}) as { from?: unknown; to?: unknown };
@@ -113,24 +107,11 @@ function display(spec: PrefSpec, v: unknown): string {
 export function Preferences() {
   const { can } = useAuth();
   const editable = can('settings.edit');
-  const qc = useQueryClient();
   const toast = useToast();
+  const invalidate = useInvalidateAppConfig();
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['settings', 'app-config'],
-    queryFn: async (): Promise<AppConfigRow[]> => {
-      const { data, error } = await getSupabaseAuth().supabase
-        .from('app_config').select('key, value, updated_at').order('key');
-      if (error) throw error;
-      return (data ?? []) as AppConfigRow[];
-    },
-  });
-
-  const server = useMemo(() => {
-    const map = new Map<string, unknown>();
-    for (const row of data ?? []) map.set(row.key, row.value);
-    return map;
-  }, [data]);
+  const { data, isLoading, error } = useAppConfig();
+  const server = useMemo(() => configMap(data), [data]);
 
   // Only the keys the operator actually touched are held here, so a value
   // changed by someone else while this page is open is not silently overwritten
@@ -145,24 +126,7 @@ export function Preferences() {
   const set = (key: string, v: unknown) => setDraft((d) => ({ ...d, [key]: v }));
 
   const save = useMutation({
-    mutationFn: async () => {
-      // One call per key: `admin-app-config` writes a single key and audits it
-      // individually, which is what makes a bad flag flip traceable later.
-      const ok: string[] = [];
-      const failed: Array<{ key: string; message: string }> = [];
-      for (const key of dirtyKeys) {
-        try {
-          const { error } = await getSupabaseAuth().supabase.functions.invoke('admin-app-config', {
-            body: { key, value: valueOf(key), reason: reason.trim() },
-          });
-          if (error) throw error;
-          ok.push(key);
-        } catch (e) {
-          failed.push({ key, message: await edgeMessage(e, 'refused by the server') });
-        }
-      }
-      return { ok, failed };
-    },
+    mutationFn: () => writeAppConfigKeys(dirtyKeys.map((key) => ({ key, value: valueOf(key) })), reason),
     onSuccess: ({ ok, failed }) => {
       // Only what the server confirmed is dropped from the draft; anything it
       // refused stays on screen, still dirty, with the reason it refused.
@@ -176,9 +140,7 @@ export function Preferences() {
         setReason('');
       }
       for (const f of failed) toast.push(`${f.key}: ${f.message}`, 'error');
-      void qc.invalidateQueries({ queryKey: ['settings', 'app-config'] });
-      // The bulk panel payload carries app_config too; leave it stale-free.
-      void qc.invalidateQueries({ queryKey: ['panel-data'] });
+      invalidate();
     },
     onError: async (e) => toast.push(await edgeMessage(e, 'Could not save the preferences.'), 'error'),
   });

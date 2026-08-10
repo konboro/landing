@@ -11,7 +11,8 @@ import { NotificationRules } from '@/components/settings/NotificationRules';
 import { Translations } from '@/components/settings/Translations';
 import { AppContent } from '@/components/settings/AppContent';
 import { FleetModels } from '@/components/settings/FleetModels';
-import { Unavailable } from '@/components/settings/Unavailable';
+import { CustomerForm } from '@/components/settings/CustomerForm';
+import { ReactionTest } from '@/components/settings/ReactionTest';
 
 /**
  * Settings.
@@ -26,11 +27,11 @@ import { Unavailable } from '@/components/settings/Unavailable';
  *   Notification rules   → notification_rules, via `admin-list`/`admin-write`
  *   Localization         → translations (pk lang+ns+key), same pair
  *   Tutorials & content  → app_content (pk key+lang), same pair
+ *   Customer form        → customer_forms, versioned (one active form)
+ *   Reaction test        → app_config, via the same edge fn as Preferences
  *   Models & curves      → read-only; no write path exists
  *   Branding             → app_config.brand, via the Branding editor
  *   Map icons            → resolved from the active brand; read-only by design
- *   Customer form        → nothing to write to (see below)
- *   Reaction test        → nothing to write to (see below)
  */
 export function SettingsPage() {
   const [tab, setTab] = useState('prefs');
@@ -70,6 +71,7 @@ export function SettingsPage() {
   );
 }
 
+
 function Personalization() {
   // Vehicle status colours are brand tokens — edit them in Settings → Branding,
   // which writes app_config.brand. This tab only shows what the active brand
@@ -96,70 +98,3 @@ function Personalization() {
   );
 }
 
-/* --------------------------------------------------------------------------
-   The two sections with nowhere to save to.
-
-   Both used to render a full form with a Save button that pushed "saved" and
-   wrote nothing at all. They are disabled rather than deleted so the gap stays
-   visible — an operator who is looking for the setting learns why it is not
-   there instead of assuming the panel lost it.
-   -------------------------------------------------------------------------- */
-
-function CustomerForm() {
-  return (
-    <Unavailable
-      title="Customer form builder"
-      sub="Extra questions asked during signup"
-      summary={
-        <>
-          The panel cannot save a signup form yet. The <code>customer_forms</code> table exists (migration 00100:
-          <code> id, fields jsonb, active</code>) and is empty, but no edge function is allowed to write it — so any
-          form built here would have nowhere to go.
-        </>
-      }
-      covers={[
-        'Which extra fields appear after name and e-mail during onboarding (docs/12 §D step 4)',
-        'Field type and whether each one is required',
-        'The answers shown back on the rider’s profile (docs/06 §7)',
-      ]}
-      needs={
-        <>
-          <code>customer_forms</code> added to the <code>admin-write</code> table allowlist (permission
-          <code> settings.edit</code>, columns <code>fields</code> + <code>active</code>, soft-delete on <code>active</code>
-          because answers reference the form version), plus <code>customer_forms</code> in <code>admin-list</code>’s view
-          allowlist so the panel can read it back. No migration needed — only the edge-function whitelists.
-        </>
-      }
-    />
-  );
-}
-
-function ReactionTest() {
-  return (
-    <Unavailable
-      title="Reaction test (night anti-DUI gate)"
-      sub="The tap test riders take before a night unlock"
-      summary={
-        <>
-          There is no config store for this test. <code>reaction_tests</code> is the <em>results</em> log
-          (<code>user_id, trip_id, started_at, passed, score</code>) — writing settings into it would corrupt the record of
-          who passed what. docs/04 refers to a <code>reaction_test_required</code> flag that does not exist in
-          <code> app_config</code> either.
-        </>
-      }
-      covers={[
-        'Whether the test is required during the night window at all',
-        'Rounds to pass and the maximum acceptable reaction time',
-        'How long a pass stays valid before a rider is asked again',
-      ]}
-      needs={
-        <>
-          Keys added to <code>admin-app-config</code>’s <code>WRITABLE_KEYS</code> — e.g.
-          <code> reaction_test_required</code> (bool), <code>reaction_test</code> (object:
-          <code> rounds</code>, <code>max_ms</code>, <code>valid_min</code>) — and the trip-start check reading them.
-          The night window itself already exists as <code>night_hours</code> and is editable under Preferences.
-        </>
-      }
-    />
-  );
-}
