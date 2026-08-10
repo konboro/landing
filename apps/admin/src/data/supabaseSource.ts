@@ -21,6 +21,7 @@ import type {
   SearchResult,
   MessageThread,
   ChatMessage,
+  ConfigTable,
 } from './api';
 import type { Page, QueryParams } from './query';
 import { toVehicleRideRow, toTimelineEvent } from './rideHistoryMapper';
@@ -630,6 +631,31 @@ export class SupabaseDataSource implements DataSource {
   }
   async listAudit(params: QueryParams): Promise<Page<AuditLogEntry>> {
     return this.listFrom<AuditLogEntry>('audit_log', params);
+  }
+
+  /* ---- Configuration catalogues ----
+     Reads reuse `admin-list`, writes go to `admin-write`; both whitelist the
+     table and demand the same permission, so the two directions cannot drift.
+     Nothing here touches a table directly (Hard Rule #6). */
+
+  async configList<T>(table: ConfigTable, params: QueryParams): Promise<Page<T>> {
+    return this.listFrom<T>(table, params);
+  }
+
+  async configCreate<T>(table: ConfigTable, values: Record<string, unknown>): Promise<T> {
+    const res = await this.invoke<{ row: T }>('admin-write', { table, action: 'create', values });
+    return res.row;
+  }
+
+  async configUpdate<T>(table: ConfigTable, id: string, values: Record<string, unknown>): Promise<T> {
+    const res = await this.invoke<{ row: T }>('admin-write', { table, action: 'update', id, values });
+    return res.row;
+  }
+
+  async configRemove(
+    table: ConfigTable, id: string, reason?: string,
+  ): Promise<{ deleted?: boolean; deactivated?: boolean }> {
+    return this.invoke('admin-write', { table, action: 'delete', id, reason });
   }
 
   /* ---- Mutations via edge functions (permission-checked + audited server-side) ----

@@ -106,6 +106,14 @@ export interface BroadcastResult {
   errors?: string[];
 }
 
+/** Tables `admin-write` accepts. Keep in step with its TABLES whitelist —
+ *  anything else is refused server-side with `table not writable here`. */
+export type ConfigTable =
+  | 'pricing_plans' | 'packages' | 'subscriptions' | 'addons' | 'penalties'
+  | 'promo_codes' | 'customer_groups' | 'loyalty_tiers' | 'pois'
+  | 'faq_items' | 'app_content'
+  | 'corporate_accounts' | 'staff';
+
 export interface CreateVehicleInput {
   code: string;
   model_id: UUID;
@@ -286,6 +294,18 @@ export interface DataSource {
   /** `preview` resolves the audience and reports reach without sending. */
   previewBroadcast(input: BroadcastInput): Promise<BroadcastResult>;
   sendBroadcast(input: BroadcastInput): Promise<BroadcastResult>;
+
+  /* ---- Configuration catalogues (pricing, marketing, content, team) ----
+     One generic path per operation, backed by the `admin-write` edge function.
+     It owns the whitelist: which table, which permission, which columns may be
+     set, and whether a delete is a real delete or a deactivation. The panel
+     therefore cannot write anything the server has not explicitly allowed. */
+  configList<T>(table: ConfigTable, params: QueryParams): Promise<Page<T>>;
+  configCreate<T>(table: ConfigTable, values: Record<string, unknown>): Promise<T>;
+  configUpdate<T>(table: ConfigTable, id: string, values: Record<string, unknown>): Promise<T>;
+  /** Resolves with `deactivated: true` when the row is referenced by history and
+   *  was flipped inactive instead of removed — say so in the UI. */
+  configRemove(table: ConfigTable, id: string, reason?: string): Promise<{ deleted?: boolean; deactivated?: boolean }>;
 
   // Audit
   logAudit(input: AuditInput): Promise<AuditLogEntry>;

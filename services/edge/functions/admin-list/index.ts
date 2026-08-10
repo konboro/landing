@@ -89,6 +89,63 @@ const VIEWS: Record<string, ViewSpec> = {
     search: [],
     defaultSort: { field: 'at', asc: false },
   },
+  /* Config catalogues the panel edits through admin-write. Read here so the
+     same permission gates both directions. */
+  pricing_plans: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  packages: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  subscriptions: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  addons: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  penalties: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  promo_codes: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  loyalty_tiers: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  faq_items: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  app_content: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  pois: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  corporate_accounts: {
+    permission: 'team.manage',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],
