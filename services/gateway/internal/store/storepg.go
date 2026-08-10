@@ -256,17 +256,34 @@ SELECT vehicle_id::text, kind::text, COALESCE(payload,'{}'::jsonb)::text,
 
 func (s *PGStore) MarkCommand(ctx context.Context, id, status, channel, errText string) error {
 	// Only advance status; never regress an acked/expired command. Idempotent by id.
+	//
+	// `status` and `channel` are enum columns, so the bound parameters need an
+	// explicit cast — and `id` is a uuid. Without the casts this statement failed
+	// on every call, and because every caller discards the error with `_ =`, the
+	// failure was invisible: the gateway reported "sent"/"acked" in its metrics
+	// while the commands table sat at 'queued' forever. Observed on the first real
+	// unlock — the gateway logged the failure, called MarkCommand, and the row
+	// never moved.
 	const q = `
 UPDATE commands SET
-  status = $2,
-  channel = COALESCE(NULLIF($3,''), channel),
+  status = $2::command_status,
+  channel = COALESCE(NULLIF($3,'')::command_channel, channel),
   error = NULLIF($4,''),
   sent_at = CASE WHEN $2='sent' AND sent_at IS NULL THEN now() ELSE sent_at END,
   acked_at = CASE WHEN $2='acked' THEN now() ELSE acked_at END
-WHERE id = $1
+WHERE id = $1::uuid
   AND status <> 'acked' AND status <> 'expired'`
-	_, err := s.pool.Exec(ctx, q, id, status, channel, errText)
-	return err
+	tag, err := s.pool.Exec(ctx, q, id, status, channel, errText)
+	if err != nil {
+		// Never silent: a command whose status cannot be written looks queued
+		// forever, which is exactly how a stuck unlock hides.
+		log.Printf("[store] MarkCommand %s -> %s failed: %v", id, status, err)
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		log.Printf("[store] MarkCommand %s -> %s matched no row (already terminal?)", id, status)
+	}
+	return nil
 }
 
 func nullStr(s string) any {
