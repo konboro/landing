@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"os"
 	"time"
 
 	"github.com/penny/gateway/internal/adapter"
@@ -112,13 +114,6 @@ func (s *Server) Handle(ctx context.Context, conn net.Conn) {
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(s.cfg.SessionIdleClose))
 		frame, err := readFrame(br)
-		if errors.Is(err, errKeepalive) {
-			// A ping carries no data and needs no reply — it exists so the link
-			// stays up between records, which is exactly what makes a
-			// server-initiated unlock possible. It still counts as activity.
-			sess.Touch()
-			continue
-		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				log.Printf("[server] read imei=%s: %v", imei, err)
@@ -192,29 +187,80 @@ func readHandshake(br *bufio.Reader, timeout time.Duration) (string, error) {
 	return string(buf), nil
 }
 
-// errKeepalive marks a zero-length frame — the device's link ping. It is a
-// normal part of the stream, not a failure, and must never close the session.
-var errKeepalive = errors.New("server: keepalive")
+// frameTrace logs the raw framing words. Temporary: on for the first-device
+// bring-up, because the stream's real shape has to be measured rather than
+// assumed. Set FRAME_TRACE=0 to silence it.
+var frameTrace = os.Getenv("FRAME_TRACE") != "0"
 
 // readFrame reads one preamble-framed packet: [4B zero][4B len][data][4B crc].
 func readFrame(br *bufio.Reader) ([]byte, error) {
-	hdr := make([]byte, 8)
-	if _, err := io.ReadFull(br, hdr); err != nil {
-		return nil, err
-	}
-	dataLen := binary.BigEndian.Uint32(hdr[4:8])
-	if dataLen == 0 {
-		// Not a malformed packet: a zero-length frame is the device's keepalive.
-		// It was treated as a protocol violation, so the gateway hung up on the
-		// scooter every time one arrived — seven times in one afternoon, each
-		// disconnect measured at the device's ping interval. Every failed unlock
-		// today traces back to this: the command was written to a socket the
-		// gateway itself had just closed.
-		return nil, errKeepalive
+	// The stream is a sequence of 4-byte words: a zero preamble, then the data
+	// length, then payload and CRC. Between records the device also sends bare
+	// words that carry no packet, and both kinds have to be skipped to stay
+	// aligned:
+	//
+	//   00000000 — zero padding / the preamble of the next packet
+	//   ffffffff — the link keepalive, measured on the wire at ~4 min intervals
+	//
+	// The keepalive is what this cost. It was read as a length of 4294967295, so
+	// the session was closed as malformed every few minutes — and every unlock
+	// that had been queued in the meantime was written to a socket the gateway
+	// itself had just closed ("use of closed network connection"). Seven
+	// disconnects in one afternoon, all of them ours; the device was doing exactly
+	// what it should, holding the link open with param 1000 = 259200 (the max).
+	//
+	// Guessing at the shape of these words failed twice. The trace below is what
+	// settled it, from the live stream:
+	//   word 00000000 / word 00000051 / len=81 starts 8e010000   (a good record)
+	//   word ffffffff                                            (the ping)
+	var word [4]byte
+	var dataLen uint32
+	for {
+		// Keepalives are TWO bytes, so they cannot be skipped a word at a time
+		// without losing alignment. Measured on the wire: two back to back read as
+		// 0xFFFFFFFF, a single one followed by the next packet's preamble reads as
+		// 0xFFFF0000 — and that second shape closed the session even after
+		// 0xFFFFFFFF was handled. Peeling them off two bytes at a time covers any
+		// number of pings in any position.
+		p, err := br.Peek(2)
+		if err != nil {
+			return nil, err
+		}
+		if p[0] == 0xFF && p[1] == 0xFF {
+			if _, err := br.Discard(2); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		if _, err := io.ReadFull(br, word[:]); err != nil {
+			return nil, err
+		}
+		dataLen = binary.BigEndian.Uint32(word[:])
+		if frameTrace {
+			log.Printf("[frame] word %x", word[:])
+		}
+		if dataLen == 0 {
+			continue // zero padding / the preamble of the next packet
+		}
+		break
 	}
 	if dataLen > 1<<20 {
-		return nil, errors.New("server: implausible data length")
+		// Dump what follows so the stream's real shape is visible instead of
+		// inferred. Two theories have already died on this line.
+		if frameTrace {
+			peek, _ := br.Peek(32)
+			log.Printf("[frame] bad len %d (%x), next bytes: %x", dataLen, word[:], peek)
+		}
+		return nil, fmt.Errorf("server: implausible data length %d", dataLen)
 	}
+	if frameTrace {
+		peek, _ := br.Peek(4)
+		log.Printf("[frame] len=%d starts %x", dataLen, peek)
+	}
+	// Rebuild the header the parsers expect: zero preamble + length.
+	hdr := make([]byte, 8)
+	binary.BigEndian.PutUint32(hdr[4:8], dataLen)
 	rest := make([]byte, int(dataLen)+4)
 	if _, err := io.ReadFull(br, rest); err != nil {
 		return nil, err
