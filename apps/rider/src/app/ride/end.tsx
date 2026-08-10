@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { evaluateZones, canEndHere, OPERATING_CITY, type ZoneLike } from '@penny/geo';
-import { formatMoney, formatDuration, formatDistance, co2SavedKg } from '@penny/ui';
+import { formatMoney, formatDuration, formatDistance, co2SavedKg, formatDateTime } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
@@ -137,7 +137,7 @@ export default function EndRideScreen() {
             <View style={styles.okCircle}><Icon name="check" size={36} color={theme.color.onPrimary} /></View>
           </Row>
           <T variant="title" center>{money(r.cost_cents)}</T>
-          <T variant="caption" center>{r.vehicle_code} · {new Date(r.ended_at ?? Date.now()).toLocaleString()}</T>
+          <T variant="caption" center>{r.vehicle_code} · {formatDateTime(new Date(r.ended_at ?? Date.now()).toISOString())}</T>
 
           <Divider />
           <View style={{ gap: 8 }}>

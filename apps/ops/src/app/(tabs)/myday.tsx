@@ -1,3 +1,4 @@
+import { OPERATING_TZ } from '@penny/ui';
 // My day — the shift, then the work the shift produced.
 //
 // The reference app buries this in a bottom sheet; here it is a real screen so
@@ -239,7 +240,7 @@ function timeOfDay(iso: string | null): string {
   if (!iso) return '—';
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return '—';
-  return new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: OPERATING_TZ });
 }
 
 function dayLabel(iso: string): string {
@@ -247,7 +248,7 @@ function dayLabel(iso: string): string {
   if (Number.isNaN(ms)) return '—';
   const d = new Date(ms);
   if (d.toDateString() === new Date().toDateString()) return 'Today';
-  return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short', timeZone: OPERATING_TZ });
 }
 
 /** An open shift is still accruing, so it is measured against now, not its end. */

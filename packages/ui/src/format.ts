@@ -27,7 +27,26 @@ export function formatSoc(pct: number | null | undefined): string {
   return `${Math.round(pct)}%`;
 }
 
-export function formatDateTime(iso: string | null | undefined, locale = 'en-GB'): string {
+/**
+ * The timezone the fleet operates in. Every timestamp in the product is shown in
+ * street time, not the viewer's.
+ *
+ * Without this, `toLocaleString` uses whatever timezone the device happens to be
+ * in: an operator working from Poland (UTC+2) saw every Greek timestamp an hour
+ * early, so a ride that started at 16:22 in Thessaloniki read 15:22 in the panel.
+ * Dispatchers reason about street time — "was the scooter moved before or after
+ * the shift ended" has one right answer, and it is the city's clock.
+ *
+ * Stored values are unaffected: the database keeps timestamptz in UTC, which is
+ * correct. This only decides how an instant is rendered.
+ */
+export const OPERATING_TZ = 'Europe/Athens';
+
+export function formatDateTime(
+  iso: string | null | undefined,
+  locale = 'en-GB',
+  timeZone = OPERATING_TZ,
+): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString(locale, {
     year: 'numeric',
@@ -35,6 +54,21 @@ export function formatDateTime(iso: string | null | undefined, locale = 'en-GB')
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone,
+  });
+}
+
+/** Time-of-day only, in the operating city's clock. */
+export function formatTime(
+  iso: string | null | undefined,
+  locale = 'en-GB',
+  timeZone = OPERATING_TZ,
+): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone,
   });
 }
 

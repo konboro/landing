@@ -1,3 +1,4 @@
+import { OPERATING_TZ } from '@penny/ui';
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -89,7 +90,7 @@ export function VehicleDetailPage() {
   });
 
   const telemetry = useMemo(() => (data?.telemetry ?? []).map((s) => ({
-    t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: OPERATING_TZ }),
     speed: s.speed_kmh, soc: s.soc_pct, volts: +(s.batt_voltage_mv / 1000).toFixed(2), gsm: s.gsm_signal,
   })), [data]);
 

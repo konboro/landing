@@ -1,4 +1,5 @@
 // Re-export shared formatters plus admin-only helpers.
+import { OPERATING_TZ } from '@penny/ui';
 export {
   formatMoney,
   formatDuration,
@@ -6,13 +7,19 @@ export {
   formatSoc,
   formatDateTime,
   relativeTime,
+  formatTime,
+  OPERATING_TZ,
   co2SavedKg,
   socColor,
 } from '@penny/ui';
 
-export function formatDate(iso: string | null | undefined, locale = 'el-GR'): string {
+export function formatDate(iso: string | null | undefined, locale = 'en-GB'): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: '2-digit' });
+  // Street time, not the viewer's: an operator abroad must not see a Greek date
+  // roll over an hour early. Locale was 'el-GR', which rendered Greek months.
+  return new Date(iso).toLocaleDateString(locale, {
+    year: 'numeric', month: 'short', day: '2-digit', timeZone: OPERATING_TZ,
+  });
 }
 
 export function formatNumber(n: number, locale = 'en-GB'): string {

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { evaluateZones, OPERATING_CITY, type ZoneLike } from '@penny/geo';
-import { formatMoney, formatDuration, formatDistance } from '@penny/ui';
+import { formatMoney, formatDuration, formatDistance, formatTime } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
@@ -105,7 +105,7 @@ export default function ActiveRideScreen() {
       </View>
 
       <Sheet visible={shareOpen} onClose={() => setShareOpen(false)} title={t('ride.share')}>
-        <Banner tone="primary" icon="share" title={share?.url ?? ''} body={`Expires ${share ? new Date(share.expires_at).toLocaleTimeString() : ''}`} />
+        <Banner tone="primary" icon="share" title={share?.url ?? ''} body={`Expires ${share ? formatTime(share.expires_at) : ''}`} />
         <Button title={t('common.done')} onPress={() => setShareOpen(false)} style={{ marginTop: theme.space.md }} />
       </Sheet>
 

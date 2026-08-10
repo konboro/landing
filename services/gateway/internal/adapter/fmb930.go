@@ -174,6 +174,12 @@ func (d *FMB930) BuildCommand(kind CommandKind, args Args) ([]byte, string, erro
 			return nil, "", fmt.Errorf("setparam requires id and value")
 		}
 		ascii = fmt.Sprintf("setparam %s:%s", id, val)
+	case CmdCustom:
+		text, ok := args["text"]
+		if !ok || text == "" {
+			return nil, "", fmt.Errorf("custom requires text")
+		}
+		ascii = text
 	default:
 		return nil, "", fmt.Errorf("unknown command kind %q", kind)
 	}
