@@ -22,6 +22,7 @@ import type {
   MessageThread,
   ChatMessage,
   ConfigTable,
+  ConfigKey,
 } from './api';
 import type { Page, QueryParams } from './query';
 import { toVehicleRideRow, toTimelineEvent } from './rideHistoryMapper';
@@ -54,6 +55,11 @@ import type {
 } from '@/types/domain';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A uuid goes over the wire as `id`; a composite key as `key`. */
+function configKey(key: ConfigKey): { id: string } | { key: Record<string, string> } {
+  return typeof key === 'string' ? { id: key } : { key };
+}
 
 function notImpl(method: string): never {
   throw new Error(
@@ -647,15 +653,17 @@ export class SupabaseDataSource implements DataSource {
     return res.row;
   }
 
-  async configUpdate<T>(table: ConfigTable, id: string, values: Record<string, unknown>): Promise<T> {
-    const res = await this.invoke<{ row: T }>('admin-write', { table, action: 'update', id, values });
+  async configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>): Promise<T> {
+    const res = await this.invoke<{ row: T }>('admin-write', {
+      table, action: 'update', ...configKey(key), values,
+    });
     return res.row;
   }
 
   async configRemove(
-    table: ConfigTable, id: string, reason?: string,
+    table: ConfigTable, key: ConfigKey, reason?: string,
   ): Promise<{ deleted?: boolean; deactivated?: boolean }> {
-    return this.invoke('admin-write', { table, action: 'delete', id, reason });
+    return this.invoke('admin-write', { table, action: 'delete', ...configKey(key), reason });
   }
 
   /* ---- Mutations via edge functions (permission-checked + audited server-side) ----

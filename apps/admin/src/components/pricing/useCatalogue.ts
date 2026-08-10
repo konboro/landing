@@ -13,11 +13,7 @@ import { useToast } from '@/components/ui/Toast';
 import { useAuth, type Permission } from '@/context/AuthContext';
 import type { ConfigTable } from '@/data/api';
 
-// Granted server-side to `admin` and above (migration 00160) and returned by
-// `admin-me`, but the panel's `Permission` union has not caught up and that file
-// belongs to another session right now. Widening here keeps the check truthful
-// without editing it; delete the cast once the union lists `pricing.edit`.
-const PRICING_EDIT = 'pricing.edit' as unknown as Permission;
+const PRICING_EDIT: Permission = 'pricing.edit';
 
 /**
  * The sentence the edge function wrote for the operator.

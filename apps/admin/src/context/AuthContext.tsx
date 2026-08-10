@@ -16,6 +16,10 @@ export type Permission =
   | 'debts.writeoff'
   | 'tasks.manage'
   | 'settings.edit'
+  // Rates, packages, add-ons and the penalty catalogue. Granted server-side
+  // since migration 00160 and returned by `admin-me`; it was simply missing
+  // from this union, so every pricing screen had to cast around it.
+  | 'pricing.edit'
   | 'team.manage'
   | 'verification.review'
   // Message centre. Reading a conversation and answering it are separate:

@@ -108,6 +108,11 @@ export interface BroadcastResult {
 
 /** Tables `admin-write` accepts. Keep in step with its TABLES whitelist —
  *  anything else is refused server-side with `table not writable here`. */
+/** How a config row is addressed. Almost everything is keyed by a uuid; pass
+ *  the columns as an object for the ones that are not — `app_content` is keyed
+ *  by `{ key, lang }` and has no id column at all. */
+export type ConfigKey = string | Record<string, string>;
+
 export type ConfigTable =
   | 'pricing_plans' | 'packages' | 'subscriptions' | 'addons' | 'penalties'
   | 'promo_codes' | 'customer_groups' | 'loyalty_tiers' | 'pois'
@@ -302,10 +307,10 @@ export interface DataSource {
      therefore cannot write anything the server has not explicitly allowed. */
   configList<T>(table: ConfigTable, params: QueryParams): Promise<Page<T>>;
   configCreate<T>(table: ConfigTable, values: Record<string, unknown>): Promise<T>;
-  configUpdate<T>(table: ConfigTable, id: string, values: Record<string, unknown>): Promise<T>;
+  configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>): Promise<T>;
   /** Resolves with `deactivated: true` when the row is referenced by history and
    *  was flipped inactive instead of removed — say so in the UI. */
-  configRemove(table: ConfigTable, id: string, reason?: string): Promise<{ deleted?: boolean; deactivated?: boolean }>;
+  configRemove(table: ConfigTable, key: ConfigKey, reason?: string): Promise<{ deleted?: boolean; deactivated?: boolean }>;
 
   // Audit
   logAudit(input: AuditInput): Promise<AuditLogEntry>;

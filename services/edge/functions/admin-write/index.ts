@@ -26,6 +26,9 @@ interface TableSpec {
   permission: string;
   /** Columns a caller may set on insert or update. Everything else is dropped. */
   columns: string[];
+  /** Primary key columns. Defaults to a single `id`; `app_content` is keyed by
+   *  (key, lang), so a row cannot always be addressed by one value. */
+  pk?: string[];
   /** Delete allowed at all? Catalogues referenced by historical rows are
    *  deactivated instead, so the history keeps resolving. */
   deletable: boolean;
@@ -73,7 +76,11 @@ const TABLES: Record<string, TableSpec> = {
   /* ---- Marketing ---- */
   promo_codes: {
     permission: 'settings.edit',
-    columns: ['code', 'kind', 'value_cents', 'percent', 'max_redemptions', 'per_user_limit', 'valid_from', 'valid_to', 'active', 'segment'],
+    // `kind` is percent | fixed | free_minutes and `value` is read in that
+    // kind's unit (percent points, cents, minutes) — docs/02. One column, not
+    // three mutually exclusive ones.
+    columns: ['code', 'kind', 'value', 'max_uses', 'per_user_limit', 'valid_from', 'valid_to', 'new_users_only', 'city_id', 'active'],
+    // A redeemed code is referenced by the discount on someone's receipt.
     deletable: false, softDeleteColumn: 'active',
     entity: 'promo_code',
   },
@@ -91,7 +98,7 @@ const TABLES: Record<string, TableSpec> = {
   },
   pois: {
     permission: 'settings.edit',
-    columns: ['city_id', 'kind', 'name', 'pos', 'active'],
+    columns: ['city_id', 'kind', 'name', 'pos', 'icon', 'active'],
     deletable: true,
     entity: 'poi',
   },
@@ -106,6 +113,9 @@ const TABLES: Record<string, TableSpec> = {
   app_content: {
     permission: 'settings.edit',
     columns: ['key', 'lang', 'value'],
+    // Keyed by (key, lang) — there is no id column. One entry per language of
+    // the same content key, which is the whole point of the table.
+    pk: ['key', 'lang'],
     deletable: true,
     entity: 'app_content',
   },
@@ -113,7 +123,9 @@ const TABLES: Record<string, TableSpec> = {
   /* ---- Team ---- */
   corporate_accounts: {
     permission: 'team.manage',
-    columns: ['name', 'vat_id', 'billing_email', 'monthly_limit_cents', 'active'],
+    columns: ['name', 'billing_email', 'stripe_customer_id', 'monthly_invoicing', 'active'],
+    // Invoices issued to a company must keep resolving — and under Greek
+    // myDATA rules they are retained regardless (docs/05).
     deletable: false, softDeleteColumn: 'active',
     entity: 'corporate_account',
   },
@@ -168,20 +180,37 @@ const handler = withErrors(async (req: Request) => {
     return json({ row: data }, 201);
   }
 
-  if (!id) throw new EdgeError('bad_request', 'id is required', 400);
+  // Which row? Single-key tables take `id`; composite ones take `key` as an
+  // object of the key columns. Built here once so update and delete address a
+  // row identically.
+  const pkCols = spec.pk ?? ['id'];
+  const match: Record<string, unknown> = {};
+  if (pkCols.length === 1 && pkCols[0] === 'id') {
+    if (!id) throw new EdgeError('bad_request', 'id is required', 400);
+    match.id = id;
+  } else {
+    const key = (body.key ?? {}) as Record<string, unknown>;
+    for (const c of pkCols) {
+      if (key[c] === undefined || key[c] === null || key[c] === '') {
+        throw new EdgeError('bad_request', `key.${c} is required for ${table}`, 400);
+      }
+      match[c] = key[c];
+    }
+  }
+  const entityId = pkCols.map((c) => String(match[c])).join('/');
 
   // Read the before-image first: an audit entry that cannot say what changed is
   // barely an audit entry.
-  const { data: before } = await admin.from(table).select('*').eq('id', id).maybeSingle();
+  const { data: before } = await admin.from(table).select('*').match(match).maybeSingle();
   if (!before) throw new EdgeError('not_found', `${spec.entity} not found`, 404);
 
   if (action === 'update') {
     const patch = pick(values, spec.columns);
     if (Object.keys(patch).length === 0) throw new EdgeError('bad_request', 'nothing to update', 400);
-    const { data, error } = await admin.from(table).update(patch).eq('id', id).select('*').single();
+    const { data, error } = await admin.from(table).update(patch).match(match).select('*').single();
     if (error) throw new EdgeError('db_error', error.message, 400);
     await writeAudit(admin, {
-      staff_id: staff.staff_id, action: `${spec.entity}.update`, entity: table, entity_id: id,
+      staff_id: staff.staff_id, action: `${spec.entity}.update`, entity: table, entity_id: entityId,
       before, after: patch, reason, ip: req.headers.get('x-forwarded-for'),
     });
     return json({ row: data });
@@ -190,10 +219,10 @@ const handler = withErrors(async (req: Request) => {
   // delete
   if (!spec.deletable) {
     const col = spec.softDeleteColumn ?? 'active';
-    const { data, error } = await admin.from(table).update({ [col]: false }).eq('id', id).select('*').single();
+    const { data, error } = await admin.from(table).update({ [col]: false }).match(match).select('*').single();
     if (error) throw new EdgeError('db_error', error.message, 400);
     await writeAudit(admin, {
-      staff_id: staff.staff_id, action: `${spec.entity}.deactivate`, entity: table, entity_id: id,
+      staff_id: staff.staff_id, action: `${spec.entity}.deactivate`, entity: table, entity_id: entityId,
       before, after: { [col]: false }, reason, ip: req.headers.get('x-forwarded-for'),
     });
     // Told plainly so the UI can say "deactivated", not "deleted" — the row is
@@ -201,10 +230,10 @@ const handler = withErrors(async (req: Request) => {
     return json({ row: data, deactivated: true });
   }
 
-  const { error } = await admin.from(table).delete().eq('id', id);
+  const { error } = await admin.from(table).delete().match(match);
   if (error) throw new EdgeError('db_error', error.message, 400);
   await writeAudit(admin, {
-    staff_id: staff.staff_id, action: `${spec.entity}.delete`, entity: table, entity_id: id,
+    staff_id: staff.staff_id, action: `${spec.entity}.delete`, entity: table, entity_id: entityId,
     before, after: null, reason, ip: req.headers.get('x-forwarded-for'),
   });
   return json({ deleted: true });

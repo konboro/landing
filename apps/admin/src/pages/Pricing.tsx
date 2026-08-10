@@ -22,9 +22,7 @@ import { SubscriptionsTab } from '@/components/pricing/SubscriptionsTab';
 import { AddonsTab } from '@/components/pricing/AddonsTab';
 import { PenaltiesTab } from '@/components/pricing/PenaltiesTab';
 
-// Server-side grant (migration 00160) that the panel's Permission union does not
-// list yet; see the note in components/pricing/useCatalogue.ts.
-const PRICING_EDIT = 'pricing.edit' as unknown as Permission;
+const PRICING_EDIT: Permission = 'pricing.edit';
 
 const TABS = [
   { key: 'plans', label: 'Plans' },

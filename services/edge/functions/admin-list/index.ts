@@ -126,15 +126,24 @@ const VIEWS: Record<string, ViewSpec> = {
     search: [],
     defaultSort: { field: 'created_at', asc: false },
   },
+  // Neither table has created_at: FAQ entries carry an explicit display order,
+  // and app_content rows are updated in place rather than appended.
   faq_items: {
     permission: 'settings.edit',
-    search: [],
-    defaultSort: { field: 'created_at', asc: false },
+    search: ['question', 'answer'],
+    defaultSort: { field: 'sort', asc: true },
   },
   app_content: {
     permission: 'settings.edit',
-    search: [],
-    defaultSort: { field: 'created_at', asc: false },
+    search: ['key'],
+    defaultSort: { field: 'updated_at', asc: false },
+  },
+  // The raw table, not v_admin_customer_groups — the panel edits these rows,
+  // and the view aggregates member counts onto them.
+  customer_groups: {
+    permission: 'settings.edit',
+    search: ['name'],
+    defaultSort: { field: 'name', asc: true },
   },
   pois: {
     permission: 'settings.edit',
@@ -143,7 +152,12 @@ const VIEWS: Record<string, ViewSpec> = {
   },
   corporate_accounts: {
     permission: 'team.manage',
-    search: [],
+    search: ['name', 'billing_email'],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  staff: {
+    permission: 'team.manage',
+    search: ['role'],
     defaultSort: { field: 'created_at', asc: false },
   },
   audit_log: {
