@@ -117,7 +117,7 @@ export type ConfigTable =
   | 'pricing_plans' | 'packages' | 'subscriptions' | 'addons' | 'penalties'
   | 'promo_codes' | 'customer_groups' | 'loyalty_tiers' | 'pois'
   | 'faq_items' | 'app_content' | 'translations'
-  | 'notification_rules'
+  | 'notification_rules' | 'customer_forms'
   | 'corporate_accounts' | 'staff';
 
 export interface CreateVehicleInput {
@@ -307,8 +307,8 @@ export interface DataSource {
      set, and whether a delete is a real delete or a deactivation. The panel
      therefore cannot write anything the server has not explicitly allowed. */
   configList<T>(table: ConfigTable, params: QueryParams): Promise<Page<T>>;
-  configCreate<T>(table: ConfigTable, values: Record<string, unknown>): Promise<T>;
-  configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>): Promise<T>;
+  configCreate<T>(table: ConfigTable, values: Record<string, unknown>, reason?: string): Promise<T>;
+  configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>, reason?: string): Promise<T>;
   /** Resolves with `deactivated: true` when the row is referenced by history and
    *  was flipped inactive instead of removed — say so in the UI. */
   configRemove(table: ConfigTable, key: ConfigKey, reason?: string): Promise<{ deleted?: boolean; deactivated?: boolean }>;

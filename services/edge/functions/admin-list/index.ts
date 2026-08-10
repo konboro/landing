@@ -170,6 +170,11 @@ const VIEWS: Record<string, ViewSpec> = {
     search: ['key', 'value'],
     defaultSort: { field: 'key', asc: true },
   },
+  customer_forms: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],

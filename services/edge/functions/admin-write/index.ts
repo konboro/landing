@@ -129,6 +129,14 @@ const TABLES: Record<string, TableSpec> = {
     deletable: false, softDeleteColumn: 'active',
     entity: 'notification_rule',
   },
+  // The extra questions asked at signup. One active form at a time; older ones
+  // are kept because answers reference the form they were given against.
+  customer_forms: {
+    permission: 'settings.edit',
+    columns: ['fields', 'active'],
+    deletable: false, softDeleteColumn: 'active',
+    entity: 'customer_form',
+  },
   translations: {
     permission: 'settings.edit',
     columns: ['lang', 'ns', 'key', 'value'],

@@ -25,6 +25,12 @@ const WRITABLE_KEYS = new Set([
   // edited through admin-write. Left out deliberately: re-adding the key would
   // recreate a second catalogue that nothing reads.
   'station_mode',
+  // Reaction test before unlocking (docs/04). `reaction_tests` is the RESULTS
+  // log — user, trip, passed, score — and has never had a config counterpart,
+  // so the Settings editor for it saved nowhere.
+  'reaction_test_required',   // bool
+  'reaction_test',            // { rounds, max_ms, valid_min }
+  'max_telemetry_age_s',      // already in the table, was read-only for want of this line
 ]);
 
 const handler = withErrors(async (req: Request) => {

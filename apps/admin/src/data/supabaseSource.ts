@@ -756,14 +756,18 @@ export class SupabaseDataSource implements DataSource {
     return this.listFrom<T>(table, params);
   }
 
-  async configCreate<T>(table: ConfigTable, values: Record<string, unknown>): Promise<T> {
-    const res = await this.invoke<{ row: T }>('admin-write', { table, action: 'create', values });
+  /* `reason` is optional but passed through on all three: admin-write records
+     it in audit_log, and a create or edit with no stated reason leaves an audit
+     entry that says what changed and never why. */
+
+  async configCreate<T>(table: ConfigTable, values: Record<string, unknown>, reason?: string): Promise<T> {
+    const res = await this.invoke<{ row: T }>('admin-write', { table, action: 'create', values, reason });
     return res.row;
   }
 
-  async configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>): Promise<T> {
+  async configUpdate<T>(table: ConfigTable, key: ConfigKey, values: Record<string, unknown>, reason?: string): Promise<T> {
     const res = await this.invoke<{ row: T }>('admin-write', {
-      table, action: 'update', ...configKey(key), values,
+      table, action: 'update', ...configKey(key), values, reason,
     });
     return res.row;
   }
