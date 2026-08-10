@@ -145,6 +145,10 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     referralsRes,
     loyaltyRes,
     devicesRes,
+    paymentMethodsRes,
+    loyaltyEventsRes,
+    notifPrefsRes,
+    tiersRes,
   ] = await Promise.all([
     want('kyc') ? kycBundle(admin, userId) : Promise.resolve(null),
     want('rides')
@@ -202,6 +206,30 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
           .eq('user_id', userId)
           .order('last_seen', { ascending: false })
       : Promise.resolve({ data: [] }),
+    // The rider's saved cards. Support's first question on a failed unlock is
+    // "do they even have a card on file", and the panel had no way to answer
+    // it. Only brand/last4/expiry/status — never a full number (Hard Rule #11).
+    want('payments')
+      ? admin
+          .from('payment_methods')
+          .select('id, brand, last4, exp, status, is_default, created_at')
+          .eq('user_id', userId)
+          .order('is_default', { ascending: false })
+      : Promise.resolve({ data: [] }),
+    want('loyalty')
+      ? admin
+          .from('loyalty_events')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(limit)
+      : Promise.resolve({ data: [] }),
+    // What the rider agreed to receive. Support needs it before promising
+    // someone a push notification they have switched off.
+    admin.from('user_notification_prefs').select('*').eq('user_id', userId).maybeSingle(),
+    // The tier catalogue, so the rider's tier can be named rather than left as
+    // a bare point count.
+    admin.from('loyalty_tiers').select('name, min_points').eq('active', true).order('min_points', { ascending: true }),
   ]);
 
   const payments = (paymentsRes.data ?? []) as Array<Record<string, unknown>>;
@@ -235,6 +263,13 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     devices_used: devicesRes.data ?? [],
     referrals: referralsRes.data ?? [],
     loyalty: loyaltyRes.data ?? null,
+    payment_methods: paymentMethodsRes.data ?? [],
+    loyalty_events: loyaltyEventsRes.data ?? [],
+    notification_prefs: notifPrefsRes.data ?? null,
+    // Highest tier whose threshold the rider has reached.
+    loyalty_tier: ((tiersRes.data ?? []) as Array<{ name: string; min_points: number }>)
+      .filter((t) => t.min_points <= Number((profile as Record<string, unknown>).loyalty_points ?? 0))
+      .at(-1)?.name ?? null,
     timeline: timelineRes.data ?? [],
   });
 });

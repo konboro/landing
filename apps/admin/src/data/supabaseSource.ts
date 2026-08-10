@@ -419,9 +419,82 @@ export class SupabaseDataSource implements DataSource {
     };
   }
 
+  /**
+   * The customer page reads seven arrays off this object — notes, devices,
+   * payment methods, loyalty events, form answers, risk reasons, tags. The edge
+   * function returns them as SIBLINGS of `profile`, not inside it, and this
+   * used to return `res.profile` alone. Every one of those arrays arrived
+   * undefined and the page died on the first `.length` — a blank customer
+   * screen, with the payload sitting right there in the response.
+   *
+   * So the bundle is assembled here. Sections the backend genuinely has no
+   * source for default to empty, which renders as an empty section: honest,
+   * and not a crash.
+   */
   async getUserProfile(userId: string): Promise<UserProfileFull | null> {
-    const res = await this.invoke<{ profile: UserProfileFull | null }>('admin-user-profile', { user_id: userId });
-    return res.profile ?? null;
+    const res = await this.invoke<Record<string, unknown>>('admin-user-profile', { user_id: userId });
+    const profile = res.profile as Record<string, unknown> | null;
+    if (!profile) return null;
+
+    const arr = <T,>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+    const prefs = (res.notification_prefs ?? {}) as Record<string, unknown>;
+    const emergency = (profile.emergency_contact ?? null) as { name?: string } | null;
+
+    return {
+      ...profile,
+      tags: arr(profile.tags),
+      // Push registrations, one per device the rider has signed in on.
+      devices: arr(res.devices_used),
+      payment_methods: arr(res.payment_methods),
+      loyalty_events: arr(res.loyalty_events),
+      stats: (res.stats ?? profile) as UserProfileFull['stats'],
+      loyalty_tier: res.loyalty_tier ?? '—',
+
+      // The view stores the address as four flat columns; the page reads one
+      // nested object and died dereferencing it.
+      address: {
+        line1: profile.address_line ?? null,
+        line2: null,
+        city: profile.address_city ?? null,
+        postcode: profile.address_postcode ?? null,
+        country: profile.address_country ?? null,
+      },
+      // Same story for consents. Only what is actually recorded is filled in —
+      // a consent the system never captured must read as unknown, never as
+      // given.
+      consents: {
+        marketing_consent: profile.marketing_consent ?? false,
+        marketing_consent_at: null,
+        tos_accepted_at: profile.tos_accepted_at ?? null,
+        tos_version: null,
+        privacy_accepted_at: profile.privacy_accepted_at ?? null,
+        privacy_version: null,
+        age_confirmed: null,
+        data_processing_at: null,
+      },
+      notification_prefs: {
+        push_promotions: prefs.push_marketing ?? false,
+        push_trip_receipts: prefs.push_transactional ?? false,
+        email_newsletter: prefs.email_marketing ?? false,
+        email_receipts: prefs.email_receipts ?? false,
+        // No SMS preference column exists; SMS is the OTP fallback only.
+        sms_critical: null,
+      },
+
+      emergency_contact_name: emergency?.name ?? null,
+      referrals_qualified: profile.referrals_completed ?? 0,
+      referral_code: profile.referral_code ?? null,
+      customer_group_name: profile.customer_group_name ?? null,
+      legacy_rides: profile.legacy_atom_user_id ? null : 0,
+
+      // No backing store for these three yet: there is no user-notes table, no
+      // per-user form answers, and risk reasons are not itemised — only the
+      // numeric `risk_score` the profile already carries. Empty rather than
+      // invented.
+      notes: [],
+      form_answers: [],
+      risk_reasons: [],
+    } as unknown as UserProfileFull;
   }
 
   async getUserRides(userId: string, params: QueryParams): Promise<Page<UserRideHistoryRow>> {
