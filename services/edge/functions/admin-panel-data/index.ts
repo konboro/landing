@@ -65,6 +65,8 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     all(admin, 'payments', { order: 'created_at', limit: 500 }),
     all(admin, 'debts', { order: 'created_at' }),
     all(admin, 'zones'),
+    // Shaped for the history list below, which needs a zone count and the
+    // operator's note — the table stores `payload` and `reason`.
     all(admin, 'zone_versions', { order: 'version' }),
     all(admin, 'vehicle_alerts', { order: 'created_at', limit: 200 }),
     all(admin, 'commands', { order: 'created_at', limit: 200 }),
@@ -110,6 +112,27 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
   // app_config.penalties, read here through an Array.isArray guard it could
   // never satisfy — so the catalogue rendered empty whatever was configured.
   const penalties = await all(admin, 'penalties', { order: 'code', asc: true });
+
+  // The zone history list reads `note` and `count`; the table has `reason` and
+  // a `payload` array. Reading the raw row rendered "Δ vs v1: NaN zones" and an
+  // empty note. `payload` rides along — rollback replays it.
+  // `created_by` is a user id; the history line showed it raw, so every entry
+  // read "2d05d0bd-7e6d-…" instead of naming who redrew the city.
+  const authorIds = [...new Set(zoneVersions.map((v) => v.created_by).filter(Boolean))] as string[];
+  const { data: authorRows } = authorIds.length
+    ? await admin.from('users').select('id, full_name, email').in('id', authorIds)
+    : { data: [] };
+  const authorName = new Map(
+    ((authorRows ?? []) as Array<{ id: string; full_name?: string; email?: string }>)
+      .map((u) => [u.id, u.full_name || u.email || u.id]),
+  );
+
+  const zoneVersionsShaped = zoneVersions.map((v) => ({
+    ...v,
+    note: v.reason ?? '',
+    count: Array.isArray(v.payload) ? v.payload.length : 0,
+    created_by: authorName.get(String(v.created_by)) ?? String(v.created_by ?? '—'),
+  }));
 
   // Each entry carries the kind of the account it hit, so the ledger explorer
   // can label "Stripe clearing +8.00 / User wallet −8.00" without a second
@@ -165,7 +188,7 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
   return json({
     cities, models, batteryCurves, vehicles, devices,
     customers, rides, payments, debts,
-    zones, zoneVersions, alerts, commands, opsTasks, damageReports, staff,
+    zones, zoneVersions: zoneVersionsShaped, alerts, commands, opsTasks, damageReports, staff,
     ledgerAccounts, ledgerEntries: ledgerEntriesLabelled, invoices, corporate,
     notificationRules, notificationLog,
     promos, groups, campaigns, referrals, pois,

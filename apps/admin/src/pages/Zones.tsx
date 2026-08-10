@@ -96,6 +96,29 @@ export function ZonesPage() {
     onError: (e: unknown) => toast.push(e instanceof Error ? e.message : 'Save failed', 'error'),
   });
 
+  /* Rollback replays a stored version through the same save path. It moves
+     FORWARD — the restored boundaries land as a new version — so the record of
+     who changed what and when is never rewritten. The button used to raise an
+     "info" toast saying it "would" do this, and do nothing. */
+  const rollback = useMutation({
+    mutationFn: async (version: number) => {
+      const target = (db?.zoneVersions ?? []).find((v) => v.version === version);
+      const payload = Array.isArray(target?.payload) ? (target.payload as Zone[]) : null;
+      if (!payload?.length) {
+        throw new Error(`v${version} has no stored geometry to restore.`);
+      }
+      return ds.saveZoneVersion(payload, `Rollback to v${version}`);
+    },
+    onSuccess: (version) => {
+      toast.push(`Restored those boundaries as v${version}`, 'success');
+      setDraft(null);
+      setSelectedId(null);
+      qc.invalidateQueries({ queryKey: ['zones'] });
+      qc.invalidateQueries({ queryKey: ['panel-data'] });
+    },
+    onError: (e: unknown) => toast.push(e instanceof Error ? e.message : 'Rollback failed', 'error'),
+  });
+
   const updateZone = (id: string, patch: Partial<Zone>) => {
     if (pending && pending.id === id) {
       setPending({ ...pending, ...patch });
@@ -291,7 +314,15 @@ export function ZonesPage() {
 
       <div className="grid grid-2">
         <PointCheck zones={activeZones} />
-        <Versions versions={db?.zoneVersions ?? []} onRollback={(v) => toast.push(`Rolled back to v${v} (would create new version)`, 'info')} />
+        {/* Rolling back replays that version's stored payload through the same
+            save path, so it lands as a NEW version rather than rewriting
+            history — the journal of who changed the boundaries stays intact. */}
+        <Versions
+          versions={db?.zoneVersions ?? []}
+          canEdit={can('zones.edit')}
+          onRollback={(v) => rollback.mutate(v)}
+          rollingBack={rollback.isPending ? rollback.variables ?? null : null}
+        />
       </div>
 
       {/* Name-before-it-exists: the drawn polygon is on the map, but it does not
@@ -643,7 +674,12 @@ function Row({ label, ok, okText = 'yes', badText = 'no' }: { label: string; ok:
   return <div className="between"><span>{label}</span><Badge tone={ok ? 'success' : 'danger'}>{ok ? okText : badText}</Badge></div>;
 }
 
-function Versions({ versions, onRollback }: { versions: Array<{ version: number; created_at: string; created_by: string; note: string; count: number }>; onRollback: (v: number) => void }) {
+function Versions({ versions, onRollback, canEdit, rollingBack }: {
+  versions: Array<{ version: number; created_at: string; created_by: string; note: string; count: number }>;
+  onRollback: (v: number) => void;
+  canEdit: boolean;
+  rollingBack: number | null;
+}) {
   return (
     <Card>
       <CardHeader title="Version history" sub="Diff & rollback" />
@@ -656,7 +692,16 @@ function Versions({ versions, onRollback }: { versions: Array<{ version: number;
               <div className="muted" style={{ fontSize: 12 }}>{v.note} · {v.count} zones · {v.created_by} · {formatDateTime(v.created_at)}</div>
               {i < versions.length ? <div className="muted" style={{ fontSize: 12 }}>Δ vs v{v.version - 1}: {v.count - (versions[i + 1]?.count ?? v.count) >= 0 ? '+' : ''}{v.count - (versions[i + 1]?.count ?? v.count)} zones</div> : null}
             </div>
-            {i !== 0 ? <Button size="sm" onClick={() => onRollback(v.version)}>Rollback</Button> : null}
+            {i !== 0 && canEdit ? (
+              <Button
+                size="sm"
+                disabled={rollingBack !== null}
+                title={`Restore the ${v.count} boundaries saved in v${v.version} as a new version`}
+                onClick={() => onRollback(v.version)}
+              >
+                {rollingBack === v.version ? 'Restoring…' : 'Rollback'}
+              </Button>
+            ) : null}
           </div>
         ))}
       </div>

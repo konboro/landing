@@ -112,7 +112,13 @@ export interface PanelData {
   payments: Payment[];
   debts: Debt[];
   zones: Zone[];
-  zoneVersions: Array<{ version: number; created_at: string; created_by: string; note: string; count: number }>;
+  /** `note` and `count` are derived server-side from the row's `reason` and
+   *  `payload`; `payload` is the full geometry of that version, which is what
+   *  a rollback replays. */
+  zoneVersions: Array<{
+    version: number; created_at: string; created_by: string;
+    note: string; count: number; payload?: unknown;
+  }>;
   alerts: VehicleAlert[];
   commands: Command[];
   opsTasks: OpsTask[];
