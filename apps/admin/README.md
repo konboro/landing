@@ -5,8 +5,16 @@ Full Atom-parity admin panel (+ upgrades) for the Penny e-scooter platform, Athe
 
 ## Deployment — Vercel
 
-Live: **https://penny-admin-one.vercel.app** (project `penny-admin`, scope
-`konrads-projects-7e53c7e8`).
+Live: **https://penny-admin-live.vercel.app** — Vercel project
+`penny-admin-live`, scope `konrads-projects-7e53c7e8`.
+
+**There is exactly one project for this panel, and the deploy script pins it.**
+Do not run a bare `vercel deploy`: without `--project` the CLI names the new
+project after the directory, which is how this account ended up with
+`penny-admin`, `penny-admin-live` and `dist` all serving the same app while
+each session verified its own copy and believed the other one was wrong. The
+duplicates are deleted; `admin` in the same scope is a DIFFERENT product
+(Tycoon) — leave it alone.
 
 ```bash
 pnpm --filter @penny/admin deploy      # build + push to production

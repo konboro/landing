@@ -97,3 +97,19 @@ must change one, say so in your final report so it reaches the human.
 **Typechecking during parallel work**: `npx tsc --noEmit` will show errors from
 the other session's half-written files. Do not "fix" them — you will fight an
 editor that is still typing. Verify only the files you own.
+
+## Deployment targets (one per surface — check before you deploy)
+
+The admin panel has exactly ONE Vercel project: **`penny-admin-live`**
+(https://penny-admin-live.vercel.app). Deploy with `pnpm --filter @penny/admin
+deploy`, which pins `--project`.
+
+A bare `vercel deploy` names the project after the working directory, so two
+sessions deploying the same app created `penny-admin`, `penny-admin-live` and
+`dist` — three live copies. Each session then verified its own URL, saw the
+feature, and told the human it was shipped while the human was looking at a
+different one. The duplicates are deleted.
+
+Before deploying anything: `vercel project ls`. If more than one project could
+plausibly be the target, ASK which URL the human actually opens rather than
+picking one. `admin` in this scope belongs to a different product (Tycoon).

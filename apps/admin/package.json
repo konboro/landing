@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && vercel deploy dist --prod --yes --project penny-admin --scope konrads-projects-7e53c7e8",
+    "deploy": "npm run build && vercel deploy dist --prod --yes --project penny-admin-live --scope konrads-projects-7e53c7e8",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist node_modules/.vite"
