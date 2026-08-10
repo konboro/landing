@@ -29,6 +29,7 @@ export default function WalletScreen() {
   const [debts, setDebts] = useState<DebtView[]>([]);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const [w, c, p, s, a, d] = await Promise.all([
@@ -44,12 +45,32 @@ export default function WalletScreen() {
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
-    try { await fn(); await reload(); Haptics.success(); } finally { setBusy(null); }
+    setError(null);
+    try {
+      await fn();
+      await reload();
+      Haptics.success();
+    } catch (e) {
+      // Dismissing PaymentSheet is a normal outcome, not a failure — say nothing.
+      // Anything else has to be visible: these actions move money, and a silent
+      // no-op looks identical to success.
+      const err = e as { code?: string; message?: string };
+      if (err?.code !== 'canceled') {
+        setError(err?.message ?? t('common.error'));
+        Haptics.error();
+      }
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
     <Screen edges={['top']} scroll>
       <T variant="title" style={{ marginBottom: theme.space.md }}>{t('wallet.title')}</T>
+
+      {error ? (
+        <Banner tone="danger" icon="warning" title={error} style={{ marginBottom: theme.space.md }} />
+      ) : null}
 
       {debtTotal > 0 ? (
         <Banner

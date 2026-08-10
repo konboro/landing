@@ -16,6 +16,7 @@ import type {
 import { estimateRangeM, OPERATING_CITY, OPERATING_BBOX } from '@penny/geo';
 import type { Lang } from '../../i18n';
 import { uuid } from '../../lib/ids';
+import { StripeSvc } from '../../lib/native';
 import {
   RiderApiError,
   type RiderApi,
@@ -58,6 +59,23 @@ import {
 
 const NI = (what: string) =>
   new RiderApiError('not_implemented', `${what} is not wired to the live backend yet.`);
+
+/** Card rows allow null brand/last4/exp (a PM Stripe has not expanded yet); the UI type does not. */
+function toCard(p: {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  exp: string | null;
+  is_default: boolean;
+}): Card {
+  return {
+    id: p.id,
+    brand: p.brand ?? 'card',
+    last4: p.last4 ?? '••••',
+    exp: p.exp ?? '',
+    is_default: p.is_default,
+  };
+}
 
 const DEFAULT_PRICING: PricingSnapshot = {
   unlock_cents: 100,
@@ -568,33 +586,59 @@ export class SupabaseRiderApi implements RiderApi {
     return { balance_cents: d?.balance_cents ?? 0, currency: d?.currency ?? 'EUR' };
   }
 
-  async topUp(_cents: number): Promise<Wallet> {
-    throw NI('Wallet top-up');
+  async topUp(cents: number): Promise<Wallet> {
+    const before = await this.getWallet();
+    const { client_secret } = await this.client.edge.topUp(cents);
+    const outcome = await StripeSvc.presentSheet({ kind: 'payment', clientSecret: client_secret });
+    if (outcome === 'canceled') throw new RiderApiError('canceled', 'Top-up cancelled.');
+    return await this.walletAfterCredit(before.balance_cents);
+  }
+
+  /**
+   * The wallet is credited by payments-webhook on payment_intent.succeeded, which
+   * lands shortly *after* the sheet closes. Reading the balance straight away would
+   * show the old number and read as a failed top-up, so wait briefly for it to move.
+   * Falls through with whatever the balance is after ~4 s rather than blocking: the
+   * credit is not lost, it is just late, and the next refresh will show it.
+   */
+  private async walletAfterCredit(previousCents: number): Promise<Wallet> {
+    let w = await this.getWallet();
+    for (let i = 0; i < 8 && w.balance_cents === previousCents; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      w = await this.getWallet();
+    }
+    return w;
   }
 
   async getCards(): Promise<Card[]> {
     const id = await this.userId();
     const pms = await this.client.repos.paymentMethods(id);
-    return pms.map((p) => ({
-      id: p.id,
-      brand: p.brand,
-      last4: p.last4,
-      exp: p.exp,
-      is_default: p.is_default,
-    }));
+    // Removed cards keep their row so past payments stay readable — they must not
+    // show up as something the rider can still pay with.
+    return pms.filter((p) => p.status === 'active').map(toCard);
   }
 
   async addCard(): Promise<Card> {
-    // Would present Stripe PaymentSheet with a SetupIntent client_secret.
-    await this.client.edge.createSetupIntent();
-    throw NI('Card add (present PaymentSheet with the returned client_secret)');
+    const { client_secret } = await this.client.edge.createSetupIntent();
+    const outcome = await StripeSvc.presentSheet({ kind: 'setup', clientSecret: client_secret });
+    if (outcome === 'canceled') throw new RiderApiError('canceled', 'Card setup cancelled.');
+
+    // Reconcile with Stripe rather than waiting on setup_intent.succeeded, so the
+    // new card is there the moment the sheet closes instead of a webhook later.
+    const { cards } = await this.client.edge.cards({ action: 'sync' });
+    const added = cards[cards.length - 1];
+    if (!added) throw new RiderApiError('card_not_saved', 'The card was not saved. Please try again.');
+    return toCard(added);
   }
 
-  async setDefaultCard(): Promise<Card[]> {
-    throw NI('Set default card');
+  async setDefaultCard(id: string): Promise<Card[]> {
+    const { cards } = await this.client.edge.cards({ action: 'set_default', card_id: id });
+    return cards.map(toCard);
   }
-  async removeCard(): Promise<Card[]> {
-    throw NI('Remove card');
+
+  async removeCard(id: string): Promise<Card[]> {
+    const { cards } = await this.client.edge.cards({ action: 'remove', card_id: id });
+    return cards.map(toCard);
   }
 
   async getPackages(): Promise<PackageProduct[]> {
