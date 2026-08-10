@@ -876,3 +876,26 @@ export interface VehicleIoFrame {
   gsm_signal: number | null;
   io: Record<string, number>;
 }
+
+/** Exactly what `admin-vehicle-history` returns: one flat snapshot, no paging.
+ *  Declared so the panel stops guessing that endpoint's shape — the previous
+ *  guess (`Page<T>` with a `section` argument) is what blanked the Rides,
+ *  Timeline and Damage tabs. */
+export interface VehicleHistorySnapshot {
+  vehicle: VehicleRow;
+  device: unknown;
+  state: unknown;
+  stats: VehicleStats | null;
+  /** RAW view rows — run them through toVehicleRideRow() before rendering. */
+  rides: Array<Record<string, unknown>>;
+  total_rides: number;
+  /** RAW view rows —  is jsonb; map with toTimelineEvent(). */
+  timeline: Array<Record<string, unknown>>;
+  commands: unknown[];
+  alerts: unknown[];
+  status_log: unknown[];
+  damage: unknown[];
+  maintenance: unknown[];
+  battery_swaps: unknown[];
+  telemetry_summary: unknown[];
+}

@@ -63,7 +63,10 @@ function Staff({ db }: { db: DB }) {
             {db.staff.map((s) => (
               <tr key={s.id}>
                 <td>{s.name}</td><td>{s.email}</td><td><Badge tone="info">{s.role}</Badge></td>
-                <td>{s.city_scope.length ? s.city_scope.join(', ') : <span className="muted">All cities</span>}</td>
+                {/* `staff.city_scope` is nullable and NULL is the common case —
+                    the schema uses it to mean "every city". Indexing it blanked
+                    the whole page the moment one unrestricted staff row existed. */}
+                <td>{s.city_scope?.length ? s.city_scope.join(', ') : <span className="muted">All cities</span>}</td>
                 <td>{s.active ? <Badge tone="success">Active</Badge> : <Badge>Disabled</Badge>}</td>
                 <td>{relativeTime(s.last_active)}</td>
               </tr>

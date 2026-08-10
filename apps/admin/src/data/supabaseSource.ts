@@ -23,6 +23,7 @@ import type {
   ChatMessage,
 } from './api';
 import type { Page, QueryParams } from './query';
+import { toVehicleRideRow, toTimelineEvent } from './rideHistoryMapper';
 import type { PanelData } from './panelData';
 import type { Command, VehicleAlert, Zone, TripEvent, LngLat } from '@penny/db-types';
 import type {
@@ -41,6 +42,7 @@ import type {
   UserRideHistoryRow,
   VehicleRideHistoryRow,
   VehicleIoFrame,
+  VehicleHistorySnapshot,
   SumsubProfileBundle,
   TimelineEvent,
   SimAlert,
@@ -402,23 +404,45 @@ export class SupabaseDataSource implements DataSource {
     });
     return res.rows ?? [];
   }
+  /* `admin-vehicle-history` answers with ONE flat snapshot —
+     { vehicle, stats, rides[], timeline[], commands[], … } — and knows nothing
+     about a `section` argument or about paging. The three readers below used to
+     ask for `section: 'rides'` and type the reply as `Page<T>`, so `data.rows`
+     came back undefined and the table crashed on `.rows.length`: the Rides,
+     Timeline and Damage tabs were a white screen. Slice the arrays here instead
+     of pretending the server pages them. */
+
+  private async vehicleSnapshot(vehicleId: string): Promise<VehicleHistorySnapshot> {
+    return this.invoke<VehicleHistorySnapshot>('admin-vehicle-history', { vehicle_id: vehicleId });
+  }
+
+  /** Page an array the server returned whole. */
+  private static slice<T>(rows: T[], params: QueryParams, total?: number): Page<T> {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = params.pageSize ?? 25;
+    const start = (page - 1) * pageSize;
+    return { rows: rows.slice(start, start + pageSize), total: total ?? rows.length, page, pageSize };
+  }
+
   async getVehicleHistory(vehicleId: string, params: QueryParams): Promise<VehicleHistory> {
-    return this.invoke<VehicleHistory>('admin-vehicle-history', {
-      vehicle_id: vehicleId, ...SupabaseDataSource.pageBody(params),
-    });
+    const snap = await this.vehicleSnapshot(vehicleId);
+    return {
+      stats: snap.stats as VehicleHistory['stats'],
+      rides: SupabaseDataSource.slice((snap.rides ?? []).map(toVehicleRideRow), params, snap.total_rides),
+      timeline: (snap.timeline ?? []).map(toTimelineEvent),
+    };
   }
 
   async getVehicleRides(vehicleId: string, params: QueryParams): Promise<Page<VehicleRideHistoryRow>> {
-    return this.invoke<Page<VehicleRideHistoryRow>>('admin-vehicle-history', {
-      vehicle_id: vehicleId, section: 'rides', ...SupabaseDataSource.pageBody(params),
-    });
+    const snap = await this.vehicleSnapshot(vehicleId);
+    return SupabaseDataSource.slice((snap.rides ?? []).map(toVehicleRideRow), params, snap.total_rides);
   }
 
   async getVehicleTimeline(vehicleId: string, params: QueryParams): Promise<Page<TimelineEvent>> {
-    return this.invoke<Page<TimelineEvent>>('admin-vehicle-history', {
-      vehicle_id: vehicleId, section: 'timeline', ...SupabaseDataSource.pageBody(params),
-    });
+    const snap = await this.vehicleSnapshot(vehicleId);
+    return SupabaseDataSource.slice((snap.timeline ?? []).map(toTimelineEvent), params);
   }
+
   /* ---- Connectivity / SIM cards ----
      Reads come from the read-only `v_sim_*` views (anon key + RLS, same as
      zones/alerts); every mutation goes through an edge function so the
