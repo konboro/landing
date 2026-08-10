@@ -1,211 +1,94 @@
-import { useMemo, useState } from 'react';
-import { usePanelData } from '@/hooks/usePanelData';
-import { useDS } from '@/context/DataContext';
-import { useToast } from '@/components/ui/Toast';
-import { Card, CardHeader, Button, Input, Select, Textarea, Checkbox, Field } from '@/components/ui/primitives';
-import { Badge } from '@/components/ui/Badge';
+import { useState } from 'react';
+import { Card, CardHeader } from '@/components/ui/primitives';
 import { Tabs } from '@/components/ui/Tabs';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Modal } from '@/components/ui/Modal';
-import { LineTrend, chartPalette } from '@/components/charts/Charts';
-import { titleCase } from '@/lib/format';
+import { BrandingEditor } from '@/components/branding/BrandingEditor';
 import { useBrand } from '@/context/BrandContext';
 import { STATUS_KEYS } from '@/lib/theme';
-import { BrandingEditor } from '@/components/branding/BrandingEditor';
-import type { AppConfigItem, BatteryCurve, NotificationRule, Translation } from '@/types/domain';
+import { titleCase } from '@/lib/format';
+import { Preferences } from '@/components/settings/Preferences';
+import { NotificationRules } from '@/components/settings/NotificationRules';
+import { Translations } from '@/components/settings/Translations';
+import { AppContent } from '@/components/settings/AppContent';
+import { FleetModels } from '@/components/settings/FleetModels';
+import { Unavailable } from '@/components/settings/Unavailable';
 
+/**
+ * Settings.
+ *
+ * Every control on this page either writes to the backend and reports what the
+ * server actually said, or states that it cannot. There is no third state:
+ * a green "saved" toast over a no-op is worse than no button, because the
+ * operator stops checking.
+ *
+ * Where each section lives:
+ *   Preferences          → app_config, via the `admin-app-config` edge fn
+ *   Notification rules   → notification_rules, via `admin-list`/`admin-write`
+ *   Localization         → translations (pk lang+ns+key), same pair
+ *   Tutorials & content  → app_content (pk key+lang), same pair
+ *   Models & curves      → read-only; no write path exists
+ *   Branding             → app_config.brand, via the Branding editor
+ *   Map icons            → resolved from the active brand; read-only by design
+ *   Customer form        → nothing to write to (see below)
+ *   Reaction test        → nothing to write to (see below)
+ */
 export function SettingsPage() {
-  const { data: db, isLoading } = usePanelData();
   const [tab, setTab] = useState('prefs');
+
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      <PageHeader title="Settings" sub="System preferences, models, forms, localization, tutorials, notification rules" />
-      <Tabs active={tab} onChange={setTab} tabs={[
-        { key: 'prefs', label: 'Preferences' },
-        { key: 'models', label: 'Models & battery curves' },
-        { key: 'form', label: 'Customer form' },
-        { key: 'reaction', label: 'Reaction test' },
-        { key: 'i18n', label: 'Localization' },
-        { key: 'personalization', label: 'Map & personalization' },
-        { key: 'branding', label: 'Branding' },
-        { key: 'tutorials', label: 'Tutorials' },
-        { key: 'notifications', label: 'Alerts & notifications' },
-      ]} />
-      {isLoading || !db ? <Card pad>Loading…</Card> : (
-        <>
-          {tab === 'prefs' ? <Prefs db={db} /> : null}
-          {tab === 'models' ? <Models db={db} /> : null}
-          {tab === 'form' ? <FormBuilder /> : null}
-          {tab === 'reaction' ? <Reaction /> : null}
-          {tab === 'i18n' ? <I18n db={db} /> : null}
-          {tab === 'personalization' ? <Personalization /> : null}
-          {tab === 'branding' ? <BrandingEditor /> : null}
-          {tab === 'tutorials' ? <Tutorials db={db} /> : null}
-          {tab === 'notifications' ? <Notifications db={db} /> : null}
-        </>
-      )}
+      <PageHeader
+        title="Settings"
+        sub="Operational preferences, notification rules, localization, tutorials and branding"
+      />
+      <Tabs
+        active={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'prefs', label: 'Preferences' },
+          { key: 'notifications', label: 'Alerts & notifications' },
+          { key: 'i18n', label: 'Localization' },
+          { key: 'tutorials', label: 'Tutorials & content' },
+          { key: 'models', label: 'Models & battery curves' },
+          { key: 'branding', label: 'Branding' },
+          { key: 'personalization', label: 'Map icons' },
+          { key: 'form', label: 'Customer form' },
+          { key: 'reaction', label: 'Reaction test' },
+        ]}
+      />
+
+      {tab === 'prefs' ? <Preferences /> : null}
+      {tab === 'notifications' ? <NotificationRules /> : null}
+      {tab === 'i18n' ? <Translations /> : null}
+      {tab === 'tutorials' ? <AppContent /> : null}
+      {tab === 'models' ? <FleetModels /> : null}
+      {tab === 'branding' ? <BrandingEditor /> : null}
+      {tab === 'personalization' ? <Personalization /> : null}
+      {tab === 'form' ? <CustomerForm /> : null}
+      {tab === 'reaction' ? <ReactionTest /> : null}
     </div>
-  );
-}
-
-type DB = NonNullable<ReturnType<typeof usePanelData>['data']>;
-
-function Prefs({ db }: { db: DB }) {
-  const toast = useToast();
-  const [config, setConfig] = useState<AppConfigItem[]>(db.appConfig);
-  const groups = Array.from(new Set(config.map((c) => c.group)));
-  const update = (key: string, value: string | number | boolean) => setConfig(config.map((c) => c.key === key ? { ...c, value } : c));
-  return (
-    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      {groups.map((g) => (
-        <Card key={g}>
-          <CardHeader title={g} />
-          <div className="card-pad row-wrap">
-            {config.filter((c) => c.group === g).map((c) => (
-              <div key={c.key} style={{ minWidth: 220 }}>
-                <label className="field-label">{c.label}{c.unit ? ` (${c.unit})` : ''}</label>
-                {c.kind === 'bool'
-                  ? <Checkbox label={c.value ? 'Enabled' : 'Disabled'} checked={Boolean(c.value)} onChange={(e) => update(c.key, e.target.checked)} />
-                  : <Input value={String(c.value)} type={c.kind === 'number' ? 'number' : c.kind === 'time' ? 'time' : 'text'} onChange={(e) => update(c.key, c.kind === 'number' ? Number(e.target.value) : e.target.value)} />}
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-      <div><Button variant="primary" onClick={() => toast.push('Preferences saved (audited)', 'success')}>Save preferences</Button></div>
-    </div>
-  );
-}
-
-function Models({ db }: { db: DB }) {
-  const [curve, setCurve] = useState<BatteryCurve>(db.batteryCurves[0]!);
-  const chartData = useMemo(() => {
-    // linear interpolation preview across voltage range
-    const pts = [...curve.points].sort((a, b) => a[0] - b[0]);
-    const out: Array<{ v: number; soc: number }> = [];
-    const min = pts[0]![0]; const max = pts[pts.length - 1]![0];
-    for (let v = min; v <= max; v += (max - min) / 40) {
-      let soc = 0;
-      for (let i = 1; i < pts.length; i++) {
-        if (v <= pts[i]![0]) { const [v0, s0] = pts[i - 1]!; const [v1, s1] = pts[i]!; soc = s0 + ((v - v0) / (v1 - v0)) * (s1 - s0); break; }
-      }
-      out.push({ v: +(v / 1000).toFixed(2), soc: +soc.toFixed(1) });
-    }
-    return out;
-  }, [curve]);
-  const updatePoint = (i: number, idx: 0 | 1, value: number) => setCurve({ ...curve, points: curve.points.map((p, j) => j === i ? (idx === 0 ? [value, p[1]] : [p[0], value]) : p) as Array<[number, number]> });
-  return (
-    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      <Card>
-        <CardHeader title="Vehicle models" />
-        <div className="table-wrap">
-          <table className="data">
-            <thead><tr><th>Name</th><th>Kind</th><th>Max speed</th><th>Requires licence</th><th>Battery curve</th></tr></thead>
-            <tbody>{db.models.map((m) => <tr key={m.id}><td>{m.name}</td><td>{m.kind}</td><td>{m.max_speed_kmh} km/h</td><td>{m.requires_licence ? 'Yes' : 'No'}</td><td>{db.batteryCurves.find((c) => c.id === m.battery_curve_id)?.name ?? '—'}</td></tr>)}</tbody>
-          </table>
-        </div>
-      </Card>
-      <Card>
-        <CardHeader title="Battery curve editor" sub="voltage (mV) ↔ SoC (%) · linear interpolation" actions={
-          <Select style={{ width: 'auto' }} value={curve.id} onChange={(e) => setCurve(db.batteryCurves.find((c) => c.id === e.target.value)!)}>{db.batteryCurves.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</Select>
-        } />
-        <div className="card-pad grid" style={{ gridTemplateColumns: '1fr 1.4fr' }}>
-          <div className="table-wrap">
-            <table className="data">
-              <thead><tr><th>Voltage (mV)</th><th>SoC (%)</th></tr></thead>
-              <tbody>{curve.points.map((p, i) => <tr key={i}><td><Input type="number" value={p[0]} onChange={(e) => updatePoint(i, 0, Number(e.target.value))} style={{ width: 110 }} /></td><td><Input type="number" value={p[1]} onChange={(e) => updatePoint(i, 1, Number(e.target.value))} style={{ width: 80 }} /></td></tr>)}</tbody>
-            </table>
-          </div>
-          <div><LineTrend data={chartData} xKey="v" height={260} series={[{ key: 'soc', name: 'SoC %', color: chartPalette[1]! }]} /></div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-function FormBuilder() {
-  const toast = useToast();
-  const [fields, setFields] = useState([
-    { label: 'Full name', kind: 'text', required: true },
-    { label: 'Email', kind: 'email', required: true },
-    { label: 'Date of birth', kind: 'date', required: false },
-    { label: 'How did you hear about us?', kind: 'select', required: false },
-  ]);
-  return (
-    <Card>
-      <CardHeader title="Customer form builder" sub="Extra signup questions" actions={<><Button size="sm" onClick={() => setFields([...fields, { label: 'New field', kind: 'text', required: false }])}>+ Field</Button><Button size="sm" variant="primary" onClick={() => toast.push('Form saved', 'success')}>Save</Button></>} />
-      <div className="card-pad stack">
-        {fields.map((f, i) => (
-          <div key={i} className="row" style={{ gap: 8, alignItems: 'center' }}>
-            <Input value={f.label} onChange={(e) => setFields(fields.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
-            <Select style={{ width: 140 }} value={f.kind} onChange={(e) => setFields(fields.map((x, j) => j === i ? { ...x, kind: e.target.value } : x))}>{['text', 'email', 'date', 'select', 'number'].map((k) => <option key={k}>{k}</option>)}</Select>
-            <Checkbox label="Required" checked={f.required} onChange={(e) => setFields(fields.map((x, j) => j === i ? { ...x, required: e.target.checked } : x))} />
-            <Button variant="ghost" onClick={() => setFields(fields.filter((_, j) => j !== i))}>✕</Button>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
-
-function Reaction() {
-  const toast = useToast();
-  return (
-    <Card>
-      <CardHeader title="Reaction test (night anti-DUI gate)" />
-      <div className="card-pad row-wrap">
-        <Field label="Enabled at night"><Select><option>Yes</option><option>No</option></Select></Field>
-        <Field label="Night window"><Input defaultValue="23:00–05:00" /></Field>
-        <Field label="Rounds to pass"><Input type="number" defaultValue="3" /></Field>
-        <Field label="Max reaction (ms)"><Input type="number" defaultValue="900" /></Field>
-        <Field label="Valid for (min)"><Input type="number" defaultValue="30" /></Field>
-        <div style={{ alignSelf: 'flex-end' }}><Button variant="primary" onClick={() => toast.push('Reaction test config saved', 'success')}>Save</Button></div>
-      </div>
-    </Card>
-  );
-}
-
-function I18n({ db }: { db: DB }) {
-  const toast = useToast();
-  const [rows, setRows] = useState<Translation[]>(db.translations);
-  const update = (i: number, lang: 'pl' | 'en' | 'el', value: string) => setRows(rows.map((r, j) => j === i ? { ...r, [lang]: value } : r));
-  return (
-    <Card>
-      <CardHeader title="App localization" sub="PL / EN / EL" actions={<Button size="sm" variant="primary" onClick={() => toast.push('Translations saved', 'success')}>Save</Button>} />
-      <div className="table-wrap">
-        <table className="data">
-          <thead><tr><th>Namespace</th><th>Key</th><th>Polish</th><th>English</th><th>Greek</th></tr></thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={`${r.ns}.${r.key}`}>
-                <td className="muted">{r.ns}</td><td className="mono">{r.key}</td>
-                <td><Input value={r.pl} onChange={(e) => update(i, 'pl', e.target.value)} /></td>
-                <td><Input value={r.en} onChange={(e) => update(i, 'en', e.target.value)} /></td>
-                <td><Input value={r.el} onChange={(e) => update(i, 'el', e.target.value)} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
   );
 }
 
 function Personalization() {
   // Vehicle status colours are brand tokens — edit them in Settings → Branding,
-  // this tab just shows what the active brand resolves to.
+  // which writes app_config.brand. This tab only shows what the active brand
+  // resolves to, so there is nothing here to save.
   const { brand, mode, statusColor } = useBrand();
   return (
     <Card>
       <CardHeader
         title="Map icons & personalization"
-        sub={`Resolved from the “${brand.name}” brand · ${mode} mode`}
+        sub={`Resolved from the “${brand.name}” brand · ${mode} mode · change them in the Branding tab`}
       />
       <div className="card-pad row-wrap">
         {STATUS_KEYS.map((s) => (
           <div key={s} className="card" style={{ padding: 12, minWidth: 160, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ width: 16, height: 16, borderRadius: 4, background: statusColor(s) }} />
-            <div><div style={{ fontSize: 13, fontWeight: 600 }}>{titleCase(s)}</div><div className="muted mono" style={{ fontSize: 12 }}>{statusColor(s)}</div></div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{titleCase(s)}</div>
+              <div className="muted mono" style={{ fontSize: 12 }}>{statusColor(s)}</div>
+            </div>
           </div>
         ))}
       </div>
@@ -213,79 +96,70 @@ function Personalization() {
   );
 }
 
-function Tutorials({ db }: { db: DB }) {
-  const toast = useToast();
+/* --------------------------------------------------------------------------
+   The two sections with nowhere to save to.
+
+   Both used to render a full form with a Save button that pushed "saved" and
+   wrote nothing at all. They are disabled rather than deleted so the gap stays
+   visible — an operator who is looking for the setting learns why it is not
+   there instead of assuming the panel lost it.
+   -------------------------------------------------------------------------- */
+
+function CustomerForm() {
   return (
-    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      {db.tutorials.map((t) => (
-        <Card key={t.id}>
-          <CardHeader title={t.title} sub={`key: ${t.key} · ${t.lang}`} actions={<Button size="sm" variant="primary" onClick={() => toast.push('Tutorial saved', 'success')}>Save</Button>} />
-          <div className="card-pad stack">
-            {t.slides.map((s, i) => (
-              <div key={i} className="card" style={{ padding: 12 }}>
-                <Field label={`Slide ${i + 1} title`}><Input defaultValue={s.title} /></Field>
-                <Field label="Body"><Textarea defaultValue={s.body} /></Field>
-              </div>
-            ))}
-          </div>
-        </Card>
-      ))}
-    </div>
+    <Unavailable
+      title="Customer form builder"
+      sub="Extra questions asked during signup"
+      summary={
+        <>
+          The panel cannot save a signup form yet. The <code>customer_forms</code> table exists (migration 00100:
+          <code> id, fields jsonb, active</code>) and is empty, but no edge function is allowed to write it — so any
+          form built here would have nowhere to go.
+        </>
+      }
+      covers={[
+        'Which extra fields appear after name and e-mail during onboarding (docs/12 §D step 4)',
+        'Field type and whether each one is required',
+        'The answers shown back on the rider’s profile (docs/06 §7)',
+      ]}
+      needs={
+        <>
+          <code>customer_forms</code> added to the <code>admin-write</code> table allowlist (permission
+          <code> settings.edit</code>, columns <code>fields</code> + <code>active</code>, soft-delete on <code>active</code>
+          because answers reference the form version), plus <code>customer_forms</code> in <code>admin-list</code>’s view
+          allowlist so the panel can read it back. No migration needed — only the edge-function whitelists.
+        </>
+      }
+    />
   );
 }
 
-function Notifications({ db }: { db: DB }) {
-  const toast = useToast();
-  const [rules, setRules] = useState<NotificationRule[]>(db.notificationRules);
-  const [edit, setEdit] = useState<NotificationRule | null>(null);
-  const toggle = (id: string) => setRules(rules.map((r) => r.id === id ? { ...r, active: !r.active } : r));
+function ReactionTest() {
   return (
-    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
-      <Card>
-        <CardHeader title="Alerts & notification rules" sub="event → condition → channels → recipients (seeded from docs/12)" />
-        <div className="table-wrap">
-          <table className="data">
-            <thead><tr><th>Rule</th><th>Audience</th><th>Condition</th><th>Channels</th><th>Recipients</th><th>Active</th><th></th></tr></thead>
-            <tbody>
-              {rules.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.label}</td>
-                  <td><Badge tone={r.audience === 'staff' ? 'info' : 'neutral'}>{r.audience}</Badge></td>
-                  <td className="mono" style={{ fontSize: 12 }}>{Object.keys(r.condition).length ? JSON.stringify(r.condition) : '—'}</td>
-                  <td>{r.channels.map((c) => <span key={c} className="pill-tag">{c}</span>)}</td>
-                  <td>{r.recipients.join(', ')}</td>
-                  <td><input type="checkbox" checked={r.active} onChange={() => toggle(r.id)} /></td>
-                  <td style={{ whiteSpace: 'nowrap' }}>
-                    <Button size="sm" variant="ghost" onClick={() => setEdit(r)}>Edit</Button>
-                    <Button size="sm" variant="ghost" onClick={() => toast.push(`Test-fired “${r.label}” to yourself`, 'info')}>Test-fire</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card>
-        <CardHeader title="Recent notification log" />
-        <div className="table-wrap">
-          <table className="data">
-            <thead><tr><th>Template</th><th>Channel</th><th>Target</th><th>Status</th></tr></thead>
-            <tbody>{db.notificationLog.slice(0, 20).map((l) => <tr key={l.id}><td>{l.template_key}</td><td>{l.channel}</td><td className="mono" style={{ fontSize: 12 }}>{l.target}</td><td><Badge tone={l.status === 'sent' ? 'success' : l.status === 'failed' ? 'danger' : 'neutral'}>{l.status}</Badge></td></tr>)}</tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Modal open={edit !== null} onClose={() => setEdit(null)} title={edit ? `Edit rule — ${edit.label}` : ''} footer={<><Button onClick={() => setEdit(null)}>Cancel</Button><Button variant="primary" onClick={() => { if (edit) setRules(rules.map((r) => r.id === edit.id ? edit : r)); toast.push('Rule saved (audited)', 'success'); setEdit(null); }}>Save</Button></>}>
-        {edit ? (
-          <div className="stack">
-            <Field label="Digest"><Select value={edit.digest} onChange={(e) => setEdit({ ...edit, digest: e.target.value as NotificationRule['digest'] })}>{['none', 'hourly', 'daily'].map((d) => <option key={d}>{d}</option>)}</Select></Field>
-            <Field label="Channels (comma separated)"><Input value={edit.channels.join(',')} onChange={(e) => setEdit({ ...edit, channels: e.target.value.split(',').map((s) => s.trim()) as NotificationRule['channels'] })} /></Field>
-            <Field label="Recipients (comma separated)"><Input value={edit.recipients.join(',')} onChange={(e) => setEdit({ ...edit, recipients: e.target.value.split(',').map((s) => s.trim()) })} /></Field>
-            <Field label="Throttle (s)"><Input type="number" value={edit.throttle_s} onChange={(e) => setEdit({ ...edit, throttle_s: Number(e.target.value) })} /></Field>
-          </div>
-        ) : null}
-      </Modal>
-    </div>
+    <Unavailable
+      title="Reaction test (night anti-DUI gate)"
+      sub="The tap test riders take before a night unlock"
+      summary={
+        <>
+          There is no config store for this test. <code>reaction_tests</code> is the <em>results</em> log
+          (<code>user_id, trip_id, started_at, passed, score</code>) — writing settings into it would corrupt the record of
+          who passed what. docs/04 refers to a <code>reaction_test_required</code> flag that does not exist in
+          <code> app_config</code> either.
+        </>
+      }
+      covers={[
+        'Whether the test is required during the night window at all',
+        'Rounds to pass and the maximum acceptable reaction time',
+        'How long a pass stays valid before a rider is asked again',
+      ]}
+      needs={
+        <>
+          Keys added to <code>admin-app-config</code>’s <code>WRITABLE_KEYS</code> — e.g.
+          <code> reaction_test_required</code> (bool), <code>reaction_test</code> (object:
+          <code> rounds</code>, <code>max_ms</code>, <code>valid_min</code>) — and the trip-start check reading them.
+          The night window itself already exists as <code>night_hours</code> and is editable under Preferences.
+        </>
+      }
+    />
   );
 }
