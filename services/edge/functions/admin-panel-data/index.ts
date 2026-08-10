@@ -53,7 +53,7 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     pricingPlans, packages, subscriptions, addons,
     translations, appConfig, appContent, faq,
     scanLog, maintenanceLog, batterySwaps, auditLog,
-    loyaltyAccounts, tripEventRows,
+    loyaltyTiers, tripEventRows,
   ] = await Promise.all([
     all(admin, 'cities', { order: 'name', asc: true }),
     all(admin, 'vehicle_models', { order: 'name', asc: true }),
@@ -94,7 +94,12 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     all(admin, 'maintenance_log', { order: 'at', limit: 200 }),
     all(admin, 'battery_swaps', { order: 'at', limit: 200 }),
     all(admin, 'audit_log', { order: 'at', limit: 300 }),
-    all(admin, 'loyalty_accounts'),
+    // The tier catalogue, which is what `loyalty` is typed as in the panel.
+    // This used to read loyalty_accounts — per-user point balances, a different
+    // shape entirely — so the Loyalty card rendered account rows through a tier
+    // template and showed nothing. Per-user points belong to the customer
+    // detail page, which gets them from admin-user-profile.
+    all(admin, 'loyalty_tiers', { order: 'min_points', asc: true }),
     all(admin, 'trip_events', { order: 'at', limit: 1000 }),
   ]);
 
@@ -154,7 +159,7 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
     pricingPlans, packages, subscriptions, addons, penalties,
     translations, appConfig, tutorials: appContent, faq,
     scanLog, maintenanceLog, batterySwaps, auditLog,
-    loyalty: loyaltyAccounts,
+    loyalty: loyaltyTiers,
     tripEvents,
     revenueByDay, heatCells,
     generated_at: new Date().toISOString(),
