@@ -1,0 +1,15 @@
+{
+  "name": "@penny/edge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Supabase Edge Functions. `invoicing/` is plain TS (no Deno APIs) so it can be unit tested under node.",
+  "scripts": {
+    "test": "node --test --experimental-strip-types invoicing/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf .turbo"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

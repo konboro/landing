@@ -25,6 +25,7 @@ export const NAV: NavItem[] = [
   { to: '/connectivity', label: 'Connectivity', icon: '📶', group: 'Fleet' },
 
   { to: '/finance', label: 'Finance', icon: '🧾', group: 'Money' },
+  { to: '/mydata', label: 'myDATA (AADE)', icon: '🏛️', group: 'Money' },
 
   { to: '/content', label: 'Subscriptions & Add-ons', icon: '🎫', group: 'Content' },
 

@@ -192,6 +192,108 @@ export interface Invoice {
   pdf_url: string;
 }
 
+/* ---- myDATA (AADE) receipt transmission — see docs/18-mydata.md ---- */
+
+export type MydataStatus =
+  | 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled' | 'skipped';
+export type MydataMode = 'dry_run' | 'sandbox' | 'live';
+
+export interface MydataSubmission {
+  id: UUID;
+  source: 'platform' | 'legacy';
+  series: string;
+  aa: number;
+  issue_date: string;                 // YYYY-MM-DD
+  gross_cents: number | null;         // null for imported legacy rows
+  net_cents: number | null;
+  vat_cents: number | null;
+  mode: MydataMode;
+  status: MydataStatus;
+  mark: string | null;
+  attempts: number;
+  last_error: string | null;
+  stripe_charge_id: string | null;
+  payment_id: UUID | null;
+  created_at: ISOTimestamp;
+  sent_at: ISOTimestamp | null;
+  /** Set when a person filed this through the AADE portal instead. */
+  filed_manually: boolean;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: ISOTimestamp | null;
+}
+
+/**
+ * A submission plus its evidence. Only ever fetched one at a time — the stored
+ * document and response run to a couple of KB each, and there are 20 months of
+ * them, so the list deliberately leaves them behind.
+ */
+export interface MydataSubmissionFull extends MydataSubmission {
+  request_xml: string | null;
+  response_body: string | null;
+}
+
+/** A number in an issued range that carries no MARK at AADE. */
+export interface MydataGap {
+  series: string;
+  aa: number;
+  reason: 'never_issued' | 'cancelled' | 'failed' | 'skipped';
+  issue_date: string | null;
+}
+
+export interface MydataSeriesState {
+  series: string;
+  next_aa: number;
+  floor_aa: number;
+  active: boolean;
+}
+
+export type MydataIssueKind = 'failed' | 'no_receipt' | 'duplicate' | 'gap' | 'stalled';
+
+/** One unit of work for the person reviewing myDATA. */
+export interface MydataIssue {
+  kind: MydataIssueKind;
+  severity: 'high' | 'medium';
+  submission_id: UUID | null;
+  series: string | null;
+  aa: number | null;
+  issue_date: string | null;
+  stripe_charge_id: string | null;
+  gross_cents: number | null;
+  detail: string;
+  reviewed_at: ISOTimestamp | null;
+}
+
+/** A day's filing, as the emailed CSV used to report it. */
+export interface MydataDailyRow {
+  issue_date: string;
+  series: string;
+  mode: MydataMode;
+  receipts: number;
+  sent: number;
+  filed_by_hand: number;
+  failed: number;
+  in_flight: number;
+  cancelled: number;
+  gross_cents: number;
+  net_cents: number;
+  vat_cents: number;
+  first_aa: number;
+  last_aa: number;
+}
+
+export interface MydataState {
+  mode: MydataMode;
+  enabled: boolean;
+  series: MydataSeriesState[];
+  submissions: MydataSubmission[];
+  gaps: MydataGap[];
+  issues: MydataIssue[];
+  daily: MydataDailyRow[];
+  /** Succeeded payments with no submission row at all. */
+  payments_without_receipt: number;
+}
+
 export interface CorporateAccount {
   id: UUID;
   name: string;

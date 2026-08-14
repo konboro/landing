@@ -36,6 +36,8 @@ import type {
   SimUsageDay,
   BroadcastRow,
   CustomerGroupRow,
+  MydataState,
+  MydataSubmissionFull,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -214,6 +216,16 @@ export interface ChatMessage {
  *  tokens does not need a panel release. */
 export type BrandConfig = Record<string, unknown>;
 
+/** Mutations `admin-mydata` accepts. Each one writes audit_log. */
+export type MydataAction = 'retry' | 'cancel' | 'mark_filed' | 'review' | 'set_mode';
+
+/** One receipt with its evidence and everything already done to it. */
+export interface MydataDetail {
+  row: MydataSubmissionFull;
+  payment: Payment | null;
+  audit: Array<{ action: string; staff_id: string | null; reason: string | null; created_at: string }>;
+}
+
 export interface DataSource {
   readonly kind: 'supabase';
 
@@ -289,6 +301,13 @@ export interface DataSource {
 
   // Everything else (pricing, marketing, fleet, finance, team, settings, analytics)
   getPanelData(): Promise<PanelData>;
+
+  // myDATA (AADE) — docs/18-mydata.md. Deliberately NOT folded into
+  // getPanelData: the submissions table carries 20 months of receipt history,
+  // and no other screen needs a byte of it.
+  getMydata(): Promise<MydataState>;
+  getMydataDetail(id: UUID): Promise<MydataDetail>;
+  mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
 
   // Global search
   search(q: string): Promise<SearchResult[]>;

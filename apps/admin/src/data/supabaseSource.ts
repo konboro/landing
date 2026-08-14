@@ -6,6 +6,8 @@ import { createPennyClient, type PennyClient } from '@penny/api-client';
 import type {
   BrandConfig,
   DataSource,
+  MydataAction,
+  MydataDetail,
   RideDetail,
   SimCommandInput,
   SimDetail,
@@ -52,6 +54,8 @@ import type {
   SimInventoryRow,
   BroadcastRow,
   CustomerGroupRow,
+  MydataState,
+  UUID,
 } from '@/types/domain';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -271,6 +275,50 @@ export class SupabaseDataSource implements DataSource {
    * Collections with no backing table yet resolve to empty, never to invented
    * rows: an empty page is the truth, a populated fake one is not.
    */
+  /* ---- myDATA (AADE) — docs/18-mydata.md ----
+     Five reads against `admin-mydata`, fanned out. They are separate actions
+     server-side because they answer different questions at different sizes; the
+     page wants all five at once, so the fan-out happens here rather than making
+     the screen orchestrate it. */
+  async getMydata(): Promise<MydataState> {
+    const [summary, subs, gaps, issues, daily] = await Promise.all([
+      this.invoke<{
+        config: Record<string, unknown>;
+        series: MydataState['series'];
+        payments_without_receipt: number;
+      }>('admin-mydata', { action: 'summary' }),
+      this.invoke<{ rows: MydataState['submissions'] }>('admin-mydata', { action: 'list', limit: 500 }),
+      this.invoke<{ rows: MydataState['gaps'] }>('admin-mydata', { action: 'gaps', limit: 500 }),
+      this.invoke<{ rows: MydataState['issues'] }>('admin-mydata', { action: 'issues', include_reviewed: true }),
+      this.invoke<{ rows: MydataState['daily'] }>('admin-mydata', { action: 'daily' }),
+    ]);
+
+    const cfg = summary.config ?? {};
+    return {
+      // A missing or unreadable config must not read as "live" — the safe
+      // default is the mode that transmits nothing.
+      mode: (cfg.mode as MydataState['mode']) ?? 'dry_run',
+      enabled: cfg.enabled === true,
+      series: summary.series ?? [],
+      submissions: subs.rows ?? [],
+      gaps: gaps.rows ?? [],
+      issues: issues.rows ?? [],
+      daily: daily.rows ?? [],
+      payments_without_receipt: Number(summary.payments_without_receipt ?? 0),
+    };
+  }
+
+  async getMydataDetail(id: UUID): Promise<MydataDetail> {
+    return await this.invoke<MydataDetail>('admin-mydata', { action: 'detail', id });
+  }
+
+  async mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void> {
+    // invoke() throws on a non-2xx, and every myDATA mutation can legitimately
+    // fail a business rule (already filed, duplicate MARK, floor violation).
+    // Letting it throw is the point — the caller shows the reason.
+    await this.invoke<{ ok: boolean }>('admin-mydata', { action, ...body });
+  }
+
   async getPanelData(): Promise<PanelData> {
     const [panel, kpis, sims] = await Promise.all([
       this.invoke<Record<string, unknown>>('admin-panel-data', {}),

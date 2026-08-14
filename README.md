@@ -122,6 +122,20 @@ alerts for over-limit and silent SIMs — behind a swappable provider adapter.
 
 See **`docs/15-connectivity-sims.md`**.
 
+## Greek myDATA (AADE)
+
+Every successful charge produces a retail receipt (ΑΠΥ) transmitted directly to
+AADE. This replaces a standalone Flask pipeline that ran on PythonAnywhere from
+2024-12-01; its 22,471-row history imports into `mydata_submissions` so
+reconciliation spans the cutover. Receipt numbering is a row-locked counter, a
+retry re-sends the same number, and a Stripe charge can only be filed once —
+the three failures that put 578 holes in the legacy series.
+
+New receipts start in `dry_run`: numbered and rendered, never transmitted, so
+the output can be compared against the legacy system before going live.
+
+See **`docs/18-mydata.md`**.
+
 ## Status
 
 See `docs/11-roadmap.md` for phases. This tree implements the full product

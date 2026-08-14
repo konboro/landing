@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // functions/ runs on Deno and imports over https — tsc cannot resolve those
+    // and is not the right checker for them. `deno check` covers that side.
+    // invoicing/ is deliberately Deno-free so it can be typechecked and unit
+    // tested with the rest of the workspace.
+    "lib": ["ES2022", "DOM"],
+    "types": []
+  },
+  "include": ["invoicing/**/*"]
+}

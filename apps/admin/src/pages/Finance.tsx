@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { usePanelData } from '@/hooks/usePanelData';
+import { useMydata } from '@/hooks/useMydata';
 import { Card, CardHeader, Button, Select, Input } from '@/components/ui/primitives';
 import { Badge, PaymentStatusBadge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
@@ -136,16 +138,40 @@ function Debts({ db }: { db: DB }) {
 }
 
 function Invoices({ db }: { db: DB }) {
+  // The full review desk lives at /mydata — this is only the pointer, so there
+  // is one place to do the work rather than two half-places. React Query shares
+  // the cache entry with that page, so opening it costs no extra fetch.
+  const { data: m } = useMydata();
+  const open = m ? m.issues.filter((i) => !i.reviewed_at).length : 0;
   return (
-    <Card>
-      <CardHeader title="Invoices & myDATA transmission" sub="AADE e-invoicing status" />
-      <div className="table-wrap">
-        <table className="data">
-          <thead><tr><th>Number</th><th>Party</th><th>Amount</th><th>myDATA mark</th><th>Status</th><th>Issued</th><th></th></tr></thead>
-          <tbody>{db.invoices.map((i) => <tr key={i.id}><td className="mono">{i.number}</td><td>{i.party_label}</td><td>{formatMoney(i.amount_cents)}</td><td className="mono" style={{ fontSize: 12 }}>{i.mydata_mark ?? '—'}</td><td><Badge tone={i.mydata_status === 'transmitted' ? 'success' : i.mydata_status === 'failed' ? 'danger' : 'warning'}>{titleCase(i.mydata_status)}</Badge></td><td>{formatDateTime(i.issued_at)}</td><td><Button size="sm" variant="ghost">PDF</Button></td></tr>)}</tbody>
-        </table>
-      </div>
-    </Card>
+    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+      <Card pad style={{ borderLeft: `3px solid ${open ? colors.danger : colors.success}` }}>
+        <div className="row-wrap" style={{ alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <strong>myDATA (AADE)</strong>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+              {!m ? 'Loading…' : (
+                <>
+                  {m.mode === 'live' ? 'Filing to AADE' : `${titleCase(m.mode.replace('_', ' '))} — not transmitting`}
+                  {' · '}next receipt {m.series[0]?.series} {m.series[0]?.next_aa}
+                  {open ? ` · ${open} item${open === 1 ? '' : 's'} need attention` : ' · nothing to review'}
+                </>
+              )}
+            </div>
+          </div>
+          <Link to="/mydata"><Button>Open myDATA</Button></Link>
+        </div>
+      </Card>
+      <Card>
+        <CardHeader title="Invoices" sub="Corporate and on-request documents" />
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr><th>Number</th><th>Party</th><th>Amount</th><th>myDATA mark</th><th>Status</th><th>Issued</th><th></th></tr></thead>
+            <tbody>{db.invoices.map((i) => <tr key={i.id}><td className="mono">{i.number}</td><td>{i.party_label}</td><td>{formatMoney(i.amount_cents)}</td><td className="mono" style={{ fontSize: 12 }}>{i.mydata_mark ?? '—'}</td><td><Badge tone={i.mydata_status === 'transmitted' ? 'success' : i.mydata_status === 'failed' ? 'danger' : 'warning'}>{titleCase(i.mydata_status)}</Badge></td><td>{formatDateTime(i.issued_at)}</td><td><Button size="sm" variant="ghost">PDF</Button></td></tr>)}</tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 

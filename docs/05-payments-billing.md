@@ -35,7 +35,7 @@ Edge fn `admin-charge`: staff with `payments.charge` permission selects user →
 ## Invoicing & Greek compliance
 
 - Receipt (απόδειξη) per charged trip: PDF (edge fn + storage) + email on request; monthly consolidated invoice for corporate.
-- **myDATA**: transmission of retail receipts/invoices to AADE required — integrate via a certified e-invoicing provider API rather than direct AADE integration (decision: provider TBD, adapter interface in `services/edge/invoicing/`). Timelines/specs must be re-verified at implementation time; keep VAT rate config per product type. Until go-live of own billing, Atom/current provider handles this — hard dependency for cutover date.
+- **myDATA**: transmission of retail receipts to AADE is required, and Penny files **directly against the AADE API** — `https://mydatapi.aade.gr/myDATA/SendInvoices`. This supersedes the earlier plan to route through a certified e-invoicing provider: no provider does the job as cheaply or as simply, and the direct integration has been in production since 2024-12-01 (~22.4k receipts, 99.8% accepted). The adapter interface still lives in `services/edge/invoicing/`, so a provider remains swappable. Implementation, controls and the cutover from the legacy PythonAnywhere pipeline: **`docs/18-mydata.md`**. Keep VAT rate config per product type.
 - VAT: transport service VAT rate config; prices stored gross; ledger stores net+vat split per entry group.
 
 ## Webhooks (edge/webhooks)
