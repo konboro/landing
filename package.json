@@ -34,6 +34,11 @@
     "//": "esbuild's postinstall places its platform binary. pnpm blocks install scripts by default, so without this every `pnpm install` leaves Vite (the admin panel) without a working esbuild until someone runs `pnpm rebuild esbuild` by hand.",
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "//overrides": "Two copies of @types/react (18.3.31 via react-native-svg and react-dom's typings, 19.1.17 via the apps) gave every app two structurally identical but nominally different ReactNode types, so passing a node from one into a component typed against the other failed. It surfaced as apps/rider Icon.tsx:443 and had CI red on every branch since 2026-08-10. React itself is 19 everywhere; only the typings disagreed.",
+    "overrides": {
+      "@types/react": "19.1.17",
+      "@types/react-dom": "19.1.11"
+    }
   }
 }
