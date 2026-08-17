@@ -108,11 +108,27 @@ Series tab. That turns the procedure into a control.
 somebody who knows what those charges were needs to either dismiss them
 ("Note as reviewed") or decide AADE is owed receipts.
 
-## 6. The shadow run — built, not yet switched on
+## 6. The shadow run — live, waiting for its first charge
 
-Code is in (`00550_mydata_shadow.sql`, `services/edge/functions/mydata-shadow/`).
-What remains is one action in the Stripe dashboard, which is deliberately not
-something a migration can do.
+All four pieces are in place as of 2026-08-17: migration applied,
+`mydata-shadow` deployed with `verify_jwt: false`, `STRIPE_SHADOW_WEBHOOK_SECRET`
+set, and the second Stripe endpoint configured. **0 shadow receipts recorded so
+far** — the old pipeline files roughly 25 a day, so the first should arrive
+within the hour.
+
+Verified reachable by probing it unsigned:
+
+```
+POST …/functions/v1/mydata-shadow   →   200 {"received":true,"skipped":"unsigned"}
+```
+
+which proves it is deployed, needs no Supabase token, and writes nothing it
+cannot authenticate.
+
+**At cutover, delete the shadow endpoint in Stripe.** Otherwise it keeps
+recording alongside the real pipeline — harmless, since it can never transmit,
+but it clutters the series and the comparison stops meaning anything once the
+old system is off.
 
 It does not route through `payments`, for two reasons found while checking:
 
@@ -134,23 +150,20 @@ insert so nothing claims it; and `mydata_claim` filters `source = 'platform'`.
 The ingest function does not import the transport at all — only the document
 builder.
 
-### To switch it on
+### How it was switched on, for the record
 
-1. Set the function secret — a **second** Stripe endpoint has its **own**
-   signing secret, distinct from `STRIPE_WEBHOOK_SECRET`:
-
-   `STRIPE_SHADOW_WEBHOOK_SECRET=whsec_…`
-
-2. Deploy: `node scripts/deploy-functions.mjs --project-ref <ref> --only mydata-shadow`
+1. `STRIPE_SHADOW_WEBHOOK_SECRET` as a function secret — a **second** Stripe
+   endpoint has its **own** signing secret, distinct from
+   `STRIPE_WEBHOOK_SECRET`.
+2. `node scripts/deploy-functions.mjs --project-ref <ref> --only mydata-shadow`
    (it is in `NO_JWT` — Stripe cannot present a Supabase token).
+3. Stripe → Developers → Webhooks, an endpoint for **`charge.succeeded`** only,
+   pointed at `…/functions/v1/mydata-shadow`. Adding an endpoint does not affect
+   the existing ones; PythonAnywhere keeps receiving exactly what it received
+   before.
 
-3. In Stripe → Developers → Webhooks, add an endpoint for **`charge.succeeded`**
-   only, pointed at `…/functions/v1/mydata-shadow`. Adding an endpoint does not
-   affect the existing ones; PythonAnywhere keeps receiving exactly what it
-   receives today.
-
-Then watch **myDATA → Daily**, which grows a comparison table above the daily
-rollup.
+Watch **myDATA → Daily**, which grows a comparison table above the daily rollup
+once the first charge lands.
 
 ### What the comparison can and cannot prove
 
