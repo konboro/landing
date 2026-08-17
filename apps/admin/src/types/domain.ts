@@ -262,6 +262,13 @@ export interface MydataIssue {
   gross_cents: number | null;
   detail: string;
   reviewed_at: ISOTimestamp | null;
+  /**
+   * Stable identity, present on every issue including the kinds with no receipt
+   * row (`gap:ΑΠΥ:20676`, `payment:<uuid>`). This is what lets an issue be
+   * acknowledged even when there is nothing to attach a note to.
+   */
+  issue_key: string;
+  review_note: string | null;
 }
 
 /** A day's filing, as the emailed CSV used to report it. */

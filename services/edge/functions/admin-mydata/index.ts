@@ -16,9 +16,13 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 type Action =
   | 'summary' | 'list' | 'gaps' | 'missing' | 'issues' | 'daily' | 'duplicates' | 'detail'
   | 'health' | 'for_trips'
-  | 'retry' | 'cancel' | 'set_mode' | 'mark_filed' | 'review';
+  | 'retry' | 'cancel' | 'set_mode' | 'mark_filed' | 'review'
+  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt';
 
-const MUTATIONS: Action[] = ['retry', 'cancel', 'set_mode', 'mark_filed', 'review'];
+const MUTATIONS: Action[] = [
+  'retry', 'cancel', 'set_mode', 'mark_filed', 'review',
+  'ack_issue', 'ack_gap_range', 'issue_receipt',
+];
 
 const handler = withErrors(async (req: Request) => {
   const pre = handlePreflight(req);
@@ -54,6 +58,9 @@ const handler = withErrors(async (req: Request) => {
     case 'set_mode':    return json(await setMode(admin, staff.staff_id, body));
     case 'mark_filed':  return json(await markFiled(admin, staff.staff_id, body));
     case 'review':      return json(await review(admin, staff.staff_id, body));
+    case 'ack_issue':     return json(await ackIssue(admin, staff.staff_id, body));
+    case 'ack_gap_range': return json(await ackGapRange(admin, staff.staff_id, body));
+    case 'issue_receipt': return json(await issueReceipt(admin, staff.staff_id, body));
     default:
       throw new EdgeError('bad_request', `unknown action: ${action}`, 400);
   }
@@ -285,6 +292,84 @@ async function markFiled(admin: SupabaseClient, staffId: string, body: Record<st
     before, after, reason: note,
   });
   return { ok: true, row: after };
+}
+
+/**
+ * Record a decision about an issue that has no receipt row — a series gap, or a
+ * payment with no submission. Without this the queue's two largest categories
+ * could never be dismissed, so it would only ever grow.
+ */
+async function ackIssue(admin: SupabaseClient, staffId: string, body: Record<string, unknown>) {
+  const kind = String(body.kind ?? '');
+  const key = String(body.key ?? '');
+  const note = String(body.note ?? '').trim();
+  if (!kind || !key) throw new EdgeError('bad_request', 'kind and key are required', 400);
+  if (note.length < 3) throw new EdgeError('bad_request', 'a note is required — say what was decided', 400);
+
+  const { data, error } = await admin.rpc('mydata_ack_issue', {
+    p_kind: kind, p_key: key, p_staff: staffId, p_note: note,
+  });
+  if (error) throw new EdgeError('db_error', error.message, 500);
+
+  await writeAudit(admin, {
+    staff_id: staffId, action: 'mydata.ack_issue', entity: 'mydata_issue', entity_id: key,
+    after: data, reason: note,
+  });
+  return { ok: true, row: data };
+}
+
+/**
+ * Acknowledge a whole range of gaps at once.
+ *
+ * The imported history carries 578 of them, including one contiguous block of
+ * 538. That is one accountant's decision, not 578 — and a queue that demanded
+ * 578 clicks would simply be abandoned.
+ */
+async function ackGapRange(admin: SupabaseClient, staffId: string, body: Record<string, unknown>) {
+  const series = String(body.series ?? '');
+  const from = Number(body.from);
+  const to = Number(body.to);
+  const note = String(body.note ?? '').trim();
+  if (!series) throw new EdgeError('bad_request', 'series is required', 400);
+  if (!Number.isFinite(from) || !Number.isFinite(to)) {
+    throw new EdgeError('bad_request', 'from and to must be numbers', 400);
+  }
+  if (to < from) throw new EdgeError('bad_request', `${to} is below ${from}`, 400);
+  if (note.length < 3) throw new EdgeError('bad_request', 'a note is required', 400);
+
+  const { data, error } = await admin.rpc('mydata_ack_gap_range', {
+    p_series: series, p_from: from, p_to: to, p_staff: staffId, p_note: note,
+  });
+  if (error) throw new EdgeError('db_error', error.message, 500);
+
+  await writeAudit(admin, {
+    staff_id: staffId, action: 'mydata.ack_gap_range', entity: 'mydata_issue',
+    entity_id: `gap:${series}:${from}-${to}`, after: { acknowledged: data }, reason: note,
+  });
+  return { ok: true, acknowledged: Number(data ?? 0) };
+}
+
+/**
+ * Create the receipt for a payment that never got one — the actual fix for a
+ * `no_receipt` issue, as opposed to merely acknowledging it.
+ */
+async function issueReceipt(admin: SupabaseClient, staffId: string, body: Record<string, unknown>) {
+  const paymentId = String(body.payment_id ?? '');
+  if (!paymentId) throw new EdgeError('bad_request', 'payment_id is required', 400);
+
+  const { data, error } = await admin.rpc('mydata_issue_receipt', {
+    p_payment: paymentId, p_staff: staffId,
+  });
+  // Already has a receipt, wrong currency, not succeeded — all user errors that
+  // deserve their reason rather than a 500.
+  if (error) throw new EdgeError('conflict', error.message, 409);
+
+  await writeAudit(admin, {
+    staff_id: staffId, action: 'mydata.issue_receipt', entity: 'mydata_submissions',
+    entity_id: (data as { id?: string })?.id ?? paymentId, after: data,
+    reason: 'issued by hand from the review queue',
+  });
+  return { ok: true, row: data };
 }
 
 /** Acknowledge an issue without changing its filing state. */

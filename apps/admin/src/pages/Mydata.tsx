@@ -144,6 +144,17 @@ function ModeBanner({ m }: { m: MydataState }) {
 function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => void }) {
   const [kind, setKind] = useState<'all' | MydataIssueKind>('all');
   const [showReviewed, setShowReviewed] = useState(false);
+  const [ackFor, setAckFor] = useState<MydataIssue | null>(null);
+  const [issueFor, setIssueFor] = useState<MydataIssue | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const toast = useToast();
+  const mutate = useMydataMutation();
+
+  const act = (action: MydataAction, body: Record<string, unknown>, ok: string, done: () => void) =>
+    mutate.mutate({ action, body }, {
+      onSuccess: () => { toast.push(ok, 'success'); done(); },
+      onError: (e) => toast.push(mydataErrorMessage(e), 'error'),
+    });
 
   const all = m.issues.filter((i) => showReviewed || !i.reviewed_at);
   const rows = all.filter((i) => kind === 'all' || i.kind === kind);
@@ -193,6 +204,12 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
               <Button size="sm" variant="ghost" onClick={() => setShowReviewed(!showReviewed)}>
                 {showReviewed ? 'Hide reviewed' : 'Show reviewed'}
               </Button>
+              {/* The imported history carries 578 gaps, 538 of them one
+                  contiguous block from a single day. That is one decision, not
+                  578 — demanding 578 clicks would get the queue abandoned. */}
+              {kind === 'gap' && rows.length > 1 ? (
+                <Button size="sm" onClick={() => setBulkOpen(true)}>Accept all shown</Button>
+              ) : null}
               <Button
                 size="sm"
                 onClick={() =>
@@ -236,11 +253,29 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
                     </div>
                   </td>
                   <td>
-                    {i.submission_id ? (
-                      <Button size="sm" onClick={() => onOpen(i.submission_id!)}>Open</Button>
-                    ) : (
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>no receipt row</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                      {/* Every row can be actioned. A queue entry with no button
+                          can never leave the queue, and 94% of these have no
+                          receipt row behind them once the history is imported. */}
+                      {i.submission_id ? (
+                        <Button size="sm" onClick={() => onOpen(i.submission_id!)}>Open</Button>
+                      ) : null}
+                      {i.kind === 'no_receipt' && i.stripe_charge_id ? (
+                        <Button size="sm" variant="primary" onClick={() => setIssueFor(i)}>
+                          Issue receipt
+                        </Button>
+                      ) : null}
+                      {!i.reviewed_at ? (
+                        <Button size="sm" variant="ghost" onClick={() => setAckFor(i)}>
+                          {i.kind === 'gap' ? 'Accept' : 'Note'}
+                        </Button>
+                      ) : null}
+                    </div>
+                    {i.review_note ? (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, textAlign: 'right' }}>
+                        {i.review_note}
+                      </div>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -248,6 +283,77 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
           </table>
         </div>
       </Card>
+
+      {/* Accept one issue — the honest action for a gap, where nothing can be
+          fixed and the only question is whether somebody has looked. */}
+      <ConfirmModal
+        open={ackFor !== null}
+        onClose={() => setAckFor(null)}
+        onConfirm={(note) =>
+          act(
+            'ack_issue',
+            { kind: ackFor?.kind, key: ackFor?.issue_key, note },
+            'Noted — off the queue.',
+            () => setAckFor(null),
+          )
+        }
+        title={ackFor ? `${ISSUE_LABEL[ackFor.kind]} · ${ackFor.series ?? ''} ${ackFor.aa ?? ''}` : ''}
+        message={
+          ackFor?.kind === 'gap'
+            ? 'This number was consumed by the old system and no document exists behind it. Nothing can be filed for it now — accepting records that it was reviewed and why.'
+            : 'Takes this off the queue without changing anything about the filing itself.'
+        }
+        confirmLabel="Record"
+        requireReason
+        reasonLabel="What was decided"
+        busy={mutate.isPending}
+      />
+
+      {/* Accept a whole range of gaps at once. */}
+      <ConfirmModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onConfirm={(note) => {
+          const aas = rows.map((r) => r.aa).filter((a): a is number => a != null);
+          const series = rows.find((r) => r.series)?.series;
+          if (!series || aas.length === 0) { setBulkOpen(false); return; }
+          act(
+            'ack_gap_range',
+            { series, from: Math.min(...aas), to: Math.max(...aas), note },
+            `Accepted ${aas.length} numbers.`,
+            () => setBulkOpen(false),
+          );
+        }}
+        title={`Accept ${rows.length} missing numbers`}
+        message="Records one decision against every gap currently listed. They stay visible under “Show reviewed”."
+        confirmLabel="Accept all"
+        requireReason
+        reasonLabel="What was decided"
+        busy={mutate.isPending}
+      />
+
+      {/* Issue a receipt — the one queue entry with a real fix rather than an
+          acknowledgement. */}
+      <ConfirmModal
+        open={issueFor !== null}
+        onClose={() => setIssueFor(null)}
+        onConfirm={() =>
+          act(
+            'issue_receipt',
+            { payment_id: (issueFor?.issue_key ?? '').replace(/^payment:/, '') },
+            'Receipt created and queued.',
+            () => setIssueFor(null),
+          )
+        }
+        title="Issue the missing receipt"
+        message={
+          issueFor
+            ? `Creates a receipt for ${issueFor.gross_cents === null ? 'this payment' : formatMoney(issueFor.gross_cents)}, taking the next number in the series. It is built exactly as an automatic one would be, and follows the current mode — in practice mode it is still not sent.`
+            : ''
+        }
+        confirmLabel="Issue receipt"
+        busy={mutate.isPending}
+      />
     </div>
   );
 }
