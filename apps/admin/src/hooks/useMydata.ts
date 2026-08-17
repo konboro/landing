@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
 import type { MydataAction, MydataDetail } from '@/data/api';
-import type { MydataState, UUID } from '@/types/domain';
+import type { MydataHealth, MydataState, PaymentReceipt, UUID } from '@/types/domain';
 
 const KEY = ['mydata'] as const;
 
@@ -19,6 +19,42 @@ export function useMydata() {
     // Receipts move on a worker's schedule, not a person's. Refetching on an
     // interval keeps a reviewer's queue honest while they work through it.
     refetchInterval: 60_000,
+  });
+}
+
+/**
+ * myDATA rollup for the dashboard.
+ *
+ * `dashboard.read` and `mydata.read` are different permissions — an ops manager
+ * has the first and not the second. A 403 here means "this person does not look
+ * after tax filings", so the tile hides itself rather than showing an error on
+ * a screen they open every morning.
+ */
+export function useMydataHealth() {
+  const ds = useDS();
+  return useQuery<MydataHealth | null>({
+    queryKey: ['mydata-health'],
+    queryFn: () => ds.getMydataHealth(),
+    retry: false,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Receipt state for the rides currently on screen.
+ *
+ * Keyed on the ids so paging refetches, and one request covers the page — a
+ * per-row query would be 25 round trips for one column.
+ */
+export function useReceiptsForTrips(tripIds: UUID[]) {
+  const ds = useDS();
+  const key = tripIds.slice().sort().join(',');
+  return useQuery<PaymentReceipt[]>({
+    queryKey: ['mydata-for-trips', key],
+    queryFn: () => ds.getReceiptsForTrips(tripIds),
+    enabled: tripIds.length > 0,
+    retry: false,
+    staleTime: 30_000,
   });
 }
 

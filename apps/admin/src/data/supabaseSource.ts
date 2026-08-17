@@ -55,6 +55,8 @@ import type {
   BroadcastRow,
   CustomerGroupRow,
   MydataState,
+  MydataHealth,
+  PaymentReceipt,
   UUID,
 } from '@/types/domain';
 
@@ -318,6 +320,21 @@ export class SupabaseDataSource implements DataSource {
 
   async getMydataDetail(id: UUID): Promise<MydataDetail> {
     return await this.invoke<MydataDetail>('admin-mydata', { action: 'detail', id });
+  }
+
+  /** Single-row rollup for the dashboard tile. */
+  async getMydataHealth(): Promise<MydataHealth | null> {
+    const res = await this.invoke<{ health: MydataHealth | null }>('admin-mydata', { action: 'health' });
+    return res.health ?? null;
+  }
+
+  /** Receipt state for a page of rides, in one request rather than one per row. */
+  async getReceiptsForTrips(tripIds: UUID[]): Promise<PaymentReceipt[]> {
+    if (tripIds.length === 0) return [];
+    const res = await this.invoke<{ rows: PaymentReceipt[] }>('admin-mydata', {
+      action: 'for_trips', trip_ids: tripIds,
+    });
+    return res.rows ?? [];
   }
 
   async mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void> {

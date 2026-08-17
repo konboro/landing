@@ -38,6 +38,8 @@ import type {
   CustomerGroupRow,
   MydataState,
   MydataSubmissionFull,
+  MydataHealth,
+  PaymentReceipt,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -308,6 +310,10 @@ export interface DataSource {
   getMydata(): Promise<MydataState>;
   getMydataDetail(id: UUID): Promise<MydataDetail>;
   mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
+  /** Dashboard rollup. Callers hide the tile on 403 rather than showing an error. */
+  getMydataHealth(): Promise<MydataHealth | null>;
+  /** Receipt state for a page of rides — one request per page, not per row. */
+  getReceiptsForTrips(tripIds: UUID[]): Promise<PaymentReceipt[]>;
 
   // Global search
   search(q: string): Promise<SearchResult[]>;

@@ -6,6 +6,7 @@
 // the exact document that was sent, and somewhere to record what was done about
 // it. See docs/18-mydata.md.
 import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMydata, useMydataDetail, useMydataMutation, mydataErrorMessage } from '@/hooks/useMydata';
 import { Button, Card, CardHeader, Field, Input, Select, Textarea, KV, Spinner } from '@/components/ui/primitives';
 import { Badge } from '@/components/ui/Badge';
@@ -14,7 +15,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Drawer, ConfirmModal, Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
 import { downloadCsv } from '@/lib/csv';
-import { formatMoney, titleCase, formatDateTime, relativeTime } from '@/lib/format';
+import { formatMoney, titleCase, formatDateTime, relativeTime, shortId } from '@/lib/format';
 import { colors } from '@penny/ui';
 import type { MydataAction } from '@/data/api';
 import type {
@@ -52,7 +53,24 @@ const ISSUE_ACTION: Record<MydataIssueKind, string> = {
 export function MydataPage() {
   const { data: m, isLoading, error } = useMydata();
   const [tab, setTab] = useState('review');
-  const [openId, setOpenId] = useState<string | null>(null);
+
+  // A receipt is linkable: the rides table, the customer card and anywhere else
+  // showing a payment sends you here with ?receipt=<id>. Holding it in the URL
+  // rather than only in state is what makes those links work, and what lets
+  // someone paste "the one that failed" to a colleague.
+  const [params, setParams] = useSearchParams();
+  const openId = params.get('receipt');
+  const setOpenId = (id: string | null) => {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set('receipt', id);
+        else next.delete('receipt');
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   const unreviewed = m ? m.issues.filter((i) => !i.reviewed_at).length : 0;
 
@@ -568,6 +586,7 @@ function SubmissionDrawer({ id, onClose }: { id: string | null; onClose: () => v
   }
 
   const row = data.row;
+  const payment = data.payment;
   const canAct = row.status !== 'sent' && row.source === 'platform';
 
   return (
@@ -639,6 +658,21 @@ function SubmissionDrawer({ id, onClose }: { id: string | null; onClose: () => v
               ['VAT', row.vat_cents === null ? '—' : formatMoney(row.vat_cents)],
               ['MARK', <span className="mono">{row.mark ?? '—'}</span>],
               ['Stripe charge', <span className="mono">{row.stripe_charge_id ?? '—'}</span>],
+              // Links back out to the ride and the rider. A receipt that is a
+              // dead end makes you search for the trip by hand, which is exactly
+              // the "separate system" feeling this is meant to remove.
+              [
+                'Ride',
+                payment?.trip_id
+                  ? <Link to={`/rides/${payment.trip_id}`} className="mono">{shortId(payment.trip_id)}</Link>
+                  : <span className="muted">— not from a ride</span>,
+              ],
+              [
+                'Rider',
+                payment?.user_id
+                  ? <Link to={`/customers/${payment.user_id}`} className="mono">{shortId(payment.user_id)}</Link>
+                  : <span className="muted">—</span>,
+              ],
               ['Payment', <span className="mono">{row.payment_id ?? '—'}</span>],
               ['Mode', row.mode],
               ['Source', row.source === 'legacy' ? 'imported from PythonAnywhere' : 'this platform'],

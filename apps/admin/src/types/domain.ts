@@ -282,6 +282,62 @@ export interface MydataDailyRow {
   last_aa: number;
 }
 
+/**
+ * What happened to one payment's tax receipt, as every screen renders it.
+ *
+ * `practice` is not a flavour of "done": it means the receipt was built while
+ * the system was in dry_run or sandbox and has provably never reached AADE.
+ */
+export type ReceiptState =
+  | 'filed'
+  | 'in_flight'
+  | 'failed'
+  | 'practice'
+  | 'not_filed'
+  | 'missing'
+  | 'not_chargeable'
+  | 'unknown';
+
+export interface PaymentReceipt {
+  payment_id: UUID;
+  trip_id: UUID | null;
+  user_id: UUID | null;
+  amount_cents: number;
+  payment_status: string;
+  submission_id: UUID | null;
+  series: string | null;
+  aa: number | null;
+  receipt_status: MydataStatus | null;
+  receipt_mode: MydataMode | null;
+  receipt_state: ReceiptState;
+  mark: string | null;
+  filed_manually: boolean | null;
+  last_error: string | null;
+}
+
+/** Single-row myDATA rollup for the dashboard. */
+export interface MydataHealth {
+  mode: MydataMode | null;
+  enabled: boolean;
+  today_receipts: number;
+  today_filed: number;
+  today_failed: number;
+  today_gross_cents: number;
+  h24_receipts: number;
+  h24_filed: number;
+  h24_failed: number;
+  h24_gross_cents: number;
+  d7_receipts: number;
+  d7_filed: number;
+  d7_failed: number;
+  d7_by_hand: number;
+  d7_gross_cents: number;
+  in_flight: number;
+  open_issues: number;
+  payments_without_receipt: number;
+  series_synced_at: ISOTimestamp | null;
+}
+
 export interface MydataState {
   mode: MydataMode;
   enabled: boolean;

@@ -15,6 +15,7 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 type Action =
   | 'summary' | 'list' | 'gaps' | 'missing' | 'issues' | 'daily' | 'duplicates' | 'detail'
+  | 'health' | 'for_trips'
   | 'retry' | 'cancel' | 'set_mode' | 'mark_filed' | 'review';
 
 const MUTATIONS: Action[] = ['retry', 'cancel', 'set_mode', 'mark_filed', 'review'];
@@ -46,6 +47,8 @@ const handler = withErrors(async (req: Request) => {
     case 'daily':       return json(await daily(admin, body));
     case 'duplicates':  return json(await duplicates(admin));
     case 'detail':      return json(await detail(admin, body));
+    case 'health':      return json(await health(admin));
+    case 'for_trips':   return json(await forTrips(admin, body));
     case 'retry':       return json(await retry(admin, staff.staff_id, body));
     case 'cancel':      return json(await cancel(admin, staff.staff_id, body));
     case 'set_mode':    return json(await setMode(admin, staff.staff_id, body));
@@ -143,6 +146,38 @@ async function gaps(admin: SupabaseClient, body: Record<string, unknown>) {
 async function missing(admin: SupabaseClient) {
   const { data, error } = await admin
     .from('v_mydata_missing').select('*').order('created_at', { ascending: false }).limit(500);
+  if (error) throw new EdgeError('db_error', error.message, 500);
+  return { rows: data ?? [] };
+}
+
+/**
+ * Single-row rollup for the dashboard.
+ *
+ * Separate from `summary` because the dashboard is loaded by roles that have
+ * `dashboard.read` but not necessarily `mydata.read` — the caller is expected to
+ * treat a 403 here as "hide the tile", not as an error worth showing.
+ */
+async function health(admin: SupabaseClient) {
+  const { data, error } = await admin.from('v_mydata_health').select('*').maybeSingle();
+  if (error) throw new EdgeError('db_error', error.message, 500);
+  return { health: data };
+}
+
+/**
+ * Receipt state for a page of rides, in one round trip.
+ *
+ * The rides table renders 25–100 rows; asking per row would be 100 requests for
+ * a column. Callers pass the trip ids they are about to draw.
+ */
+async function forTrips(admin: SupabaseClient, body: Record<string, unknown>) {
+  const ids = Array.isArray(body.trip_ids) ? (body.trip_ids as string[]).filter(Boolean) : [];
+  if (ids.length === 0) return { rows: [] };
+  if (ids.length > 500) throw new EdgeError('bad_request', 'at most 500 trip ids', 400);
+
+  const { data, error } = await admin
+    .from('v_mydata_by_payment')
+    .select('payment_id, trip_id, user_id, amount_cents, payment_status, submission_id, series, aa, receipt_status, receipt_mode, receipt_state, mark, filed_manually, last_error')
+    .in('trip_id', ids);
   if (error) throw new EdgeError('db_error', error.message, 500);
   return { rows: data ?? [] };
 }
