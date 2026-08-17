@@ -5,13 +5,14 @@
 // job, with the three things the CSV could never carry: why a receipt failed,
 // the exact document that was sent, and somewhere to record what was done about
 // it. See docs/18-mydata.md.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
 import {
   useMydata,
   useMydataDetail,
+  useMydataList,
   useMydataMutation,
   useMydataShadowCompare,
   mydataErrorMessage,
@@ -35,6 +36,16 @@ import type {
   MydataStatus,
   MydataSubmission,
 } from '@/types/domain';
+
+/** Hold a value still while someone is typing, so filtering does not fire per keystroke. */
+function useDebounced<T>(value: T, ms: number): T {
+  const [held, setHeld] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setHeld(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return held;
+}
 
 const STATUS_TONE: Record<MydataStatus, 'success' | 'danger' | 'warning' | 'neutral'> = {
   sent: 'success', failed: 'danger', pending: 'warning', sending: 'warning',
@@ -432,28 +443,27 @@ function Submissions({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
   const [status, setStatus] = useState('all');
   const [source, setSource] = useState('all');
   const [q, setQ] = useState('');
+  const search = useDebounced(q, 300);
 
-  const rows = m.submissions.filter(
-    (s) =>
-      (status === 'all' || s.status === status) &&
-      (source === 'all' || s.source === source) &&
-      (!q ||
-        String(s.aa).includes(q) ||
-        (s.mark ?? '').includes(q) ||
-        (s.stripe_charge_id ?? '').toLowerCase().includes(q.toLowerCase())),
-  );
+  // Filtered at the database. Doing it here meant only ever searching the page
+  // already fetched — and since the shadow series numbers from 1 while the
+  // imported history reaches 23,108, every shadow receipt fell outside it and
+  // "source = shadow" showed nothing despite the rows existing.
+  const { data, isFetching } = useMydataList({ status, source, search, limit: 200 });
+  const rows = data ?? [];
 
   return (
     <Card>
       <CardHeader
         title={`Receipts (${rows.length.toLocaleString()}${
-          m.totals.receipts > m.submissions.length ? ` of ${m.totals.receipts.toLocaleString()}` : ''
+          m.totals.receipts > rows.length ? ` of ${m.totals.receipts.toLocaleString()}` : ''
         })`}
         sub={
-          m.totals.receipts > m.submissions.length
-            ? `Showing the ${m.submissions.length.toLocaleString()} most recent numbers only — ` +
-              `the filters below search these, not the full history yet.`
-            : 'Imported history and everything this platform has issued'
+          isFetching
+            ? 'Searching…'
+            : rows.length >= 200
+              ? 'The 200 most recent matches. Narrow the filters to see further back.'
+              : 'Imported history, the shadow run, and everything this platform has issued'
         }
         actions={
           <Button

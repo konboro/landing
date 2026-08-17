@@ -124,6 +124,11 @@ async function list(admin: SupabaseClient, body: Record<string, unknown>) {
         'attempts, last_error, stripe_charge_id, payment_id, created_at, sent_at, ' +
         'filed_manually, review_note, reviewed_by, reviewed_at',
     )
+    // By recency, NOT by aa. Numbering restarts per series — the shadow run
+    // begins at 1 — so ordering by number buried every shadow receipt 23,000
+    // rows below the imported history and the panel showed an empty list for a
+    // source that plainly had rows in it.
+    .order('created_at', { ascending: false })
     .order('aa', { ascending: false })
     .limit(limit);
 

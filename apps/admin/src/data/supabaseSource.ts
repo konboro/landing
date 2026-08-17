@@ -55,6 +55,7 @@ import type {
   BroadcastRow,
   CustomerGroupRow,
   MydataState,
+  MydataSubmission,
   MydataHealth,
   MydataShadowDay,
   PaymentReceipt,
@@ -317,6 +318,24 @@ export class SupabaseDataSource implements DataSource {
       totals: summary.totals ?? { receipts: subs.rows?.length ?? 0, by_status: {} },
       payments_without_receipt: Number(summary.payments_without_receipt ?? 0),
     };
+  }
+
+  /**
+   * The receipts table, filtered server-side.
+   *
+   * Separate from getMydata because filtering client-side only ever searched
+   * whatever the first page happened to contain — with 22k rows imported, a
+   * source or status that existed but sat outside that page showed as empty.
+   */
+  async getMydataList(f: import('./api').MydataListFilters): Promise<MydataSubmission[]> {
+    const res = await this.invoke<{ rows: MydataSubmission[] }>('admin-mydata', {
+      action: 'list',
+      limit: f.limit ?? 200,
+      ...(f.status && f.status !== 'all' ? { status: f.status } : {}),
+      ...(f.source && f.source !== 'all' ? { source: f.source } : {}),
+      ...(f.search ? { search: f.search } : {}),
+    });
+    return res.rows ?? [];
   }
 
   async getMydataDetail(id: UUID): Promise<MydataDetail> {

@@ -37,6 +37,7 @@ import type {
   BroadcastRow,
   CustomerGroupRow,
   MydataState,
+  MydataSubmission,
   MydataSubmissionFull,
   MydataHealth,
   MydataShadowDay,
@@ -220,6 +221,15 @@ export interface ChatMessage {
 export type BrandConfig = Record<string, unknown>;
 
 /** Mutations `admin-mydata` accepts. Each one writes audit_log. */
+/** Filters the receipts table applies at the database, not in the browser. */
+export interface MydataListFilters {
+  status?: string;
+  source?: string;
+  /** Matches charge id or MARK. */
+  search?: string;
+  limit?: number;
+}
+
 export type MydataAction =
   | 'retry' | 'cancel' | 'mark_filed' | 'review' | 'set_mode'
   // Issue-level, for the queue entries that have no receipt row behind them.
@@ -312,6 +322,8 @@ export interface DataSource {
   // getPanelData: the submissions table carries 20 months of receipt history,
   // and no other screen needs a byte of it.
   getMydata(): Promise<MydataState>;
+  /** The receipts table, filtered server-side rather than over one fetched page. */
+  getMydataList(f: MydataListFilters): Promise<MydataSubmission[]>;
   getMydataDetail(id: UUID): Promise<MydataDetail>;
   mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
   /** Day-by-day coverage of the shadow run. Empty until a shadow endpoint receives. */

@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
-import type { MydataAction, MydataDetail } from '@/data/api';
+import type { MydataAction, MydataDetail, MydataListFilters } from '@/data/api';
 import type {
   MydataHealth,
   MydataShadowDay,
   MydataState,
+  MydataSubmission,
   PaymentReceipt,
   UUID,
 } from '@/types/domain';
@@ -78,6 +79,24 @@ export function useMydataShadowCompare(enabled: boolean) {
     enabled,
     retry: false,
     staleTime: 60_000,
+  });
+}
+
+/**
+ * The receipts table, filtered at the database.
+ *
+ * Filtering in the browser meant searching only the rows already fetched. With
+ * 22k imported receipts and a shadow series that numbers from 1, "source =
+ * shadow" matched nothing at all — the rows existed but sat far outside the
+ * first page. The filters belong where the data is.
+ */
+export function useMydataList(filters: MydataListFilters) {
+  const ds = useDS();
+  return useQuery<MydataSubmission[]>({
+    queryKey: ['mydata-list', filters.status, filters.source, filters.search],
+    queryFn: () => ds.getMydataList(filters),
+    placeholderData: (prev) => prev,   // no flash to empty while refiltering
+    staleTime: 15_000,
   });
 }
 
