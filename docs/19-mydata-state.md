@@ -42,18 +42,20 @@ Not defence in depth by accident — each of these alone is sufficient.
 1. `app_config.mydata.mode` is `dry_run`.
 2. Rows record their mode at creation, and the adapter refuses to POST in
    `dry_run` regardless of the caller.
-3. The `mydata-submit` cron job exists but is **inactive**, and stays that way
-   until somebody creates the Vault secret and flips it on (`00540`).
+3. **Nothing is scheduled.** `mydata_tick()` exists to be called by pg_cron, but
+   no cron job is created — that is a deliberate go-live step, documented at the
+   foot of `00540`. Until then the panel's **Run now** button is the only thing
+   that invokes the worker.
 4. `AADE_USER_ID` and `AADE_SUBSCRIPTION_KEY` are **not set** as function
    secrets, so the adapter would fail closed even if the first three were
    removed.
 
 ## 4. What is not built or not done
 
-- **The cron job is inactive** (see §3.3 — currently a feature, not an
-  omission). Until go-live, use **Run now** on the myDATA → Series & controls
-  tab; the worker is what renders each receipt's document, so practice mode
-  needs it to be useful at all.
+- **No cron job is scheduled** (see §3.3 — a feature, not an omission). Until
+  go-live, use **Run now** on the myDATA → Series & controls tab; the worker is
+  what renders each receipt's document, so practice mode needs it to be useful
+  at all. The three go-live commands are at the foot of `00540`.
 - **Credit notes on refund** are not implemented. `doc_kind` exists for them.
   Note the legacy system never did this either; it is a pre-existing gap.
 - **Shadow ingest from live Stripe is not built** — see §6.

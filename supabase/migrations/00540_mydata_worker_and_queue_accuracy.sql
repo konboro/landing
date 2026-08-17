@@ -184,22 +184,47 @@ comment on function mydata_tick() is
   'Invokes the mydata-submit edge function. Called by pg_cron; reads its bearer token from Vault so no key is ever written into a migration.';
 
 /* ---------------------------------------------------------------------------
-   3. The schedule — created switched OFF
+   3. The schedule is NOT created here
    --------------------------------------------------------------------------- */
 
-do $$
-begin
-  if not exists (select 1 from cron.job where jobname = 'mydata-submit') then
-    perform cron.schedule('mydata-submit', '* * * * *', 'select public.mydata_tick()');
-    raise notice 'scheduled mydata-submit (every minute)';
-  end if;
-
-  -- Off until the Vault secret exists. An active job with no key would fail
-  -- sixty times an hour and bury the log it is supposed to be useful in.
-  update cron.job set active = false where jobname = 'mydata-submit';
-  raise notice 'mydata-submit is scheduled but INACTIVE — see the comment in 00540 to enable';
-exception
-  when undefined_function or invalid_schema_name then
-    raise notice 'pg_cron unavailable — schedule mydata-submit by hand';
-end
-$$;
+-- This migration deliberately does not call cron.schedule().
+--
+-- An earlier version created the job and then immediately disabled it, so that
+-- it would be discoverable. That failed: Supabase does not grant UPDATE on
+-- `cron.job` to the role the SQL editor runs as —
+--
+--   ERROR: 42501: permission denied for table job
+--
+-- and it was convoluted anyway. Creating a scheduled task in order to switch it
+-- off in the next statement says the wrong thing about intent. There is one
+-- honest version of this: the migration supplies the machinery, and turning it
+-- on is a step somebody takes at go-live, on purpose, in one place.
+--
+-- Until then the panel's **Run now** button (myDATA → Series & controls) invokes
+-- the worker on demand, which is the better tool for practice mode regardless:
+-- somebody comparing documents wants to trigger a batch and look at it.
+--
+-- ── At go-live, in this order ────────────────────────────────────────────────
+--
+--   1. Store the bearer token. Never write it into a migration; this repository
+--      is public.
+--
+--        select vault.create_secret(
+--          '<service_role key>',
+--          'mydata_worker_key',
+--          'Bearer token pg_cron uses to invoke the mydata-submit edge function'
+--        );
+--
+--   2. Confirm the wiring works before anything is scheduled:
+--
+--        select public.mydata_tick();        -- returns a request id, or raises
+--
+--   3. Schedule it:
+--
+--        select cron.schedule('mydata-submit', '* * * * *', 'select public.mydata_tick()');
+--
+--   To stop it again — also a function call, not DML on cron.job:
+--
+--        select cron.unschedule('mydata-submit');
+--
+-- ─────────────────────────────────────────────────────────────────────────────
