@@ -1,4 +1,4 @@
-// Minimal Stripe REST client via fetch + form encoding — NO stripe npm dependency.
+﻿// Minimal Stripe REST client via fetch + form encoding — NO stripe npm dependency.
 // Calls https://api.stripe.com/v1 directly. Also verifies webhook signatures.
 import { EdgeError } from './responses.ts';
 
@@ -63,44 +63,8 @@ export async function stripe<T = Record<string, unknown>>(
   return jsonBody as T;
 }
 
-/**
- * Verify a Stripe webhook signature (t + v1 scheme) using Web Crypto HMAC-SHA256.
- * Mirrors stripe.webhooks.constructEvent without the npm package.
- */
-export async function verifyStripeSignature(
-  payload: string,
-  sigHeader: string | null,
-  secret: string,
-  toleranceSec = 300,
-): Promise<boolean> {
-  if (!sigHeader) return false;
-  const parts = Object.fromEntries(
-    sigHeader.split(',').map((kv) => kv.split('=').map((s) => s.trim()) as [string, string]),
-  );
-  const t = parts['t'];
-  const v1 = parts['v1'];
-  if (!t || !v1) return false;
+// Signature verification lives in ./stripe-signature.ts — it is pure Web
+// Crypto with no Deno dependency, so it can be unit tested under node.
+export { verifyStripeSignature } from './stripe-signature.ts';
+export type { SignatureFailure, SignatureResult } from './stripe-signature.ts';
 
-  // Replay protection.
-  const now = Math.floor(Date.now() / 1000);
-  if (Math.abs(now - Number(t)) > toleranceSec) return false;
-
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const mac = await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${payload}`));
-  const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return timingSafeEqual(expected, v1);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}

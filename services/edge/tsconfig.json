@@ -10,5 +10,7 @@
     "lib": ["ES2022", "DOM"],
     "types": []
   },
-  "include": ["invoicing/**/*"]
+  // _shared/stripe-signature.ts is Deno-free and unit tested, so it is checked
+  // here too. The rest of _shared/ reaches for Deno.env and esm.sh and is not.
+  "include": ["invoicing/**/*", "_shared/stripe-signature.ts", "_shared/stripe.test.ts"]
 }

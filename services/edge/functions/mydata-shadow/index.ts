@@ -56,10 +56,14 @@ const handler = withErrors(async (req: Request) => {
     console.error('mydata-shadow: no stripe-signature header — ignoring delivery');
     return json({ received: true, skipped: 'unsigned' });
   }
-  if (!(await verifyStripeSignature(raw, sig, secret))) {
-    // Unlike a missing secret, a bad signature is either the wrong secret or
-    // something forged. Say so with a status code.
-    console.error('mydata-shadow: signature verification failed');
+  const check = await verifyStripeSignature(raw, sig, secret);
+  if (!check.ok) {
+    // The reason is logged, never returned — Stripe's delivery view is visible
+    // to anyone with dashboard access, and an unauthenticated caller should not
+    // learn why it failed. Read it in the Supabase function logs instead.
+    console.error(
+      `mydata-shadow: signature rejected (${check.reason})${check.detail ? ` — ${check.detail}` : ''}`,
+    );
     return json({ code: 'bad_signature', message: 'invalid Stripe signature', status: 400 }, 400);
   }
 
