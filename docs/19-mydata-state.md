@@ -1,8 +1,8 @@
 # 19 — myDATA: what is actually live right now
 
-**Snapshot taken 2026-08-17.** This is a point-in-time status, not a reference —
-it goes stale. `docs/18-mydata.md` explains how the system works and stays true;
-this file says what is deployed today and what is not.
+**Snapshot updated 2026-08-17, late.** This is a point-in-time status, not a
+reference — it goes stale. `docs/18-mydata.md` explains how the system works and
+stays true; this file says what is deployed today and what is not.
 
 Everything below was verified against the live project by query, not from
 memory. §7 has the commands to re-check it.
@@ -21,7 +21,9 @@ still the system of record and is still doing all the real work.
 
 | | |
 |---|---|
-| Migrations `00500_mydata.sql`, `00510_mydata_review.sql` | applied 2026-08-17 |
+| Migrations `00500`, `00510`, `00520`, `00530` | applied 2026-08-17 |
+| Migration `00540` (worker schedule + queue accuracy) | **written, not yet applied** |
+| Imported history | **22,471 receipts, AA 100–23108**, series bytes verified `ce91cea0cea5` |
 | Tables | `mydata_series`, `mydata_submissions` |
 | Views | `v_mydata_issues`, `v_mydata_missing`, `v_mydata_series_gaps`, `v_mydata_duplicates`, `v_mydata_daily`, `v_mydata_daily_review` — all execute |
 | Functions | `mydata_take_aa`, `mydata_claim`, `mydata_settle`, `mydata_config`, `mydata_enqueue_for_payment`, `mydata_mark_filed`, `mydata_review` |
@@ -40,23 +42,41 @@ Not defence in depth by accident — each of these alone is sufficient.
 1. `app_config.mydata.mode` is `dry_run`.
 2. Rows record their mode at creation, and the adapter refuses to POST in
    `dry_run` regardless of the caller.
-3. `mydata-submit` has **no cron schedule** — nothing invokes the worker.
+3. The `mydata-submit` cron job exists but is **inactive**, and stays that way
+   until somebody creates the Vault secret and flips it on (`00540`).
 4. `AADE_USER_ID` and `AADE_SUBSCRIPTION_KEY` are **not set** as function
    secrets, so the adapter would fail closed even if the first three were
    removed.
 
 ## 4. What is not built or not done
 
-- **Legacy history is not imported.** `supabase/seed-mydata-legacy.sql` exists
-  (22,471 rows, 3.8 MB) but has not been applied. Until it is, the panel shows
-  no history, no daily rollup and none of the 578 inherited series holes.
-- **No cron entry** for `mydata-submit` (see §3.3 — currently a feature).
+- **The cron job is inactive** (see §3.3 — currently a feature, not an
+  omission). Until go-live, use **Run now** on the myDATA → Series & controls
+  tab; the worker is what renders each receipt's document, so practice mode
+  needs it to be useful at all.
 - **Credit notes on refund** are not implemented. `doc_kind` exists for them.
   Note the legacy system never did this either; it is a pre-existing gap.
 - **Shadow ingest from live Stripe is not built** — see §6.
 - **AADE reconciliation** (`RequestTransmittedDocs`) not wired.
 - **Legacy rows carry no amounts.** The old log stored only AA / MARK / date /
   Stripe ids.
+
+## 4a. What the queue holds, verified
+
+After the import, against the live project:
+
+| Kind | Count | What it is |
+|---|---|---|
+| Missing number (gap) | 578 | 40 burned by legacy failures + the 538-block of 2026-06-17 |
+| Filed twice | 32 | surplus receipts across 31 payments; one charge was filed three times |
+| Not filed | 40 → **0 after `00540`** | legacy failures; already counted as gaps, and never retryable |
+| Payment with no receipt | 5 | the €20 charges of 10–11 August |
+
+Every count matches the independent analysis of `invoices_log.txt` exactly,
+which is the best evidence available that nothing was lost in the import.
+
+`00540` removes the double-count: 655 "open issues" is really 615 distinct
+problems, and after the bulk gap acknowledgement it should be **37**.
 
 ## 5. Two live findings that need a decision
 
