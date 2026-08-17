@@ -7,6 +7,8 @@
 // it. See docs/18-mydata.md.
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { useDS } from '@/context/DataContext';
 import { useMydata, useMydataDetail, useMydataMutation, mydataErrorMessage } from '@/hooks/useMydata';
 import { Button, Card, CardHeader, Field, Input, Select, Textarea, KV, Spinner } from '@/components/ui/primitives';
 import { Badge } from '@/components/ui/Badge';
@@ -536,11 +538,52 @@ function Daily({ m }: { m: MydataState }) {
 function SeriesControls({ m }: { m: MydataState }) {
   const toast = useToast();
   const mutate = useMydataMutation();
+  const ds = useDS();
+  const qc = useQueryClient();
   const [askMode, setAskMode] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [lastRun, setLastRun] = useState<string | null>(null);
   const s = m.series[0];
+
+  const runWorker = async () => {
+    setRunning(true);
+    try {
+      const r = await ds.runMydataWorker();
+      const summary = `${r.processed} processed · ${r.sent} filed · ${r.failed} failed · ${r.blocked} not sent`;
+      setLastRun(summary);
+      toast.push(r.processed === 0 ? 'Nothing was waiting.' : summary, 'success');
+      await qc.invalidateQueries({ queryKey: ['mydata'] });
+    } catch (e) {
+      toast.push(mydataErrorMessage(e), 'error');
+    } finally {
+      setRunning(false);
+    }
+  };
 
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+      <Card>
+        <CardHeader
+          title="Worker"
+          sub="Builds each receipt's document and, in live mode, transmits it"
+          actions={
+            <Button size="sm" disabled={running} onClick={runWorker}>
+              {running ? 'Running…' : 'Run now'}
+            </Button>
+          }
+        />
+        <div className="card-pad" style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+          The scheduler stays switched off until go-live, so nothing runs on its own. Until then
+          use this to process anything waiting — in {m.mode.replace('_', ' ')} that means building
+          the document and storing it, without sending anything.
+          {lastRun ? (
+            <div style={{ marginTop: 8, color: 'var(--text)' }}>
+              Last run: {lastRun}
+            </div>
+          ) : null}
+        </div>
+      </Card>
+
       <Card>
         <CardHeader title="Series" sub="Receipt numbering" />
         <div className="card-pad">

@@ -313,6 +313,8 @@ export interface DataSource {
   getMydata(): Promise<MydataState>;
   getMydataDetail(id: UUID): Promise<MydataDetail>;
   mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
+  /** Run the myDATA worker once on demand — the scheduler stays off until go-live. */
+  runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }>;
   /** Dashboard rollup. Callers hide the tile on 403 rather than showing an error. */
   getMydataHealth(): Promise<MydataHealth | null>;
   /** Receipt state for a page of rides — one request per page, not per row. */

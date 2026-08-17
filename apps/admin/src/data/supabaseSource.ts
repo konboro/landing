@@ -322,6 +322,18 @@ export class SupabaseDataSource implements DataSource {
     return await this.invoke<MydataDetail>('admin-mydata', { action: 'detail', id });
   }
 
+  /**
+   * Run the myDATA worker once, now.
+   *
+   * The scheduler is deliberately switched off until go-live, but the worker is
+   * what renders each receipt's document — so without a way to run it on demand,
+   * practice mode cannot do the job it exists for. Reaching the function at all
+   * requires a signed-in staff session (verify_jwt).
+   */
+  async runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }> {
+    return await this.invoke('mydata-submit', {});
+  }
+
   /** Single-row rollup for the dashboard tile. */
   async getMydataHealth(): Promise<MydataHealth | null> {
     const res = await this.invoke<{ health: MydataHealth | null }>('admin-mydata', { action: 'health' });
