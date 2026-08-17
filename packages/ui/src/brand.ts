@@ -190,7 +190,12 @@ export const pennyBrand: Brand = {
     primary: ramp.blue500,
     primaryDark: ramp.blue700,
     primarySoft: ramp.blue50,
-    onPrimary: ramp.white,
+    // Ink, not white. The logo's sky-blue is a light colour: white on it is
+    // ~2.5:1, below even the 3:1 floor for UI text, and validateBrand has been
+    // failing on exactly this since the ramp was resampled from the logo. Ink
+    // gives ~7.6:1. The alternative was darkening `primary`, which would mean
+    // the product no longer matches the mark.
+    onPrimary: ramp.ink900,
 
     accent: ramp.lime500,
     accentSoft: ramp.lime100,

@@ -30,7 +30,7 @@ test('createBrand deep-merges over the default', () => {
   assert.equal(acme.assets.emoji, pennyBrand.assets.emoji);
   assert.equal(acme.features.groupRides, true);
   // the default brand is not mutated
-  assert.equal(pennyBrand.colors.primary, '#2f5be0');
+  assert.equal(pennyBrand.colors.primary, '#35aef7');
   assert.equal(pennyBrand.id, 'penny');
 });
 
