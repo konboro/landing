@@ -62,33 +62,41 @@ async function summary(admin: SupabaseClient) {
   const { data: series } = await admin
     .from('mydata_series').select('series, next_aa, floor_aa, active');
 
-  // Counts by status. Small table by DB standards (~23k rows), so a grouped
-  // count is fine; if it ever isn't, this becomes a materialised view.
-  const { data: rows } = await admin
-    .from('mydata_submissions').select('status, mode, source, gross_cents');
+  // Counts come from the database, NOT from counting fetched rows.
+  //
+  // This previously did `select('status, mode, source, gross_cents')` and tallied
+  // in JS. PostgREST caps an unbounded select at 1000 rows, so the moment the 20
+  // months of imported history landed every figure on the page would have frozen
+  // at 1000 — silently, with no error, on a page about tax filings. Exactly the
+  // swallowed-failure shape this platform has been bitten by before.
+  const statuses = ['pending', 'sending', 'sent', 'failed', 'cancelled', 'skipped'] as const;
+  const countOf = async (
+    table: string,
+    where?: (q: ReturnType<SupabaseClient['from']>) => unknown,
+  ): Promise<number> => {
+    let q = admin.from(table).select('*', { count: 'exact', head: true });
+    if (where) q = where(q) as typeof q;
+    const { count, error } = await q;
+    if (error) throw new EdgeError('db_error', `${table}: ${error.message}`, 500);
+    return count ?? 0;
+  };
+
+  const [total, gapCount, missingCount, ...statusCounts] = await Promise.all([
+    countOf('mydata_submissions'),
+    countOf('v_mydata_series_gaps'),
+    countOf('v_mydata_missing'),
+    ...statuses.map((s) => countOf('mydata_submissions', (q) => (q as { eq: (a: string, b: string) => unknown }).eq('status', s))),
+  ]);
 
   const byStatus: Record<string, number> = {};
-  const byMode: Record<string, number> = {};
-  let grossSent = 0;
-  for (const r of (rows ?? []) as Array<Record<string, string | number>>) {
-    byStatus[String(r.status)] = (byStatus[String(r.status)] ?? 0) + 1;
-    byMode[String(r.mode)] = (byMode[String(r.mode)] ?? 0) + 1;
-    if (r.status === 'sent') grossSent += Number(r.gross_cents ?? 0);
-  }
-
-  const { count: gapCount } = await admin
-    .from('v_mydata_series_gaps').select('*', { count: 'exact', head: true });
-  const { count: missingCount } = await admin
-    .from('v_mydata_missing').select('*', { count: 'exact', head: true });
+  statuses.forEach((s, i) => { byStatus[s] = statusCounts[i] ?? 0; });
 
   return {
     config: cfgRow?.value ?? {},
     series: series ?? [],
-    by_status: byStatus,
-    by_mode: byMode,
-    gross_sent_cents: grossSent,
-    gaps: gapCount ?? 0,
-    payments_without_receipt: missingCount ?? 0,
+    totals: { receipts: total, by_status: byStatus },
+    gaps: gapCount,
+    payments_without_receipt: missingCount,
   };
 }
 

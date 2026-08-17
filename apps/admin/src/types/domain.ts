@@ -286,10 +286,17 @@ export interface MydataState {
   mode: MydataMode;
   enabled: boolean;
   series: MydataSeriesState[];
+  /** One page of receipts, newest number first — NOT the whole table. */
   submissions: MydataSubmission[];
   gaps: MydataGap[];
   issues: MydataIssue[];
   daily: MydataDailyRow[];
+  /**
+   * Counts from the database, covering every row rather than the page above.
+   * With 20 months of history loaded, `submissions.length` is a page size and
+   * showing it as a total would understate the table by an order of magnitude.
+   */
+  totals: { receipts: number; by_status: Record<string, number> };
   /** Succeeded payments with no submission row at all. */
   payments_without_receipt: number;
 }

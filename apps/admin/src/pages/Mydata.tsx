@@ -254,8 +254,15 @@ function Submissions({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
   return (
     <Card>
       <CardHeader
-        title={`Receipts (${rows.length})`}
-        sub="Imported history and everything this platform has issued"
+        title={`Receipts (${rows.length.toLocaleString()}${
+          m.totals.receipts > m.submissions.length ? ` of ${m.totals.receipts.toLocaleString()}` : ''
+        })`}
+        sub={
+          m.totals.receipts > m.submissions.length
+            ? `Showing the ${m.submissions.length.toLocaleString()} most recent numbers only — ` +
+              `the filters below search these, not the full history yet.`
+            : 'Imported history and everything this platform has issued'
+        }
         actions={
           <Button
             size="sm"

@@ -285,11 +285,18 @@ export class SupabaseDataSource implements DataSource {
       this.invoke<{
         config: Record<string, unknown>;
         series: MydataState['series'];
+        totals: MydataState['totals'];
         payments_without_receipt: number;
       }>('admin-mydata', { action: 'summary' }),
       this.invoke<{ rows: MydataState['submissions'] }>('admin-mydata', { action: 'list', limit: 500 }),
-      this.invoke<{ rows: MydataState['gaps'] }>('admin-mydata', { action: 'gaps', limit: 500 }),
-      this.invoke<{ rows: MydataState['issues'] }>('admin-mydata', { action: 'issues', include_reviewed: true }),
+      // Gaps and issues are counted, not paged: the tiles on the review queue
+      // are computed from these arrays, so a truncated fetch would show a wrong
+      // number rather than a partial list. The imported history alone carries
+      // 578 gaps and 31 duplicates, which is already past the 500 default.
+      this.invoke<{ rows: MydataState['gaps'] }>('admin-mydata', { action: 'gaps', limit: 2000 }),
+      this.invoke<{ rows: MydataState['issues'] }>('admin-mydata', {
+        action: 'issues', include_reviewed: true, limit: 2000,
+      }),
       this.invoke<{ rows: MydataState['daily'] }>('admin-mydata', { action: 'daily' }),
     ]);
 
@@ -304,6 +311,7 @@ export class SupabaseDataSource implements DataSource {
       gaps: gaps.rows ?? [],
       issues: issues.rows ?? [],
       daily: daily.rows ?? [],
+      totals: summary.totals ?? { receipts: subs.rows?.length ?? 0, by_status: {} },
       payments_without_receipt: Number(summary.payments_without_receipt ?? 0),
     };
   }
