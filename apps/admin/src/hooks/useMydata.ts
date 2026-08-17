@@ -1,7 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
 import type { MydataAction, MydataDetail } from '@/data/api';
-import type { MydataHealth, MydataState, PaymentReceipt, UUID } from '@/types/domain';
+import type {
+  MydataHealth,
+  MydataShadowDay,
+  MydataState,
+  PaymentReceipt,
+  UUID,
+} from '@/types/domain';
 
 const KEY = ['mydata'] as const;
 
@@ -55,6 +61,23 @@ export function useReceiptsForTrips(tripIds: UUID[]) {
     enabled: tripIds.length > 0,
     retry: false,
     staleTime: 30_000,
+  });
+}
+
+/**
+ * Day-by-day coverage of the shadow run.
+ *
+ * Fetched only when the Daily tab is open, and empty until a shadow endpoint is
+ * actually receiving — so it costs nothing before then and needs no flag.
+ */
+export function useMydataShadowCompare(enabled: boolean) {
+  const ds = useDS();
+  return useQuery<MydataShadowDay[]>({
+    queryKey: ['mydata-shadow-compare'],
+    queryFn: () => ds.getMydataShadowCompare(),
+    enabled,
+    retry: false,
+    staleTime: 60_000,
   });
 }
 

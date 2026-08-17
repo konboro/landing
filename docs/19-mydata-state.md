@@ -108,28 +108,70 @@ Series tab. That turns the procedure into a control.
 somebody who knows what those charges were needs to either dismiss them
 ("Note as reviewed") or decide AADE is owed receipts.
 
-## 6. The shadow-run idea (discussed, not built)
+## 6. The shadow run — built, not yet switched on
 
-Proposal: point live Stripe at this platform now, so it records every real
-charge and populates the panel, while still transmitting nothing. That would
-test the receiving path against real traffic instead of waiting for the first
-completed ride.
+Code is in (`00550_mydata_shadow.sql`, `services/edge/functions/mydata-shadow/`).
+What remains is one action in the Stripe dashboard, which is deliberately not
+something a migration can do.
 
-It does not work as-is, for two reasons found while checking:
+It does not route through `payments`, for two reasons found while checking:
 
 - `payments-webhook` ignores charges it does not recognise (`if (!payment)
-  return`), so foreign charges would land in `stripe_events` and nowhere else.
-- `payments.user_id` is `not null` — Atom Mobility's riders do not exist here,
-  so the charges cannot be written to `payments` without inventing users.
+  return`), so foreign charges would land in `stripe_events` and nowhere else;
+- `payments.user_id` is `not null` — the riders behind those charges do not exist
+  here, so writing them to `payments` would mean inventing users and polluting
+  every KPI derived from that table.
 
-**The shape that would work:** ingest `charge.succeeded` straight into
-`mydata_submissions`, bypassing `payments`, under a separate **`ΑΠΥ-SHADOW`**
-series so the real counter is never consumed. Comparison is then by charge id,
-amount and rendered document — which is what matters; AA is just a counter.
+So `charge.succeeded` is recorded straight into `mydata_submissions` as
+`source = 'shadow'`, under its own **`ΑΠΥ-SHADOW`** series starting at 1. The
+real ΑΠΥ counter is untouched, which removes the only serious risk of running
+both systems at once. Correlation is by Stripe charge id; the number is a
+sequence position, not a tax identity.
 
-Needs: a small migration (`source = 'shadow'`, the shadow series, a partial
-unique index on charge id), one edge function, and a second endpoint on the live
-Stripe account.
+**Three independent reasons a shadow receipt cannot reach AADE:** `mode` is
+`dry_run` and the adapter refuses to POST in dry_run; the status is terminal on
+insert so nothing claims it; and `mydata_claim` filters `source = 'platform'`.
+The ingest function does not import the transport at all — only the document
+builder.
+
+### To switch it on
+
+1. Set the function secret — a **second** Stripe endpoint has its **own**
+   signing secret, distinct from `STRIPE_WEBHOOK_SECRET`:
+
+   `STRIPE_SHADOW_WEBHOOK_SECRET=whsec_…`
+
+2. Deploy: `node scripts/deploy-functions.mjs --project-ref <ref> --only mydata-shadow`
+   (it is in `NO_JWT` — Stripe cannot present a Supabase token).
+
+3. In Stripe → Developers → Webhooks, add an endpoint for **`charge.succeeded`**
+   only, pointed at `…/functions/v1/mydata-shadow`. Adding an endpoint does not
+   affect the existing ones; PythonAnywhere keeps receiving exactly what it
+   receives today.
+
+Then watch **myDATA → Daily**, which grows a comparison table above the daily
+rollup.
+
+### What the comparison can and cannot prove
+
+`v_mydata_shadow_compare` reports, per day: charges recorded here, charges the
+old pipeline filed, and the set difference both ways. Both difference columns
+should be **0**.
+
+It proves **coverage** — that the new receiving path sees every charge the old
+one does. It cannot prove **amounts**, because the legacy log recorded AA / MARK
+/ date / Stripe ids and no money at all, so there is nothing on that side to
+check a figure against. Verifying amounts means asking Stripe, which is the
+separate backfill job in §4.
+
+If a misconfiguration means nothing arrives, the symptom is an empty shadow
+series and no comparison table — the function answers 200 with a reason in the
+log rather than making Stripe retry for days.
+
+### At cutover
+
+Remove the shadow endpoint from Stripe. From then on the platform's own
+`payments` trigger is the thing issuing receipts, in the real series.
 
 ## 7. How to re-verify this file
 

@@ -15,7 +15,7 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 type Action =
   | 'summary' | 'list' | 'gaps' | 'missing' | 'issues' | 'daily' | 'duplicates' | 'detail'
-  | 'health' | 'for_trips'
+  | 'health' | 'for_trips' | 'shadow_compare'
   | 'retry' | 'cancel' | 'set_mode' | 'mark_filed' | 'review'
   | 'ack_issue' | 'ack_gap_range' | 'issue_receipt';
 
@@ -52,6 +52,7 @@ const handler = withErrors(async (req: Request) => {
     case 'duplicates':  return json(await duplicates(admin));
     case 'detail':      return json(await detail(admin, body));
     case 'health':      return json(await health(admin));
+    case 'shadow_compare': return json(await shadowCompare(admin, body));
     case 'for_trips':   return json(await forTrips(admin, body));
     case 'retry':       return json(await retry(admin, staff.staff_id, body));
     case 'cancel':      return json(await cancel(admin, staff.staff_id, body));
@@ -168,6 +169,19 @@ async function health(admin: SupabaseClient) {
   const { data, error } = await admin.from('v_mydata_health').select('*').maybeSingle();
   if (error) throw new EdgeError('db_error', error.message, 500);
   return { health: data };
+}
+
+/**
+ * Day-by-day coverage comparison for the shadow run: did this platform record
+ * the same charges the old pipeline filed?
+ */
+async function shadowCompare(admin: SupabaseClient, body: Record<string, unknown>) {
+  const { data, error } = await admin
+    .from('v_mydata_shadow_compare')
+    .select('*')
+    .limit(Math.min(Number(body.limit ?? 60) || 60, 400));
+  if (error) throw new EdgeError('db_error', error.message, 500);
+  return { rows: data ?? [] };
 }
 
 /**

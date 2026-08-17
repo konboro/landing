@@ -33,7 +33,10 @@ if (!TOKEN) { console.error('SUPABASE_ACCESS_TOKEN is required'); process.exit(1
 if (!REF) { console.error('--project-ref is required'); process.exit(1); }
 
 /** Provider webhooks and public feeds must be reachable without a Supabase JWT. */
-const NO_JWT = new Set(['payments-webhook', 'sumsub-webhook', 'gbfs']);
+// mydata-shadow is a Stripe webhook endpoint: Stripe cannot present a Supabase
+// JWT, so it must be reachable without one. It verifies the Stripe signature
+// itself and ignores any delivery it cannot authenticate.
+const NO_JWT = new Set(['payments-webhook', 'sumsub-webhook', 'gbfs', 'mydata-shadow']);
 
 function walk(dir) {
   const out = [];

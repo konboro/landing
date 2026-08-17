@@ -39,6 +39,7 @@ import type {
   MydataState,
   MydataSubmissionFull,
   MydataHealth,
+  MydataShadowDay,
   PaymentReceipt,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
@@ -313,6 +314,8 @@ export interface DataSource {
   getMydata(): Promise<MydataState>;
   getMydataDetail(id: UUID): Promise<MydataDetail>;
   mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
+  /** Day-by-day coverage of the shadow run. Empty until a shadow endpoint receives. */
+  getMydataShadowCompare(): Promise<MydataShadowDay[]>;
   /** Run the myDATA worker once on demand — the scheduler stays off until go-live. */
   runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }>;
   /** Dashboard rollup. Callers hide the tile on 403 rather than showing an error. */

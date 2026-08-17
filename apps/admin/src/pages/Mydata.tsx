@@ -9,7 +9,13 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDS } from '@/context/DataContext';
-import { useMydata, useMydataDetail, useMydataMutation, mydataErrorMessage } from '@/hooks/useMydata';
+import {
+  useMydata,
+  useMydataDetail,
+  useMydataMutation,
+  useMydataShadowCompare,
+  mydataErrorMessage,
+} from '@/hooks/useMydata';
 import { Button, Card, CardHeader, Field, Input, Select, Textarea, KV, Spinner } from '@/components/ui/primitives';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
@@ -427,9 +433,10 @@ function Submissions({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
             ))}
           </Select>
           <Select style={{ width: 'auto' }} value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="all">Platform + imported</option>
+            <option value="all">Everything</option>
             <option value="platform">Platform only</option>
             <option value="legacy">Imported history</option>
+            <option value="shadow">Shadow run</option>
           </Select>
         </div>
       </div>
@@ -475,6 +482,83 @@ function Submissions({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
 /* ──────────────────────────── daily ─────────────────────────────── */
 
 function Daily({ m }: { m: MydataState }) {
+  return (
+    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+      <ShadowCompare />
+      <DailyTable m={m} />
+    </div>
+  );
+}
+
+/**
+ * Coverage of the shadow run, day by day.
+ *
+ * The question it answers is the only one a shadow run can answer, and the one
+ * that matters: are both systems seeing the same charges? Amounts cannot be
+ * compared — the old log recorded no money at all — so a clean row here means
+ * "nothing was missed", not "every figure agrees".
+ */
+function ShadowCompare() {
+  const { data: rows, isLoading } = useMydataShadowCompare(true);
+  if (isLoading || !rows || rows.length === 0) return null;
+
+  const mismatched = rows.filter((d) => d.here_only > 0 || d.old_system_only > 0);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Shadow run vs the old pipeline"
+        sub="Same live charges, both systems — only this one sends nothing"
+        actions={
+          <Badge tone={mismatched.length === 0 ? 'success' : 'danger'}>
+            {mismatched.length === 0
+              ? `${rows.length} day${rows.length === 1 ? '' : 's'} matched`
+              : `${mismatched.length} day${mismatched.length === 1 ? '' : 's'} differ`}
+          </Badge>
+        }
+      />
+      <div className="table-wrap">
+        <table className="data">
+          <thead>
+            <tr>
+              <th>Date</th><th>Recorded here</th><th>Filed by the old system</th>
+              <th>Only here</th><th>Only theirs</th><th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((d) => {
+              const bad = d.here_only > 0 || d.old_system_only > 0;
+              return (
+                <tr key={d.issue_date}>
+                  <td>{d.issue_date}</td>
+                  <td className="mono">{d.recorded_here}</td>
+                  <td className="mono">{d.filed_by_old_system}</td>
+                  <td className="mono" style={{ color: d.here_only ? colors.danger : undefined }}>
+                    {d.here_only || '—'}
+                  </td>
+                  <td className="mono" style={{ color: d.old_system_only ? colors.danger : undefined }}>
+                    {d.old_system_only || '—'}
+                  </td>
+                  <td>{formatMoney(d.gross_cents)}</td>
+                  <td>
+                    {bad ? <Badge tone="danger">check</Badge> : <Badge tone="success">match</Badge>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="card-pad" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        Coverage only. The old log recorded receipt numbers, MARKs, dates and Stripe ids — never
+        amounts — so there is nothing on that side to check a figure against. Verifying amounts
+        means asking Stripe, which is a separate job.
+      </div>
+    </Card>
+  );
+}
+
+function DailyTable({ m }: { m: MydataState }) {
   return (
     <Card>
       <CardHeader

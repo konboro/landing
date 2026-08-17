@@ -150,6 +150,32 @@ submission, because a MARK identifies one document at AADE — a pasted-in
 duplicate would hide a real gap rather than close one. Every action writes
 `audit_log` with the reviewer's note, so the reasoning survives the person.
 
+## 4b. Shadow ingest
+
+`mydata-shadow` is a second Stripe webhook endpoint that records live
+`charge.succeeded` events — the same event the legacy Flask app listened to —
+without transmitting anything. It exists because the alternative way to test the
+receiving path is to wait for this platform's first completed ride, and that
+gives you one data point whenever it happens.
+
+It writes into `mydata_submissions` as `source = 'shadow'`, bypassing `payments`
+entirely: `payments.user_id` is `not null` and those riders exist in the old
+system, not here. Receipts go into a separate **`ΑΠΥ-SHADOW`** series so the real
+counter is never consumed while both systems are issuing.
+
+Nothing shadow can reach AADE, for three independent reasons: `mode` is
+`dry_run`; the status is terminal on insert; and `mydata_claim` filters
+`source = 'platform'`. The document is rendered by the ingest function itself
+rather than by the worker — the worker is the thing that talks to AADE, and a
+shadow receipt should never pass through it.
+
+`v_mydata_shadow_compare` reports daily coverage against the imported history:
+charges recorded here, charges the old pipeline filed, and the difference both
+ways. It proves the two systems see the same charges. It cannot compare amounts —
+the legacy log never recorded any.
+
+Setup, and how to switch it off at cutover: `docs/19-mydata-state.md` §6.
+
 ## 5. Testing
 
 `services/edge/invoicing/` is deliberately free of Deno APIs so it runs under

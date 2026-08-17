@@ -56,6 +56,7 @@ import type {
   CustomerGroupRow,
   MydataState,
   MydataHealth,
+  MydataShadowDay,
   PaymentReceipt,
   UUID,
 } from '@/types/domain';
@@ -332,6 +333,14 @@ export class SupabaseDataSource implements DataSource {
    */
   async runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }> {
     return await this.invoke('mydata-submit', {});
+  }
+
+  /** Day-by-day coverage of the shadow run against the imported history. */
+  async getMydataShadowCompare(): Promise<MydataShadowDay[]> {
+    const res = await this.invoke<{ rows: MydataShadowDay[] }>('admin-mydata', {
+      action: 'shadow_compare',
+    });
+    return res.rows ?? [];
   }
 
   /** Single-row rollup for the dashboard tile. */

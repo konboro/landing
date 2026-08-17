@@ -345,6 +345,20 @@ export interface MydataHealth {
   series_synced_at: ISOTimestamp | null;
 }
 
+/**
+ * One day of the shadow run, compared against the imported PythonAnywhere
+ * history. `here_only` and `old_system_only` should both be 0 — anything else
+ * means the two systems are not seeing the same charges.
+ */
+export interface MydataShadowDay {
+  issue_date: string;
+  recorded_here: number;
+  filed_by_old_system: number;
+  here_only: number;
+  old_system_only: number;
+  gross_cents: number;
+}
+
 export interface MydataState {
   mode: MydataMode;
   enabled: boolean;
