@@ -223,7 +223,7 @@ export type BrandConfig = Record<string, unknown>;
 export type MydataAction =
   | 'retry' | 'cancel' | 'mark_filed' | 'review' | 'set_mode'
   // Issue-level, for the queue entries that have no receipt row behind them.
-  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt';
+  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt' | 'ack_historical';
 
 /** One receipt with its evidence and everything already done to it. */
 export interface MydataDetail {

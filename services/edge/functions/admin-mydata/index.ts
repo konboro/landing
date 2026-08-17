@@ -17,11 +17,11 @@ type Action =
   | 'summary' | 'list' | 'gaps' | 'missing' | 'issues' | 'daily' | 'duplicates' | 'detail'
   | 'health' | 'for_trips' | 'shadow_compare'
   | 'retry' | 'cancel' | 'set_mode' | 'mark_filed' | 'review'
-  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt';
+  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt' | 'ack_historical';
 
 const MUTATIONS: Action[] = [
   'retry', 'cancel', 'set_mode', 'mark_filed', 'review',
-  'ack_issue', 'ack_gap_range', 'issue_receipt',
+  'ack_issue', 'ack_gap_range', 'issue_receipt', 'ack_historical',
 ];
 
 const handler = withErrors(async (req: Request) => {
@@ -61,6 +61,7 @@ const handler = withErrors(async (req: Request) => {
     case 'review':      return json(await review(admin, staff.staff_id, body));
     case 'ack_issue':     return json(await ackIssue(admin, staff.staff_id, body));
     case 'ack_gap_range': return json(await ackGapRange(admin, staff.staff_id, body));
+    case 'ack_historical': return json(await ackHistorical(admin, staff.staff_id, body));
     case 'issue_receipt': return json(await issueReceipt(admin, staff.staff_id, body));
     default:
       throw new EdgeError('bad_request', `unknown action: ${action}`, 400);
@@ -361,6 +362,41 @@ async function ackGapRange(admin: SupabaseClient, staffId: string, body: Record<
     entity_id: `gap:${series}:${from}-${to}`, after: { acknowledged: data }, reason: note,
   });
   return { ok: true, acknowledged: Number(data ?? 0) };
+}
+
+/**
+ * Close the inherited backlog in one decision.
+ *
+ * The import brought 615 issues with it, none of which anybody is going to act
+ * on — nobody files a receipt for December 2024. A queue that opens at 615 is a
+ * queue nobody opens twice, and the few items that will matter get lost in it.
+ *
+ * This acknowledges rather than deletes: the rows stay, "Show reviewed" still
+ * lists them, and every one carries the note and the reviewer.
+ */
+async function ackHistorical(admin: SupabaseClient, staffId: string, body: Record<string, unknown>) {
+  const before = String(body.before ?? '');
+  const note = String(body.note ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+    throw new EdgeError('bad_request', 'before must be a date, YYYY-MM-DD', 400);
+  }
+  if (note.length < 3) {
+    throw new EdgeError('bad_request', 'a note is required — this is a decision, not a cleanup', 400);
+  }
+
+  const { data, error } = await admin.rpc('mydata_ack_historical', {
+    p_before: before, p_staff: staffId, p_note: note,
+  });
+  // The function refuses a future cutoff, which would close issues nobody has
+  // seen. That is a user error, not a server fault.
+  if (error) throw new EdgeError('conflict', error.message, 409);
+
+  const closed = Number(data ?? 0);
+  await writeAudit(admin, {
+    staff_id: staffId, action: 'mydata.ack_historical', entity: 'mydata_issue',
+    entity_id: `before:${before}`, after: { closed }, reason: note,
+  });
+  return { ok: true, closed };
 }
 
 /**

@@ -155,6 +155,7 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
   const [ackFor, setAckFor] = useState<MydataIssue | null>(null);
   const [issueFor, setIssueFor] = useState<MydataIssue | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
   const toast = useToast();
   const mutate = useMydataMutation();
 
@@ -166,6 +167,14 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
 
   const all = m.issues.filter((i) => showReviewed || !i.reviewed_at);
   const rows = all.filter((i) => kind === 'all' || i.kind === kind);
+
+  // Anything older than 30 days is inherited from the old pipeline and is not
+  // work anybody will do. Counted separately so the queue can offer to close it
+  // rather than making a person scroll past it forever.
+  const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+  const historical = all.filter(
+    (i) => !i.reviewed_at && (i.issue_date === null || i.issue_date < cutoff),
+  );
 
   const byKind = useMemo(() => {
     const c = {} as Record<MydataIssueKind, number>;
@@ -184,6 +193,28 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
 
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+      {/* Shown only while the inherited backlog is open. Once it is closed this
+          disappears for good — in steady state there is nothing older than a
+          month sitting unreviewed. */}
+      {historical.length > 20 ? (
+        <Card pad style={{ borderLeft: `3px solid ${colors.warning}` }}>
+          <div className="row-wrap" style={{ alignItems: 'center', gap: 'var(--space-md)' }}>
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <strong>{historical.length} of these came with the old system.</strong>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
+                Everything dated before {cutoff}, plus every missing number the old pipeline used.
+                None of it is work anybody is going to do — nobody files a receipt for 2024. Closing
+                it records who decided and why; nothing is deleted, and “Show reviewed” still lists
+                it all.
+              </div>
+            </div>
+            <Button variant="primary" onClick={() => setCloseOpen(true)}>
+              Close the old backlog
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <div className="row-wrap">
         {(Object.keys(ISSUE_LABEL) as MydataIssueKind[]).map((k) => (
           <button
@@ -312,6 +343,35 @@ function ReviewQueue({ m, onOpen }: { m: MydataState; onOpen: (id: string) => vo
             : 'Takes this off the queue without changing anything about the filing itself.'
         }
         confirmLabel="Record"
+        requireReason
+        reasonLabel="What was decided"
+        busy={mutate.isPending}
+      />
+
+      {/* Close the inherited backlog in one decision. */}
+      <ConfirmModal
+        open={closeOpen}
+        onClose={() => setCloseOpen(false)}
+        onConfirm={(note) =>
+          act(
+            'ack_historical',
+            { before: cutoff, note },
+            `Closed ${historical.length} inherited items.`,
+            () => setCloseOpen(false),
+          )
+        }
+        title={`Close ${historical.length} inherited issues`}
+        message={
+          <>
+            Marks everything dated before <strong>{cutoff}</strong>, and every missing number below
+            the series floor, as reviewed — with your name and this note against each one.
+            <br /><br />
+            It does <strong>not</strong> mark them filed, and it deletes nothing. The duplicates are
+            still duplicated at AADE and the never-filed are still never-filed; this records that
+            somebody looked and decided they are history. They stay visible under “Show reviewed”.
+          </>
+        }
+        confirmLabel="Close them"
         requireReason
         reasonLabel="What was decided"
         busy={mutate.isPending}
