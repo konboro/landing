@@ -77,8 +77,14 @@ After the import, against the live project:
 Every count matches the independent analysis of `invoices_log.txt` exactly,
 which is the best evidence available that nothing was lost in the import.
 
-`00540` removes the double-count: 655 "open issues" is really 615 distinct
-problems, and after the bulk gap acknowledgement it should be **37**.
+`00540` removed the double-count (655 "open issues" was really 615 distinct
+problems — every legacy failure appeared both as `failed` and as `gap`), and
+`00560` closed the rest.
+
+**Now: 610 acknowledged, 5 open.** The 5 are the orphan payments in §5.2 — real
+money with no receipt, and the only myDATA question outstanding that a person
+has to answer. Everything acknowledged is still visible under "Show reviewed",
+each carrying who decided and why.
 
 ## 5. Two live findings that need a decision
 
@@ -108,13 +114,32 @@ Series tab. That turns the procedure into a control.
 somebody who knows what those charges were needs to either dismiss them
 ("Note as reviewed") or decide AADE is owed receipts.
 
-## 6. The shadow run — live, waiting for its first charge
+## 6. The shadow run — live and receiving
 
-All four pieces are in place as of 2026-08-17: migration applied,
-`mydata-shadow` deployed with `verify_jwt: false`, `STRIPE_SHADOW_WEBHOOK_SECRET`
-set, and the second Stripe endpoint configured. **0 shadow receipts recorded so
-far** — the old pipeline files roughly 25 a day, so the first should arrive
-within the hour.
+All four pieces in place as of 2026-08-17: migration applied, `mydata-shadow`
+deployed with `verify_jwt: false`, `STRIPE_SHADOW_WEBHOOK_SECRET` set, and the
+second Stripe endpoint configured.
+
+**2 shadow receipts recorded, €5.30 total**, both with rendered documents. The
+first was `ΑΠΥ-SHADOW 1` at 20:01 UTC for `ch_3U5VbUJOdefzvp0w27Oj4mp8` — €3.10
+gross, €2.50 + €0.60, reconciling exactly.
+
+### Two faults it caught in its first hour
+
+Both would otherwise have been found on go-live day, with AADE on the other end.
+
+1. **Every delivery rejected as `bad_signature`** — 14 in a row. The HMAC was
+   correct; the configured secret was not. The fix included making the failure
+   say *which* of the four possible causes it was: see `_shared/stripe-signature.ts`
+   and its 8 tests. Two latent bugs fell out of writing those — the secret is now
+   trimmed (a pasted newline broke every delivery invisibly), and all `v1`
+   signatures are checked rather than only the last, which would have rejected
+   valid deliveries during any future secret rotation.
+2. **The receipts table could not find the shadow run** while the daily view
+   could. The list was ordered by `aa`, and shadow numbering restarts at 1 while
+   the imported history reaches 23,108 — so every shadow row sorted below the
+   fetch limit. Ordering is by `created_at` now, and the filters query the
+   database rather than one fetched page.
 
 Verified reachable by probing it unsigned:
 
