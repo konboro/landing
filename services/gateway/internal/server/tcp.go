@@ -216,18 +216,20 @@ func readFrame(br *bufio.Reader) ([]byte, error) {
 	var word [4]byte
 	var dataLen uint32
 	for {
-		// Keepalives are TWO bytes, so they cannot be skipped a word at a time
-		// without losing alignment. Measured on the wire: two back to back read as
-		// 0xFFFFFFFF, a single one followed by the next packet's preamble reads as
-		// 0xFFFF0000 — and that second shape closed the session even after
-		// 0xFFFFFFFF was handled. Peeling them off two bytes at a time covers any
-		// number of pings in any position.
-		p, err := br.Peek(2)
+		// The keepalive is a SINGLE 0xFF byte, sent one or more times in a row. All
+		// three lengths seen on the wire are the same thing read as a 4-byte word:
+		//   ff000000  one ping, then the next packet's zero preamble
+		//   ffff0000  two pings
+		//   ffffffff  four pings
+		// Anything that skips a fixed number of bytes therefore breaks on some
+		// counts — which is why treating it as 4 bytes, and then as 2, each fixed
+		// only part of it. Peeling one byte at a time is the only shape that holds.
+		p, err := br.Peek(1)
 		if err != nil {
 			return nil, err
 		}
-		if p[0] == 0xFF && p[1] == 0xFF {
-			if _, err := br.Discard(2); err != nil {
+		if p[0] == 0xFF {
+			if _, err := br.Discard(1); err != nil {
 				return nil, err
 			}
 			continue
