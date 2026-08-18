@@ -25,6 +25,7 @@ import { ConnectivityPage } from '@/pages/Connectivity';
 import { MessagesPage } from '@/pages/Messages';
 import { NotificationsPage } from '@/pages/Notifications';
 import { FinancePage } from '@/pages/Finance';
+import { MydataPage } from '@/pages/Mydata';
 import { ContentPage } from '@/pages/Content';
 import { TeamPage } from '@/pages/Team';
 import { SettingsPage } from '@/pages/Settings';
@@ -66,6 +67,7 @@ export function App() {
                     <Route path="/connectivity" element={<ConnectivityPage />} />
                     <Route path="/connectivity/:simId" element={<ConnectivityPage />} />
                     <Route path="/finance" element={<FinancePage />} />
+                    <Route path="/mydata" element={<MydataPage />} />
                     <Route path="/content" element={<ContentPage />} />
                     <Route path="/team" element={<TeamPage />} />
                     <Route path="/settings" element={<SettingsPage />} />

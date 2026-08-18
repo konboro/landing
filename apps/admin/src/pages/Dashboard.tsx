@@ -9,6 +9,7 @@ import { MapView, type MapMarker } from '@/components/map/MapView';
 import { Badge } from '@/components/ui/Badge';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { EmptyState } from '@/components/ui/feedback';
+import { MydataHealthCard } from '@/components/mydata/MydataHealthCard';
 import { formatMoney, formatNumber, relativeTime, titleCase } from '@/lib/format';
 import { useBrand } from '@/context/BrandContext';
 
@@ -296,6 +297,12 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      {/* ── Tax receipts ──────────────────────────────────────────────────────
+          Money and its receipt belong on the same screen: the question "did
+          yesterday's takings get declared?" should not require remembering to
+          open a tab. Hides itself for roles without mydata.read. */}
+      <MydataHealthCard />
 
       {/* ── Alerts ────────────────────────────────────────────────────────── */}
       <Card>

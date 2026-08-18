@@ -36,6 +36,12 @@ import type {
   SimUsageDay,
   BroadcastRow,
   CustomerGroupRow,
+  MydataState,
+  MydataSubmission,
+  MydataSubmissionFull,
+  MydataHealth,
+  MydataShadowDay,
+  PaymentReceipt,
 } from '@/types/domain';
 import type { LngLat, Trip, User } from '@penny/db-types';
 
@@ -215,6 +221,28 @@ export interface ChatMessage {
  *  tokens does not need a panel release. */
 export type BrandConfig = Record<string, unknown>;
 
+/** Mutations `admin-mydata` accepts. Each one writes audit_log. */
+/** Filters the receipts table applies at the database, not in the browser. */
+export interface MydataListFilters {
+  status?: string;
+  source?: string;
+  /** Matches charge id or MARK. */
+  search?: string;
+  limit?: number;
+}
+
+export type MydataAction =
+  | 'retry' | 'cancel' | 'mark_filed' | 'review' | 'set_mode'
+  // Issue-level, for the queue entries that have no receipt row behind them.
+  | 'ack_issue' | 'ack_gap_range' | 'issue_receipt' | 'ack_historical';
+
+/** One receipt with its evidence and everything already done to it. */
+export interface MydataDetail {
+  row: MydataSubmissionFull;
+  payment: Payment | null;
+  audit: Array<{ action: string; staff_id: string | null; reason: string | null; created_at: string }>;
+}
+
 export interface DataSource {
   readonly kind: 'supabase';
 
@@ -290,6 +318,23 @@ export interface DataSource {
 
   // Everything else (pricing, marketing, fleet, finance, team, settings, analytics)
   getPanelData(): Promise<PanelData>;
+
+  // myDATA (AADE) — docs/18-mydata.md. Deliberately NOT folded into
+  // getPanelData: the submissions table carries 20 months of receipt history,
+  // and no other screen needs a byte of it.
+  getMydata(): Promise<MydataState>;
+  /** The receipts table, filtered server-side rather than over one fetched page. */
+  getMydataList(f: MydataListFilters): Promise<MydataSubmission[]>;
+  getMydataDetail(id: UUID): Promise<MydataDetail>;
+  mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void>;
+  /** Day-by-day coverage of the shadow run. Empty until a shadow endpoint receives. */
+  getMydataShadowCompare(): Promise<MydataShadowDay[]>;
+  /** Run the myDATA worker once on demand — the scheduler stays off until go-live. */
+  runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }>;
+  /** Dashboard rollup. Callers hide the tile on 403 rather than showing an error. */
+  getMydataHealth(): Promise<MydataHealth | null>;
+  /** Receipt state for a page of rides — one request per page, not per row. */
+  getReceiptsForTrips(tripIds: UUID[]): Promise<PaymentReceipt[]>;
 
   // Global search
   search(q: string): Promise<SearchResult[]>;

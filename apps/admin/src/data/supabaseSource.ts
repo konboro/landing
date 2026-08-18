@@ -6,6 +6,8 @@ import { createPennyClient, type PennyClient } from '@penny/api-client';
 import type {
   BrandConfig,
   DataSource,
+  MydataAction,
+  MydataDetail,
   RideDetail,
   SimCommandInput,
   SimDetail,
@@ -52,6 +54,12 @@ import type {
   SimInventoryRow,
   BroadcastRow,
   CustomerGroupRow,
+  MydataState,
+  MydataSubmission,
+  MydataHealth,
+  MydataShadowDay,
+  PaymentReceipt,
+  UUID,
 } from '@/types/domain';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -306,6 +314,111 @@ export class SupabaseDataSource implements DataSource {
    * Collections with no backing table yet resolve to empty, never to invented
    * rows: an empty page is the truth, a populated fake one is not.
    */
+  /* ---- myDATA (AADE) — docs/18-mydata.md ----
+     Five reads against `admin-mydata`, fanned out. They are separate actions
+     server-side because they answer different questions at different sizes; the
+     page wants all five at once, so the fan-out happens here rather than making
+     the screen orchestrate it. */
+  async getMydata(): Promise<MydataState> {
+    const [summary, subs, gaps, issues, daily] = await Promise.all([
+      this.invoke<{
+        config: Record<string, unknown>;
+        series: MydataState['series'];
+        totals: MydataState['totals'];
+        payments_without_receipt: number;
+      }>('admin-mydata', { action: 'summary' }),
+      this.invoke<{ rows: MydataState['submissions'] }>('admin-mydata', { action: 'list', limit: 500 }),
+      // Gaps and issues are counted, not paged: the tiles on the review queue
+      // are computed from these arrays, so a truncated fetch would show a wrong
+      // number rather than a partial list. The imported history alone carries
+      // 578 gaps and 31 duplicates, which is already past the 500 default.
+      this.invoke<{ rows: MydataState['gaps'] }>('admin-mydata', { action: 'gaps', limit: 2000 }),
+      this.invoke<{ rows: MydataState['issues'] }>('admin-mydata', {
+        action: 'issues', include_reviewed: true, limit: 2000,
+      }),
+      this.invoke<{ rows: MydataState['daily'] }>('admin-mydata', { action: 'daily' }),
+    ]);
+
+    const cfg = summary.config ?? {};
+    return {
+      // A missing or unreadable config must not read as "live" — the safe
+      // default is the mode that transmits nothing.
+      mode: (cfg.mode as MydataState['mode']) ?? 'dry_run',
+      enabled: cfg.enabled === true,
+      series: summary.series ?? [],
+      submissions: subs.rows ?? [],
+      gaps: gaps.rows ?? [],
+      issues: issues.rows ?? [],
+      daily: daily.rows ?? [],
+      totals: summary.totals ?? { receipts: subs.rows?.length ?? 0, by_status: {} },
+      payments_without_receipt: Number(summary.payments_without_receipt ?? 0),
+    };
+  }
+
+  /**
+   * The receipts table, filtered server-side.
+   *
+   * Separate from getMydata because filtering client-side only ever searched
+   * whatever the first page happened to contain — with 22k rows imported, a
+   * source or status that existed but sat outside that page showed as empty.
+   */
+  async getMydataList(f: import('./api').MydataListFilters): Promise<MydataSubmission[]> {
+    const res = await this.invoke<{ rows: MydataSubmission[] }>('admin-mydata', {
+      action: 'list',
+      limit: f.limit ?? 200,
+      ...(f.status && f.status !== 'all' ? { status: f.status } : {}),
+      ...(f.source && f.source !== 'all' ? { source: f.source } : {}),
+      ...(f.search ? { search: f.search } : {}),
+    });
+    return res.rows ?? [];
+  }
+
+  async getMydataDetail(id: UUID): Promise<MydataDetail> {
+    return await this.invoke<MydataDetail>('admin-mydata', { action: 'detail', id });
+  }
+
+  /**
+   * Run the myDATA worker once, now.
+   *
+   * The scheduler is deliberately switched off until go-live, but the worker is
+   * what renders each receipt's document — so without a way to run it on demand,
+   * practice mode cannot do the job it exists for. Reaching the function at all
+   * requires a signed-in staff session (verify_jwt).
+   */
+  async runMydataWorker(): Promise<{ processed: number; sent: number; failed: number; blocked: number }> {
+    return await this.invoke('mydata-submit', {});
+  }
+
+  /** Day-by-day coverage of the shadow run against the imported history. */
+  async getMydataShadowCompare(): Promise<MydataShadowDay[]> {
+    const res = await this.invoke<{ rows: MydataShadowDay[] }>('admin-mydata', {
+      action: 'shadow_compare',
+    });
+    return res.rows ?? [];
+  }
+
+  /** Single-row rollup for the dashboard tile. */
+  async getMydataHealth(): Promise<MydataHealth | null> {
+    const res = await this.invoke<{ health: MydataHealth | null }>('admin-mydata', { action: 'health' });
+    return res.health ?? null;
+  }
+
+  /** Receipt state for a page of rides, in one request rather than one per row. */
+  async getReceiptsForTrips(tripIds: UUID[]): Promise<PaymentReceipt[]> {
+    if (tripIds.length === 0) return [];
+    const res = await this.invoke<{ rows: PaymentReceipt[] }>('admin-mydata', {
+      action: 'for_trips', trip_ids: tripIds,
+    });
+    return res.rows ?? [];
+  }
+
+  async mydataMutate(action: MydataAction, body: Record<string, unknown>): Promise<void> {
+    // invoke() throws on a non-2xx, and every myDATA mutation can legitimately
+    // fail a business rule (already filed, duplicate MARK, floor violation).
+    // Letting it throw is the point — the caller shows the reason.
+    await this.invoke<{ ok: boolean }>('admin-mydata', { action, ...body });
+  }
+
   async getPanelData(): Promise<PanelData> {
     const [panel, kpis, sims] = await Promise.all([
       this.invoke<Record<string, unknown>>('admin-panel-data', {}),

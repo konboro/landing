@@ -201,6 +201,192 @@ export interface Invoice {
   pdf_url: string;
 }
 
+/* ---- myDATA (AADE) receipt transmission — see docs/18-mydata.md ---- */
+
+export type MydataStatus =
+  | 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled' | 'skipped';
+export type MydataMode = 'dry_run' | 'sandbox' | 'live';
+
+export interface MydataSubmission {
+  id: UUID;
+  source: 'platform' | 'legacy';
+  series: string;
+  aa: number;
+  issue_date: string;                 // YYYY-MM-DD
+  gross_cents: number | null;         // null for imported legacy rows
+  net_cents: number | null;
+  vat_cents: number | null;
+  mode: MydataMode;
+  status: MydataStatus;
+  mark: string | null;
+  attempts: number;
+  last_error: string | null;
+  stripe_charge_id: string | null;
+  payment_id: UUID | null;
+  created_at: ISOTimestamp;
+  sent_at: ISOTimestamp | null;
+  /** Set when a person filed this through the AADE portal instead. */
+  filed_manually: boolean;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: ISOTimestamp | null;
+}
+
+/**
+ * A submission plus its evidence. Only ever fetched one at a time — the stored
+ * document and response run to a couple of KB each, and there are 20 months of
+ * them, so the list deliberately leaves them behind.
+ */
+export interface MydataSubmissionFull extends MydataSubmission {
+  request_xml: string | null;
+  response_body: string | null;
+}
+
+/** A number in an issued range that carries no MARK at AADE. */
+export interface MydataGap {
+  series: string;
+  aa: number;
+  reason: 'never_issued' | 'cancelled' | 'failed' | 'skipped';
+  issue_date: string | null;
+}
+
+export interface MydataSeriesState {
+  series: string;
+  next_aa: number;
+  floor_aa: number;
+  active: boolean;
+}
+
+export type MydataIssueKind = 'failed' | 'no_receipt' | 'duplicate' | 'gap' | 'stalled';
+
+/** One unit of work for the person reviewing myDATA. */
+export interface MydataIssue {
+  kind: MydataIssueKind;
+  severity: 'high' | 'medium';
+  submission_id: UUID | null;
+  series: string | null;
+  aa: number | null;
+  issue_date: string | null;
+  stripe_charge_id: string | null;
+  gross_cents: number | null;
+  detail: string;
+  reviewed_at: ISOTimestamp | null;
+  /**
+   * Stable identity, present on every issue including the kinds with no receipt
+   * row (`gap:ΑΠΥ:20676`, `payment:<uuid>`). This is what lets an issue be
+   * acknowledged even when there is nothing to attach a note to.
+   */
+  issue_key: string;
+  review_note: string | null;
+}
+
+/** A day's filing, as the emailed CSV used to report it. */
+export interface MydataDailyRow {
+  issue_date: string;
+  series: string;
+  mode: MydataMode;
+  receipts: number;
+  sent: number;
+  filed_by_hand: number;
+  failed: number;
+  in_flight: number;
+  cancelled: number;
+  gross_cents: number;
+  net_cents: number;
+  vat_cents: number;
+  first_aa: number;
+  last_aa: number;
+}
+
+/**
+ * What happened to one payment's tax receipt, as every screen renders it.
+ *
+ * `practice` is not a flavour of "done": it means the receipt was built while
+ * the system was in dry_run or sandbox and has provably never reached AADE.
+ */
+export type ReceiptState =
+  | 'filed'
+  | 'in_flight'
+  | 'failed'
+  | 'practice'
+  | 'not_filed'
+  | 'missing'
+  | 'not_chargeable'
+  | 'unknown';
+
+export interface PaymentReceipt {
+  payment_id: UUID;
+  trip_id: UUID | null;
+  user_id: UUID | null;
+  amount_cents: number;
+  payment_status: string;
+  submission_id: UUID | null;
+  series: string | null;
+  aa: number | null;
+  receipt_status: MydataStatus | null;
+  receipt_mode: MydataMode | null;
+  receipt_state: ReceiptState;
+  mark: string | null;
+  filed_manually: boolean | null;
+  last_error: string | null;
+}
+
+/** Single-row myDATA rollup for the dashboard. */
+export interface MydataHealth {
+  mode: MydataMode | null;
+  enabled: boolean;
+  today_receipts: number;
+  today_filed: number;
+  today_failed: number;
+  today_gross_cents: number;
+  h24_receipts: number;
+  h24_filed: number;
+  h24_failed: number;
+  h24_gross_cents: number;
+  d7_receipts: number;
+  d7_filed: number;
+  d7_failed: number;
+  d7_by_hand: number;
+  d7_gross_cents: number;
+  in_flight: number;
+  open_issues: number;
+  payments_without_receipt: number;
+  series_synced_at: ISOTimestamp | null;
+}
+
+/**
+ * One day of the shadow run, compared against the imported PythonAnywhere
+ * history. `here_only` and `old_system_only` should both be 0 — anything else
+ * means the two systems are not seeing the same charges.
+ */
+export interface MydataShadowDay {
+  issue_date: string;
+  recorded_here: number;
+  filed_by_old_system: number;
+  here_only: number;
+  old_system_only: number;
+  gross_cents: number;
+}
+
+export interface MydataState {
+  mode: MydataMode;
+  enabled: boolean;
+  series: MydataSeriesState[];
+  /** One page of receipts, newest number first — NOT the whole table. */
+  submissions: MydataSubmission[];
+  gaps: MydataGap[];
+  issues: MydataIssue[];
+  daily: MydataDailyRow[];
+  /**
+   * Counts from the database, covering every row rather than the page above.
+   * With 20 months of history loaded, `submissions.length` is a page size and
+   * showing it as a total would understate the table by an order of magnitude.
+   */
+  totals: { receipts: number; by_status: Record<string, number> };
+  /** Succeeded payments with no submission row at all. */
+  payments_without_receipt: number;
+}
+
 export interface CorporateAccount {
   id: UUID;
   name: string;

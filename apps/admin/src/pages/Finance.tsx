@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { usePanelData } from '@/hooks/usePanelData';
+import { useMydata } from '@/hooks/useMydata';
 import { Card, CardHeader, Button, Select, Input } from '@/components/ui/primitives';
 import { Badge, PaymentStatusBadge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { EmptyState } from '@/components/ui/feedback';
 import { downloadCsv } from '@/lib/csv';
 import { formatMoney, titleCase, relativeTime, formatDateTime } from '@/lib/format';
 import { colors } from '@penny/ui';
@@ -76,23 +77,11 @@ function Ledger({ db }: { db: DB }) {
   return (
     <div className="stack" style={{ gap: 'var(--space-lg)' }}>
       <Card>
-        <CardHeader title="Ledger accounts" sub="Balances are derived from the journal (never a mutable column)" />
+        <CardHeader title="Ledger accounts" sub="Balances are derived (never a mutable column)" />
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>Account</th><th>Kind</th><th>Entries</th><th>Balance</th><th>Journal sum</th></tr></thead>
-            <tbody>{db.ledgerAccounts.map((a) => (
-              <tr key={a.id}>
-                <td>{a.owner_label}</td>
-                <td>{titleCase(a.kind)}</td>
-                <td>{a.entry_count}</td>
-                {/* The holder's view — a rider with 80 € of credit reads 80 €
-                    here, the same figure their app shows. */}
-                <td style={{ color: a.owner_balance_cents < 0 ? colors.danger : colors.success, fontWeight: 600 }}>{formatMoney(a.owner_balance_cents)}</td>
-                {/* A wallet is a liability, so its journal sum is the mirror
-                    image. Shown so the double-entry maths stays checkable. */}
-                <td className="mono" style={{ fontSize: 12, opacity: 0.65 }} title="Raw sum of this account's entries, in ledger signs">{formatMoney(a.balance_cents)}</td>
-              </tr>
-            ))}</tbody>
+            <thead><tr><th>Account</th><th>Kind</th><th>Balance</th></tr></thead>
+            <tbody>{db.ledgerAccounts.map((a) => <tr key={a.id}><td>{a.owner_label}</td><td>{titleCase(a.kind)}</td><td style={{ color: a.balance_cents < 0 ? colors.danger : colors.success, fontWeight: 600 }}>{formatMoney(a.balance_cents)}</td></tr>)}</tbody>
           </table>
         </div>
       </Card>
@@ -107,7 +96,7 @@ function Ledger({ db }: { db: DB }) {
                 return (
                   <tr key={txn}>
                     <td className="mono">{txn}</td>
-                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{e.account_kind ? titleCase(e.account_kind) : '—'} {formatMoney(e.delta_cents)}</span>)}</td>
+                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{titleCase(e.account_kind)} {formatMoney(e.delta_cents)}</span>)}</td>
                     <td>{formatMoney(sum)}</td>
                     <td>{sum === 0 ? <Badge tone="success">Balanced</Badge> : <Badge tone="danger">Off by {formatMoney(sum)}</Badge>}</td>
                   </tr>
@@ -149,28 +138,40 @@ function Debts({ db }: { db: DB }) {
 }
 
 function Invoices({ db }: { db: DB }) {
-  if (!db.invoices.length) {
-    return (
-      <Card>
-        <CardHeader title="Invoices & myDATA transmission" sub="AADE e-invoicing status" />
-        <EmptyState
-          emoji="🧾"
-          title="No invoices issued yet"
-          hint="Invoices appear here once myDATA e-invoicing goes live (docs/05, phase 4). Until then rides are receipted through Stripe — see Transactions."
-        />
-      </Card>
-    );
-  }
+  // The full review desk lives at /mydata — this is only the pointer, so there
+  // is one place to do the work rather than two half-places. React Query shares
+  // the cache entry with that page, so opening it costs no extra fetch.
+  const { data: m } = useMydata();
+  const open = m ? m.issues.filter((i) => !i.reviewed_at).length : 0;
   return (
-    <Card>
-      <CardHeader title="Invoices & myDATA transmission" sub="AADE e-invoicing status" />
-      <div className="table-wrap">
-        <table className="data">
-          <thead><tr><th>Number</th><th>Party</th><th>Amount</th><th>myDATA mark</th><th>Status</th><th>Issued</th><th></th></tr></thead>
-          <tbody>{db.invoices.map((i) => <tr key={i.id}><td className="mono">{i.number}</td><td>{i.party_label}</td><td>{formatMoney(i.amount_cents)}</td><td className="mono" style={{ fontSize: 12 }}>{i.mydata_mark ?? '—'}</td><td><Badge tone={i.mydata_status === 'transmitted' ? 'success' : i.mydata_status === 'failed' ? 'danger' : 'warning'}>{titleCase(i.mydata_status)}</Badge></td><td>{formatDateTime(i.issued_at)}</td><td><Button size="sm" variant="ghost" disabled title="Invoice PDFs are generated by the myDATA e-invoicing service (docs/05, phase 4), which is not live yet.">PDF</Button></td></tr>)}</tbody>
-        </table>
-      </div>
-    </Card>
+    <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+      <Card pad style={{ borderLeft: `3px solid ${open ? colors.danger : colors.success}` }}>
+        <div className="row-wrap" style={{ alignItems: 'center' }}>
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <strong>myDATA (AADE)</strong>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+              {!m ? 'Loading…' : (
+                <>
+                  {m.mode === 'live' ? 'Filing to AADE' : `${titleCase(m.mode.replace('_', ' '))} — not transmitting`}
+                  {' · '}next receipt {m.series[0]?.series} {m.series[0]?.next_aa}
+                  {open ? ` · ${open} item${open === 1 ? '' : 's'} need attention` : ' · nothing to review'}
+                </>
+              )}
+            </div>
+          </div>
+          <Link to="/mydata"><Button>Open myDATA</Button></Link>
+        </div>
+      </Card>
+      <Card>
+        <CardHeader title="Invoices" sub="Corporate and on-request documents" />
+        <div className="table-wrap">
+          <table className="data">
+            <thead><tr><th>Number</th><th>Party</th><th>Amount</th><th>myDATA mark</th><th>Status</th><th>Issued</th><th></th></tr></thead>
+            <tbody>{db.invoices.map((i) => <tr key={i.id}><td className="mono">{i.number}</td><td>{i.party_label}</td><td>{formatMoney(i.amount_cents)}</td><td className="mono" style={{ fontSize: 12 }}>{i.mydata_mark ?? '—'}</td><td><Badge tone={i.mydata_status === 'transmitted' ? 'success' : i.mydata_status === 'failed' ? 'danger' : 'warning'}>{titleCase(i.mydata_status)}</Badge></td><td>{formatDateTime(i.issued_at)}</td><td><Button size="sm" variant="ghost">PDF</Button></td></tr>)}</tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
   );
 }
 
