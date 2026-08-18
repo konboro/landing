@@ -96,7 +96,7 @@ function Ledger({ db }: { db: DB }) {
                 return (
                   <tr key={txn}>
                     <td className="mono">{txn}</td>
-                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{titleCase(e.account_kind)} {formatMoney(e.delta_cents)}</span>)}</td>
+                    <td>{entries.map((e) => <span key={e.id} className="pill-tag">{e.account_kind ? titleCase(e.account_kind) : "—"} {formatMoney(e.delta_cents)}</span>)}</td>
                     <td>{formatMoney(sum)}</td>
                     <td>{sum === 0 ? <Badge tone="success">Balanced</Badge> : <Badge tone="danger">Off by {formatMoney(sum)}</Badge>}</td>
                   </tr>
