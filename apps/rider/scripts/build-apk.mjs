@@ -50,18 +50,20 @@ if (!existsSync(androidDir)) {
 }
 
 console.log(`Building release APK (${abis})…`);
+const isWin = process.platform === 'win32';
+const gradlew = join(androidDir, isWin ? 'gradlew.bat' : 'gradlew');
 execFileSync(
-  join(androidDir, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew'),
+  // Three Windows traps here: Node refuses to spawn a bare .bat (EINVAL) so it
+  // needs a shell; once a shell resolves the command through PATH a relative
+  // 'gradlew.bat' stops being found, so the path must be absolute; and under a
+  // shell an absolute path that CONTAINS A SPACE (e.g. `D:\penny platform\…`) is
+  // re-split by cmd unless it is quoted. Quote it. POSIX gets no shell, so its
+  // path must stay unquoted or the argument is taken literally.
+  isWin ? `"${gradlew}"` : gradlew,
   ['assembleRelease', `-PreactNativeArchitectures=${abis}`, '--no-daemon'],
   {
     cwd: androidDir,
-    // Two Windows traps in one line above: Node refuses to spawn a bare .bat
-    // (EINVAL) so it needs a shell, and once a shell resolves the command
-    // through PATH a relative 'gradlew.bat' stops being found. An absolute
-    // path satisfies both, and POSIX must not get the shell or the argument
-    // list is re-split on spaces.
-    shell: process.platform === 'win32',
-
+    shell: isWin,
     stdio: 'inherit',
     env: { ...process.env, EXPO_NO_METRO_WORKSPACE_ROOT: '1' },
   },
