@@ -551,14 +551,45 @@ export class SupabaseRiderApi implements RiderApi {
   }
 
   async endTrip(input: EndTripInput): Promise<TripView> {
+    // The mandatory parking photo arrives as a LOCAL device uri (file://… from the
+    // camera). Upload it to the private ride-photos bucket first, and send the edge
+    // fn the storage object PATH instead — a file:// uri means nothing server-side and
+    // would leave ops/admin with no image (the exact gap this milestone closes).
+    const photoPath = await this.uploadEndPhoto(input.trip_id, input.end_photo_url);
     await this.client.edge.endTrip({
       trip_id: input.trip_id,
       pos: input.pos,
-      end_photo_url: input.end_photo_url,
+      end_photo_url: photoPath,
       rating: input.rating,
       tags: input.tags,
     });
     return this.refreshTrip(input.trip_id);
+  }
+
+  /**
+   * Upload a local parking-photo uri to ride-photos via a one-shot signed url and
+   * return the stored object path. An already-remote value (storage path or https
+   * url) passes straight through. Upload failures do not trap the rider at an
+   * unlocked scooter: the path is still reserved and returned, and the photo simply
+   * shows as pending/missing for manual review (docs/04 grace policy).
+   */
+  private async uploadEndPhoto(tripId: string, localUri: string): Promise<string> {
+    if (!localUri || localUri.startsWith('ride-photos/') || /^https?:\/\//i.test(localUri)) {
+      return localUri;
+    }
+    const { path, token } = await this.client.edge.signPhotoUpload({ trip_id: tripId });
+    try {
+      const res = await fetch(localUri);
+      const blob = await res.blob();
+      const { error } = await this.client.supabase.storage
+        .from('ride-photos')
+        .uploadToSignedUrl(path, token, blob, { contentType: 'image/jpeg' });
+      if (error) throw error;
+    } catch (e) {
+      // Log, but let the ride end — see the doc comment above.
+      console.warn('end-photo upload failed, ending with photo pending:', (e as Error).message);
+    }
+    return path;
   }
 
   async shareRide(trip_id: string): Promise<ShareLink> {

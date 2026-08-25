@@ -357,6 +357,11 @@ export class MockOpsApi implements OpsApi {
         throw new Error(`unknown outbox kind ${item.kind}`);
     }
   }
+
+  // No real storage in the mock — the last-ride screen just shows its placeholder.
+  async getRidePhotoUrl(_tripId: string): Promise<string | null> {
+    return null;
+  }
 }
 
 function delay(ms: number): Promise<void> {

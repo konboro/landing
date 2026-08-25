@@ -12,6 +12,7 @@ import { handlePreflight } from '../../_shared/cors.ts';
 import { json, withErrors, EdgeError } from '../../_shared/responses.ts';
 import { adminClient, requireUser, requireStaff } from '../../_shared/admin.ts';
 import { readJson, str, num } from '../../_shared/validate.ts';
+import { signRidePhoto } from '../../_shared/photos.ts';
 
 interface ViewSpec {
   /** Permission the caller must hold. */
@@ -280,8 +281,22 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
   const { data, error, count } = await q.range(offset, offset + limit - 1);
   if (error) throw new EdgeError('db_error', error.message, 500);
 
+  let rows = data ?? [];
+
+  // The verification queue stores end_photo_url as a private-bucket object path
+  // (migration 00570). Turn each into a short-TTL signed url so the panel can render
+  // the real photo instead of a placeholder — the bucket is never public.
+  if (view === 'v_ride_verification_queue') {
+    rows = await Promise.all(
+      rows.map(async (r: Record<string, unknown>) => ({
+        ...r,
+        end_photo_url: await signRidePhoto(admin, r.end_photo_url as string | null, 600),
+      })),
+    );
+  }
+
   return json({
-    rows: data ?? [],
+    rows,
     total: count ?? (data ?? []).length,
     limit,
     offset,

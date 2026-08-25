@@ -23,9 +23,17 @@ export function ZonesPage() {
   const { data: db } = usePanelData();
   const [draft, setDraft] = useState<Zone[] | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  // Lock model: saved zones are read-only on the map until explicitly unlocked.
+  // `editingId` is the one zone currently editable in the draw layer; `selectedId`
+  // is a highlighted-but-still-locked zone (picked from the map or the table).
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const working = draft ?? zones ?? [];
   const dirty = draft !== null;
+  const editingZone = working.find((z) => z.id === editingId) ?? null;
+
+  const clearEdit = () => { setEditingId(null); setSelectedId(null); };
 
   // A new polygon must inherit a real city: `apply_zone_version` keys the whole
   // version off one city id, so a placeholder here fails the save server-side.
@@ -33,7 +41,7 @@ export function ZonesPage() {
 
   const save = useMutation({
     mutationFn: (reason: string) => ds.saveZoneVersion(working, reason),
-    onSuccess: (version) => { toast.push(`Saved zones v${version}`, 'success'); setDraft(null); setSaveOpen(false); qc.invalidateQueries({ queryKey: ['zones'] }); qc.invalidateQueries({ queryKey: ['panel-data'] }); },
+    onSuccess: (version) => { toast.push(`Saved zones v${version}`, 'success'); setDraft(null); clearEdit(); setSaveOpen(false); qc.invalidateQueries({ queryKey: ['zones'] }); qc.invalidateQueries({ queryKey: ['panel-data'] }); },
   });
 
   const updateZone = (id: string, patch: Partial<Zone>) => setDraft(working.map((z) => (z.id === id ? { ...z, ...patch } : z)));
@@ -53,7 +61,7 @@ export function ZonesPage() {
         actions={
           <>
             <Button onClick={exportGeoJSON}>Export GeoJSON</Button>
-            {dirty ? <Button onClick={() => setDraft(null)}>Discard</Button> : null}
+            {dirty ? <Button onClick={() => { setDraft(null); clearEdit(); }}>Discard</Button> : null}
             <Button variant="primary" disabled={!dirty || !can('zones.edit')} onClick={() => setSaveOpen(true)}>Save new version</Button>
           </>
         }
@@ -62,15 +70,29 @@ export function ZonesPage() {
 
       <div className="grid" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
         <Card>
-          <CardHeader title="Map editor" sub="Polygon + trash tools (requires Mapbox token)" />
+          <CardHeader title="Map editor" sub="Saved zones are locked — pick one and Edit, or draw a new polygon" />
           <div className="card-pad">
+            {editingZone ? (
+              <div className="between" style={{ gap: 8, alignItems: 'center' }}>
+                <Badge tone="warning">Editing “{editingZone.name || titleCase(editingZone.kind)}” — drag to move, double-click an edge to add a point, trash to delete</Badge>
+                <Button size="sm" variant="primary" onClick={clearEdit}>Done editing</Button>
+              </div>
+            ) : (
+              <Badge tone="info">Zones are locked. Click a zone (or a table row) then “Edit”, or use the polygon tool ▱ to add a new one.</Badge>
+            )}
+            <div style={{ height: 8 }} />
             <ZoneDrawEditor
               zones={working}
+              editingId={editingId}
+              selectedId={selectedId}
+              // Clicking a locked zone only selects it — the Edit button unlocks it.
+              onSelect={(id) => setSelectedId(id)}
               // The id must be mapbox-gl-draw's own feature id, otherwise the
               // draw.update / draw.delete events for this polygon match nothing.
-              onCreate={(coords, drawId) => setDraft([...working, { id: drawId, city_id: newZoneCityId, kind: 'parking', geom: { type: 'Polygon', coordinates: coords }, rules: {}, active: true, valid_from: null, valid_to: null, version: 0, created_by: null, name: 'New zone' }])}
+              // A freshly drawn polygon is immediately the editable one.
+              onCreate={(coords, drawId) => { setDraft([...working, { id: drawId, city_id: newZoneCityId, kind: 'parking', geom: { type: 'Polygon', coordinates: coords }, rules: {}, active: true, valid_from: null, valid_to: null, version: 0, created_by: null, name: 'New zone' }]); setEditingId(drawId); setSelectedId(drawId); }}
               onUpdate={(id, coords) => updateZone(id, { geom: { type: 'Polygon', coordinates: coords } })}
-              onDelete={(id) => setDraft(working.filter((z) => z.id !== id))}
+              onDelete={(id) => { setDraft(working.filter((z) => z.id !== id)); if (id === editingId) clearEdit(); }}
             />
             <div className="row-wrap" style={{ marginTop: 10, gap: 6 }}>
               {ZONE_KINDS.map((k) => { const s = zoneMapStyle(k); return <span key={k} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}><span style={{ width: 12, height: 12, borderRadius: 3, background: s.fill, border: `1px solid ${s.line}` }} />{titleCase(k)}</span>; })}
@@ -88,10 +110,18 @@ export function ZonesPage() {
         <CardHeader title="Zone rules" sub="Per-kind fields; edits become a new version" />
         <div className="table-wrap">
           <table className="data">
-            <thead><tr><th>Name</th><th>Kind</th><th>Rules</th><th>Active</th></tr></thead>
+            <thead><tr><th></th><th>Name</th><th>Kind</th><th>Rules</th><th>Active</th></tr></thead>
             <tbody>
               {working.map((z) => (
-                <tr key={z.id}>
+                <tr key={z.id} onClick={() => setSelectedId(z.id)} style={{ background: z.id === editingId ? 'var(--color-warning-bg, rgba(245,158,11,0.12))' : z.id === selectedId ? 'var(--color-hover, rgba(120,120,120,0.08))' : undefined, cursor: 'pointer' }}>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant={z.id === editingId ? 'primary' : 'ghost'}
+                      disabled={!can('zones.edit')}
+                      onClick={(e) => { e.stopPropagation(); if (z.id === editingId) clearEdit(); else { setEditingId(z.id); setSelectedId(z.id); } }}
+                    >{z.id === editingId ? 'Done' : 'Edit'}</Button>
+                  </td>
                   <td><Input value={z.name ?? ''} onChange={(e) => updateZone(z.id, { name: e.target.value })} style={{ minWidth: 160 }} /></td>
                   <td>
                     <Select value={z.kind} onChange={(e) => updateZone(z.id, { kind: e.target.value as Zone['kind'] })} style={{ width: 'auto' }}>

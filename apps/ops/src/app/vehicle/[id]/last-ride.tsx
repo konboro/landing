@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   Text,
+  Image,
   Pressable,
   ScrollView,
   Animated,
@@ -37,6 +38,7 @@ import { formatDistance, formatDuration, formatDateTime, formatMoney } from '@pe
 import type { LngLat } from '@penny/db-types';
 import { useTheme, makeStyles, withAlpha } from '../../../brand';
 import { Icon, Body, Muted, Badge, Empty } from '../../../components/ui';
+import { getOpsApi } from '../../../services';
 import * as repo from '../../../offline/repo';
 import { hasMapboxToken, env } from '../../../lib/env';
 import { ATHENS_CENTER } from '../../../services/mockData';
@@ -216,6 +218,8 @@ export default function LastRideScreen() {
   const [vehicle, setVehicle] = useState<OpsVehicle | null>(null);
   const [ride, setRide] = useState<MirrorRide | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -233,6 +237,20 @@ export default function LastRideScreen() {
       alive = false;
     };
   }, [id]);
+
+  // The end-of-ride parking photo is not mirrored offline (bytes live in a private
+  // bucket). Fetch a short-TTL signed url for the ride we're showing, online only.
+  useEffect(() => {
+    if (!ride?.id) return;
+    let alive = true;
+    setPhotoUrl(null);
+    setPhotoFailed(false);
+    getOpsApi()
+      .getRidePhotoUrl(ride.id)
+      .then((url) => { if (alive) setPhotoUrl(url); })
+      .catch(() => { if (alive) setPhotoUrl(null); });
+    return () => { alive = false; };
+  }, [ride?.id]);
 
   // The real GPS trace when the mirror has it (`trip_routes.path`, pulled into
   // `VehicleRide.track`), and only then the reconstruction. Two points is the
@@ -552,6 +570,23 @@ export default function LastRideScreen() {
               ))}
             </View>
 
+            <View style={st.photoSection}>
+              <Muted>End-of-ride parking photo</Muted>
+              {photoUrl && !photoFailed ? (
+                <Image
+                  source={{ uri: photoUrl }}
+                  style={st.photo}
+                  resizeMode="cover"
+                  onError={() => setPhotoFailed(true)}
+                />
+              ) : (
+                <View style={[st.photo, st.photoEmpty]}>
+                  <Icon name="camera" size={28} color={c.textMuted} />
+                  <Muted>{photoFailed ? 'Photo unavailable' : 'No photo for this ride'}</Muted>
+                </View>
+              )}
+            </View>
+
             <View style={st.legendRow}>
               <Dot color={c.success} />
               <Muted>Start</Muted>
@@ -771,6 +806,9 @@ const useStyles = makeStyles((t) => ({
   speedText: { color: t.c.text, fontSize: t.font.size.md, fontWeight: '700' },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: t.space.md },
   fact: { flexBasis: '30%', flexGrow: 1, minWidth: 96 },
+  photoSection: { gap: t.space.sm },
+  photo: { width: '100%', height: 200, borderRadius: t.radius.lg, backgroundColor: t.c.surfaceAlt },
+  photoEmpty: { alignItems: 'center', justifyContent: 'center', gap: t.space.sm, borderWidth: 1, borderColor: t.c.border },
   legendRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, flexWrap: 'wrap' },
   endpoint: { width: 16, height: 16, borderRadius: 8, borderWidth: 3, borderColor: t.c.surface },
   cursorOuter: {
