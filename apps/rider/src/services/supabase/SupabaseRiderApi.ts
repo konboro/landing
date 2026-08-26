@@ -592,6 +592,15 @@ export class SupabaseRiderApi implements RiderApi {
     return path;
   }
 
+  async reportZoneIncident(trip_id: string, kind: 'no_go' | 'no_parking', pos: [number, number]): Promise<void> {
+    // Best-effort operator alert; never let it block or throw into the ride UI.
+    try {
+      await this.client.edge.zoneIncident({ trip_id, kind, pos });
+    } catch (e) {
+      console.warn('zone incident report failed:', (e as Error).message);
+    }
+  }
+
   async shareRide(trip_id: string): Promise<ShareLink> {
     // Signed share URL from an edge fn. Placeholder shape.
     return {

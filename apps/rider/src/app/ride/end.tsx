@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { evaluateZones, canEndHere, OPERATING_CITY, type ZoneLike } from '@penny/geo';
+import { evaluateZones, canEndHere, haversine, OPERATING_CITY, type ZoneLike } from '@penny/geo';
 import { formatMoney, formatDuration, formatDistance, co2SavedKg, formatDateTime } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
@@ -39,6 +39,37 @@ export default function EndRideScreen() {
   const ev = useMemo(() => evaluateZones(endPos, zones as unknown as ZoneLike[]), [endPos, zones]);
   const zoneCheck = canEndHere(ev);
 
+  // No-parking (P2): the rider reached the end screen inside a no-parking zone.
+  // Alert operators once (the edge fn counts attempts and flags repeats > 3).
+  const reportedNoParking = React.useRef(false);
+  React.useEffect(() => {
+    if (phase === 'form' && !zoneCheck.ok && ev.inNoParking && trip && !reportedNoParking.current) {
+      reportedNoParking.current = true;
+      api.reportZoneIncident(trip.id, 'no_parking', endPos);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, zoneCheck.ok, ev.inNoParking]);
+
+  // Direct the rider to the nearest allowed parking (centroid of the closest
+  // parking / parking_station zone) via the device maps app.
+  const openNearestParking = () => {
+    let best: [number, number] | null = null;
+    let bestD = Infinity;
+    for (const z of zones as unknown as ZoneLike[]) {
+      if (z.kind !== 'parking' && z.kind !== 'parking_station') continue;
+      const ring = (z.geom.coordinates?.[0] ?? []) as [number, number][];
+      if (!ring.length) continue;
+      const c: [number, number] = [
+        ring.reduce((s, p) => s + p[0], 0) / ring.length,
+        ring.reduce((s, p) => s + p[1], 0) / ring.length,
+      ];
+      const d = haversine(endPos, c);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    if (!best) return;
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${best[1]},${best[0]}`).catch(() => undefined);
+  };
+
   if (!trip) {
     return <Screen><Header title={t('endRide.title')} /><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
   }
@@ -51,6 +82,7 @@ export default function EndRideScreen() {
 
   const confirmEnd = async () => {
     if (!photo) return;
+    if (!zoneCheck.ok) { Haptics.warning(); return; } // blocked: can't end here (P2)
     setBusy(true);
     try {
       const result = await api.endTrip({ trip_id: trip.id, pos: endPos, end_photo_url: photo, rating: rating || undefined, tags });
@@ -95,8 +127,10 @@ export default function EndRideScreen() {
               tone="danger"
               icon="warning"
               title={t('endRide.zoneBad')}
-              body={t(`ride.${zoneCheck.reason === 'no_parking_zone' ? 'noGo' : 'outside'}`)}
-              action={isEnabled('parkingSchool') ? <Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} /> : undefined}
+              body={t(`endRide.${zoneCheck.reason === 'no_parking_zone' ? 'noParking' : 'outsideArea'}`)}
+              action={zoneCheck.reason === 'no_parking_zone'
+                ? <Button title={t('endRide.navigateParking')} size="sm" full={false} variant="ghost" onPress={openNearestParking} />
+                : (isEnabled('parkingSchool') ? <Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} /> : undefined)}
             />
           )}
 
@@ -120,7 +154,7 @@ export default function EndRideScreen() {
           <Button title={t('endRide.reportDamage')} icon="flag" variant="ghost" onPress={() => router.push({ pathname: '/report/[code]', params: { code: trip.vehicle_code } })} />
         </ScrollView>
         <View style={styles.footer}>
-          <Button title={t('endRide.finish')} icon="check" size="lg" onPress={confirmEnd} loading={busy} />
+          <Button title={zoneCheck.ok ? t('endRide.finish') : t('endRide.zoneBad')} icon="check" size="lg" onPress={confirmEnd} loading={busy} disabled={!zoneCheck.ok} />
         </View>
       </Screen>
     );

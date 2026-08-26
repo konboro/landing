@@ -103,6 +103,8 @@ export function createEdgeApi(client: SupabaseClient) {
       invoke<EndTripResult>(client, 'trips-end', input),
     signPhotoUpload: (input: { trip_id: UUID }) =>
       invoke<SignPhotoUploadResult>(client, 'photos-sign-upload', input),
+    zoneIncident: (input: { trip_id: UUID; kind: 'no_go' | 'no_parking'; pos: LngLat }) =>
+      invoke<{ alerted: boolean; kind: string; attempts: number; flagged: boolean }>(client, 'zone-incident', input),
     pauseTrip: (trip_id: UUID) =>
       invoke<{ trip_id: UUID; status: string }>(client, 'trips-pause', { trip_id, action: 'pause' }),
     resumeTrip: (trip_id: UUID) =>
