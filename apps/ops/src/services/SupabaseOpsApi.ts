@@ -513,4 +513,20 @@ export class SupabaseOpsApi implements OpsApi {
       shifts: shiftRows.map(toShift),
     };
   }
+
+  async getRidePhotoUrl(tripId: string): Promise<string | null> {
+    // The ride-photos bucket is private; the app cannot sign urls itself, so it
+    // asks the staff-gated ride-photo-url edge fn (docs/07). Any failure (offline,
+    // no photo) degrades to null and the screen shows a placeholder.
+    try {
+      const client = await getClient();
+      const { data, error } = await client.supabase.functions.invoke('ride-photo-url', {
+        body: { trip_id: tripId },
+      });
+      if (error) return null;
+      return (data as { url?: string | null })?.url ?? null;
+    } catch {
+      return null;
+    }
+  }
 }

@@ -441,6 +441,10 @@ export class MockRiderApi implements RiderApi {
     await wait(600); // DOUT2 siren pulse
   }
 
+  async reportZoneIncident(_trip_id: string, _kind: 'no_go' | 'no_parking', _pos: [number, number]): Promise<void> {
+    await wait(50); // no backend in the mock
+  }
+
   /* ---------------------------- trip lifecycle ---------------------------- */
 
   async getActiveTrip(): Promise<TripView | null> {

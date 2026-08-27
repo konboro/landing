@@ -88,12 +88,23 @@ export interface EndTripResult {
   receipt_url?: string;
 }
 
+/** Signed upload target for a trip's end-of-ride parking photo (photos-sign-upload). */
+export interface SignPhotoUploadResult {
+  path: string;       // storage object path — pass back to endTrip as end_photo_url
+  token: string;      // one-shot token for storage.uploadToSignedUrl
+  signed_url: string;
+}
+
 export function createEdgeApi(client: SupabaseClient) {
   return {
     startTrip: (input: StartTripInput) =>
       invoke<StartTripResult>(client, 'trips-start', input),
     endTrip: (input: EndTripInput) =>
       invoke<EndTripResult>(client, 'trips-end', input),
+    signPhotoUpload: (input: { trip_id: UUID }) =>
+      invoke<SignPhotoUploadResult>(client, 'photos-sign-upload', input),
+    zoneIncident: (input: { trip_id: UUID; kind: 'no_go' | 'no_parking'; pos: LngLat }) =>
+      invoke<{ alerted: boolean; kind: string; attempts: number; flagged: boolean }>(client, 'zone-incident', input),
     pauseTrip: (trip_id: UUID) =>
       invoke<{ trip_id: UUID; status: string }>(client, 'trips-pause', { trip_id, action: 'pause' }),
     resumeTrip: (trip_id: UUID) =>

@@ -512,6 +512,9 @@ export interface RiderApi {
   endTrip(input: EndTripInput): Promise<TripView>;
   shareRide(trip_id: string): Promise<ShareLink>;
   triggerCrashAlert(trip_id: string): Promise<void>;
+  /** Report a zone incident (no-go entry, or a blocked no-parking end attempt) so
+   *  operators are alerted. Best-effort — callers ignore failures. */
+  reportZoneIncident(trip_id: string, kind: 'no_go' | 'no_parking', pos: [number, number]): Promise<void>;
 
   /* wallet */
   getWallet(): Promise<Wallet>;

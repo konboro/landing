@@ -216,10 +216,21 @@ export class SupabaseDataSource implements DataSource {
     return { ride, events, route, telemetry: [], payments };
   }
   async listVerification(): Promise<VerificationItem[]> {
-    const res = await this.invoke<{ rows: VerificationItem[] }>('admin-list', {
+    // The queue view now carries the full RideRow shape (migration 00580), and
+    // admin-list has already turned end_photo_url into a short-TTL signed url
+    // (00570). Wrap each row into the nested VerificationItem the panel expects.
+    // ai_confidence/ai_verdict are not yet computed per-row server-side, so they
+    // default to "needs a human"; the real photo is what M1 surfaces here.
+    const res = await this.invoke<{ rows: RideRow[] }>('admin-list', {
       view: 'v_ride_verification_queue', limit: 200, offset: 0,
     });
-    return res.rows ?? [];
+    return (res.rows ?? []).map((trip) => ({
+      trip,
+      photo_url: trip.end_photo_url ?? '',
+      ai_confidence: 0,
+      ai_verdict: 'needs_review' as const,
+      queued_at: trip.ended_at ?? trip.created_at,
+    }));
   }
   async listVehicles(params: QueryParams): Promise<Page<VehicleRow>> {
     return this.listFrom<VehicleRow>('v_admin_vehicles', params);

@@ -44,4 +44,11 @@ export interface OpsApi {
 
   /** Server-authoritative changes since `since` (server wins on status). */
   syncPull(since: string): Promise<PullDelta>;
+
+  /**
+   * Short-TTL signed url for a trip's end-of-ride parking photo, or null when the
+   * ride has none. Online-only (the photo bytes are not mirrored offline); callers
+   * fetch it lazily when a screen shows a specific ride.
+   */
+  getRidePhotoUrl(tripId: string): Promise<string | null>;
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { formatMoney, formatDuration, formatDistance, formatTime } from '@penny/ui';
@@ -6,6 +6,7 @@ import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
 import type { ShareLink } from '../../services/types';
+import { OPERATING_CITY } from '@penny/geo';
 import { useZoneWatch } from '../../lib/useZoneWatch';
 import { useT } from '../../i18n';
 import { useTrip } from '../../store/trip';
@@ -26,6 +27,8 @@ export default function ActiveRideScreen() {
   const [shareOpen, setShareOpen] = useState(false);
   const [crash, setCrash] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [noGoOpen, setNoGoOpen] = useState(false);
+  const prevNoGo = useRef(false);
 
   // Where the ride STARTED is only the fallback. The banners below have to
   // follow the rider, so the watch polls the device for a real fix.
@@ -36,6 +39,23 @@ export default function ActiveRideScreen() {
       if (!trip) router.replace('/(tabs)/map');
     }
   }, [trip, router]);
+
+  const pos: [number, number] = trip
+    ? (trip.route[trip.route.length - 1] ?? trip.start_pos ?? OPERATING_CITY.center)
+    : OPERATING_CITY.center;
+
+  // No-go zone (P3): the moment the rider crosses in, buzz hard, raise the critical
+  // overlay, and alert operators. Per docs/04 auto ignition-cut stays disabled here.
+  useEffect(() => {
+    if (!trip) return;
+    if (ev.inNoGo && !prevNoGo.current) {
+      Haptics.error();
+      setNoGoOpen(true);
+      api.reportZoneIncident(trip.id, 'no_go', pos);
+    }
+    prevNoGo.current = ev.inNoGo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev.inNoGo, trip]);
 
   if (!trip) return <Screen><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
 
@@ -117,6 +137,15 @@ export default function ActiveRideScreen() {
       {isEnabled('crashCheckIn') ? (
         <CrashCheckin tripId={trip.id} visible={crash} onResolved={() => setCrash(false)} />
       ) : null}
+
+      {noGoOpen ? (
+        <View style={styles.nogoOverlay}>
+          <Icon name="nogo" size={72} color={theme.color.onPrimary} />
+          <T variant="title" color={theme.color.onPrimary} center style={{ marginTop: theme.space.lg }}>{t('ride.noGoTitle')}</T>
+          <T variant="body" color={theme.color.onPrimary} center style={{ marginTop: theme.space.sm, opacity: 0.95 }}>{t('ride.noGoBody')}</T>
+          <Button title={t('ride.noGoDismiss')} variant="secondary" onPress={() => setNoGoOpen(false)} style={{ marginTop: theme.space.xl, alignSelf: 'stretch' }} />
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -143,5 +172,14 @@ const useStyles = makeStyles((t) => ({
     borderTopRightRadius: t.radius.xl,
     padding: t.space.lg,
     marginTop: t.space.md,
+  },
+  nogoOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: t.color.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: t.space.xl,
+    zIndex: 100,
   },
 }));
