@@ -23,6 +23,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"],
       "@penny/db-types": ["../../packages/db-types/src/index.ts"],
       "@penny/api-client": ["../../packages/api-client/src/index.ts"],
       "@penny/geo": ["../../packages/geo/src/index.ts"],

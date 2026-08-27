@@ -29,8 +29,13 @@ const handler = withErrors(async (req: Request) => {
   // ---------- Stripe branch ----------
   const secret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
   if (secret) {
-    const ok = await verifyStripeSignature(raw, stripeSig, secret);
-    if (!ok) throw new EdgeError('bad_signature', 'invalid Stripe signature', 400);
+    const check = await verifyStripeSignature(raw, stripeSig, secret);
+    if (!check.ok) {
+      // The reason goes to the log, not to Stripe: a caller that failed to
+      // authenticate does not get told how close it came.
+      console.error(`payments-webhook: signature rejected (${check.reason})${check.detail ? ` — ${check.detail}` : ''}`);
+      throw new EdgeError('bad_signature', 'invalid Stripe signature', 400);
+    }
   } else {
     console.warn('STRIPE_WEBHOOK_SECRET not set — skipping signature verification (dev only)');
   }

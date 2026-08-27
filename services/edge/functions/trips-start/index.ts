@@ -65,8 +65,17 @@ const handler = withErrors(async (req: Request) => {
   if (snap.status !== 'available') throw new EdgeError('vehicle_unavailable', `vehicle is ${snap.status}`, 409);
   if (!snap.session_online) throw new EdgeError('vehicle_offline', 'vehicle is offline', 409);
 
+  // How old the last frame may be. This has to match the device's reporting
+  // period, not a guess: an FMB930 parked and asleep reports every ~5 min, so the
+  // old hardcoded 3 min rejected most unlock attempts on a perfectly healthy
+  // scooter with "vehicle telemetry stale". Configurable so it can be tightened
+  // from the panel once the fleet's period is set in Configurator, without a
+  // redeploy.
+  const maxAgeS = await configNum(admin, 'max_telemetry_age_s', 600);
   const lastSeenMs = snap.last_seen ? Date.now() - new Date(snap.last_seen).getTime() : Infinity;
-  if (lastSeenMs > 3 * 60 * 1000) throw new EdgeError('vehicle_offline', 'vehicle telemetry stale', 409);
+  if (lastSeenMs > maxAgeS * 1000) {
+    throw new EdgeError('vehicle_offline', 'vehicle telemetry stale', 409);
+  }
 
   const minStartSoc = await configNum(admin, 'min_start_soc', 15);
   if ((snap.soc_pct ?? 0) < minStartSoc) throw new EdgeError('low_battery', `SoC below ${minStartSoc}%`, 409);

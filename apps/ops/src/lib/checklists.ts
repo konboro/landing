@@ -87,3 +87,34 @@ export function checklistBlockers(items: ChecklistState[]): string[] {
 export function isBatterySwap(kind: Kind): boolean {
   return kind === K.battery_swap;
 }
+
+// --- Damage parts -----------------------------------------------------------
+// The component a damage report is filed against (`damage_reports.part`).
+// Kept as a plain string list, not an enum or a DB type: migration 00370 made
+// the column free text on purpose so an operator can extend the catalogue
+// without a migration. Order is the order the chips render in — most-picked
+// first, "Other" last as the escape hatch.
+export const DAMAGE_PARTS: readonly string[] = [
+  'Front bumper',
+  'Rear wheel',
+  'Front wheel',
+  'Motor',
+  'Lights',
+  'Control panel',
+  'Lose/worn parts',
+  'Vandalism',
+  'Frame',
+  'Pedals',
+  'Saddle',
+  'Gears/transmission',
+  'Chain',
+  'Suspension',
+  'Ignition',
+  'Electrical system',
+  'Controllers',
+  'Firmware',
+  'Charger',
+  'Mirror',
+  'Footrest',
+  'Other',
+];

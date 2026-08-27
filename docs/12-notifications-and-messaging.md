@@ -29,6 +29,36 @@ must be changed together — see docs/15 §E.
 
 Rules editable in panel: **Settings → Alerts & notifications** (parity + upgrade): pick event, condition values, channels, recipients, test-fire button. Every rule change → audit_log.
 
+### A.1 Manual broadcasts (panel → riders)
+
+The rule engine above reacts to events. **Notifications** in the panel is the other
+direction: a human composes one message and fires it now. Edge fn
+`admin-broadcast`, permission `notifications.send` (migration 00310).
+
+- **Surfaces**, any combination: `inbox` (waits in the message centre) ·
+  `popup` (interrupting modal on next app open, optional `expires_at`) ·
+  `push` (Expo, to every row in `push_tokens`). A pop-up is an
+  `inbox_messages` row with `kind='popup'`, not a parallel system — same RLS,
+  same realtime, same unread index as the message centre (00280 set that
+  precedent for `chat`). The inbox list filters pop-ups out so a send on both
+  surfaces is not shown twice.
+- **Audience**: `{kind:'all'}` (active riders) · `{kind:'group', group_id}`
+  (membership via `users.customer_group_id`; the rule-based segments
+  `customer_groups.rules` describes are **not** evaluated yet) ·
+  `{kind:'users', user_ids[]}`.
+- **Consent**: `category='marketing'` filters on `users.marketing_consent`, and
+  push additionally on `user_notification_prefs.push_marketing` (opt-in,
+  default false). `transactional` skips the marketing gate but still honours
+  `push_transactional`.
+- **Reason** is mandatory whenever more than one person is targeted, and the
+  whole send is audited (Hard Rule #8). Header row in `broadcasts`,
+  per-recipient rows in `notification_log` (`broadcast_id`); `notification_channel`
+  has no `popup` member, so a pop-up logs as `inbox` with `payload.surface='popup'`.
+- **Dry run**: `preview: true` resolves the audience and reports reach per
+  channel without sending — the panel's "Check reach" button. Push reach is the
+  number of *registered devices*, which is how "0 devices" becomes visible
+  before someone assumes a send landed.
+
 ## B. Fleet alert catalogue (staff: email + Telegram + panel; each rule pre-seeded, thresholds in condition jsonb)
 
 | Event | Default condition | Default channels |

@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
-import { evaluateZones, type ZoneLike } from '@penny/geo';
-import { formatMoney, formatDuration, formatDistance } from '@penny/ui';
+import { formatMoney, formatDuration, formatDistance, formatTime } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
-import type { MapZone, ShareLink } from '../../services/types';
+import type { ShareLink } from '../../services/types';
+import { OPERATING_CITY } from '@penny/geo';
+import { useZoneWatch } from '../../lib/useZoneWatch';
 import { useT } from '../../i18n';
 import { useTrip } from '../../store/trip';
 import {
@@ -22,13 +23,16 @@ export default function ActiveRideScreen() {
   const { isEnabled } = useBrand();
   const api = getApi();
   const { trip, pause, resume } = useTrip();
-  const [zones, setZones] = useState<MapZone[]>([]);
   const [share, setShare] = useState<ShareLink | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [crash, setCrash] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [noGoOpen, setNoGoOpen] = useState(false);
+  const prevNoGo = useRef(false);
 
-  useEffect(() => { api.getZones().then(setZones); /* eslint-disable-next-line */ }, []);
+  // Where the ride STARTED is only the fallback. The banners below have to
+  // follow the rider, so the watch polls the device for a real fix.
+  const { ev, status: zoneStatus } = useZoneWatch(trip?.start_pos ?? null);
 
   useEffect(() => {
     if (!trip || (trip.status !== 'active' && trip.status !== 'paused')) {
@@ -36,11 +40,26 @@ export default function ActiveRideScreen() {
     }
   }, [trip, router]);
 
+  const pos: [number, number] = trip
+    ? (trip.route[trip.route.length - 1] ?? trip.start_pos ?? OPERATING_CITY.center)
+    : OPERATING_CITY.center;
+
+  // No-go zone (P3): the moment the rider crosses in, buzz hard, raise the critical
+  // overlay, and alert operators. Per docs/04 auto ignition-cut stays disabled here.
+  useEffect(() => {
+    if (!trip) return;
+    if (ev.inNoGo && !prevNoGo.current) {
+      Haptics.error();
+      setNoGoOpen(true);
+      api.reportZoneIncident(trip.id, 'no_go', pos);
+    }
+    prevNoGo.current = ev.inNoGo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev.inNoGo, trip]);
+
   if (!trip) return <Screen><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
 
   const paused = trip.status === 'paused';
-  const pos: [number, number] = trip.route[trip.route.length - 1] ?? trip.start_pos ?? [23.7275, 37.9838];
-  const ev = evaluateZones(pos, zones as unknown as ZoneLike[]);
 
   const doShare = async () => {
     const link = await api.shareRide(trip.id);
@@ -83,11 +102,17 @@ export default function ActiveRideScreen() {
       </View>
 
       <View style={styles.sheet}>
-        {/* zone banners */}
-        {ev.inNoGo ? <Banner tone="danger" icon="nogo" title={t('ride.noGo')} style={{ marginBottom: theme.space.sm }} /> : null}
-        {!ev.inOperating ? <Banner tone="warning" icon="warning" title={t('ride.outside')} style={{ marginBottom: theme.space.sm }} /> : null}
-        {ev.speedLimitKmh ? <Banner tone="warning" icon="speed" title={t('ride.speedZone', { kmh: ev.speedLimitKmh })} style={{ marginBottom: theme.space.sm }} /> : null}
-        {ev.bonusCents > 0 ? <Banner tone="success" icon="bonus" title={t('endRide.bonus')} body={formatMoney(ev.bonusCents, trip.currency)} style={{ marginBottom: theme.space.sm }} /> : null}
+        {/* Zone banners. Every one of these is gated on `zoneStatus === 'ready'`:
+            with no zones and no fix, `evaluateZones` reports `inOperating:false`,
+            which used to render "Outside the service area" over a rider standing
+            in the middle of it. Not knowing is its own state, and it says so. */}
+        {zoneStatus === 'unavailable' ? (
+          <Banner tone="neutral" icon="info" title={t('ride.zoneUnknown')} body={t('ride.zoneUnknownBody')} style={{ marginBottom: theme.space.sm }} />
+        ) : null}
+        {zoneStatus === 'ready' && ev.inNoGo ? <Banner tone="danger" icon="nogo" title={t('ride.noGo')} style={{ marginBottom: theme.space.sm }} /> : null}
+        {zoneStatus === 'ready' && !ev.inOperating ? <Banner tone="warning" icon="warning" title={t('ride.outside')} body={t('ride.outsideBody')} style={{ marginBottom: theme.space.sm }} /> : null}
+        {zoneStatus === 'ready' && ev.speedLimitKmh ? <Banner tone="warning" icon="speed" title={t('ride.speedZone', { kmh: ev.speedLimitKmh })} style={{ marginBottom: theme.space.sm }} /> : null}
+        {zoneStatus === 'ready' && ev.bonusCents > 0 ? <Banner tone="success" icon="bonus" title={t('endRide.bonus')} body={formatMoney(ev.bonusCents, trip.currency)} style={{ marginBottom: theme.space.sm }} /> : null}
         {trip.soc_pct < 20 ? <Banner tone="warning" icon="battery" title={t('ride.lowBattery')} style={{ marginBottom: theme.space.sm }} /> : null}
 
         <Row gap={theme.space.md} style={{ marginBottom: theme.space.md }}>
@@ -105,12 +130,21 @@ export default function ActiveRideScreen() {
       </View>
 
       <Sheet visible={shareOpen} onClose={() => setShareOpen(false)} title={t('ride.share')}>
-        <Banner tone="primary" icon="share" title={share?.url ?? ''} body={`Expires ${share ? new Date(share.expires_at).toLocaleTimeString() : ''}`} />
+        <Banner tone="primary" icon="share" title={share?.url ?? ''} body={`Expires ${share ? formatTime(share.expires_at) : ''}`} />
         <Button title={t('common.done')} onPress={() => setShareOpen(false)} style={{ marginTop: theme.space.md }} />
       </Sheet>
 
       {isEnabled('crashCheckIn') ? (
         <CrashCheckin tripId={trip.id} visible={crash} onResolved={() => setCrash(false)} />
+      ) : null}
+
+      {noGoOpen ? (
+        <View style={styles.nogoOverlay}>
+          <Icon name="nogo" size={72} color={theme.color.onPrimary} />
+          <T variant="title" color={theme.color.onPrimary} center style={{ marginTop: theme.space.lg }}>{t('ride.noGoTitle')}</T>
+          <T variant="body" color={theme.color.onPrimary} center style={{ marginTop: theme.space.sm, opacity: 0.95 }}>{t('ride.noGoBody')}</T>
+          <Button title={t('ride.noGoDismiss')} variant="secondary" onPress={() => setNoGoOpen(false)} style={{ marginTop: theme.space.xl, alignSelf: 'stretch' }} />
+        </View>
       ) : null}
     </Screen>
   );
@@ -138,5 +172,14 @@ const useStyles = makeStyles((t) => ({
     borderTopRightRadius: t.radius.xl,
     padding: t.space.lg,
     marginTop: t.space.md,
+  },
+  nogoOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: t.color.danger,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: t.space.xl,
+    zIndex: 100,
   },
 }));

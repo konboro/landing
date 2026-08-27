@@ -16,6 +16,7 @@ export default function CardScreen() {
   const advance = useSession((s) => s.advance);
   const [added, setAdded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const next = async () => {
     await advance('tutorial');
@@ -24,7 +25,19 @@ export default function CardScreen() {
 
   const addCard = async () => {
     setBusy('card');
-    try { await api.addCard(); setAdded(true); } finally { setBusy(null); }
+    setError(null);
+    try {
+      await api.addCard();
+      setAdded(true);
+    } catch (e) {
+      // Only a real save marks the step done. Dismissing PaymentSheet rejects too,
+      // and treating that as success would show "Card added" with no card on the
+      // account — and the rider would find out at the first unlock.
+      const err = e as { code?: string; message?: string };
+      if (err?.code !== 'canceled') setError(err?.message ?? t('common.error'));
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
@@ -42,6 +55,8 @@ export default function CardScreen() {
             <Badge tone="primary" label="Fastest" />
           </Row>
         </Card>
+
+        {error ? <Banner tone="danger" icon="warning" title={error} /> : null}
 
         {added ? (
           <Banner tone="success" icon="check" title="Card added" />

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { haversine } from '@penny/geo';
+import { haversine, OPERATING_CITY } from '@penny/geo';
 import { formatDistance } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics, LocationSvc } from '../../lib/native';
@@ -12,8 +12,9 @@ import { useT } from '../../i18n';
 import { useTrip } from '../../store/trip';
 import { useFlags } from '../../store/flags';
 import { FleetMap } from '../../components/map/FleetMap';
+import { ZoneLegend } from '../../components/map/ZoneLegend';
 import {
-  T, Row, Card, Button, Badge, Sheet, Banner, Icon, type IconName,
+  T, Row, Button, Badge, Sheet, Banner, Icon, type IconName,
 } from '../../components/ui';
 
 export default function MapScreen() {
@@ -32,6 +33,7 @@ export default function MapScreen() {
   const [city, setCity] = useState<City | null>(null);
   const [vehicles, setVehicles] = useState<MapVehicle[]>([]);
   const [zones, setZones] = useState<MapZone[]>([]);
+  const [zonesFailed, setZonesFailed] = useState(false);
   const [pois, setPois] = useState<MapPoi[]>([]);
   const [userPos, setUserPos] = useState<LngLat | null>(null);
   const [selected, setSelected] = useState<MapVehicle | null>(null);
@@ -47,18 +49,22 @@ export default function MapScreen() {
   useEffect(() => {
     let unsub = () => {};
     (async () => {
-      const [c, vs, zs, ps, inbox] = await Promise.all([
+      // Settled, not `all`. One rejected read (zones now throws rather than
+      // silently returning an empty list) used to take the whole screen with it:
+      // `setLoading(false)` never ran and the map sat under a spinner forever.
+      const [c, vs, zs, ps, inbox] = await Promise.allSettled([
         api.getCity(),
         api.getVehicles(),
         api.getZones(),
         api.getPois(),
         api.getInbox(),
       ]);
-      setCity(c);
-      setVehicles(vs);
-      setZones(zs);
-      setPois(ps);
-      setInboxUnread(inbox.filter((m) => !m.read).length);
+      if (c.status === 'fulfilled') setCity(c.value);
+      if (vs.status === 'fulfilled') setVehicles(vs.value);
+      if (zs.status === 'fulfilled') setZones(zs.value);
+      else setZonesFailed(true);
+      if (ps.status === 'fulfilled') setPois(ps.value);
+      if (inbox.status === 'fulfilled') setInboxUnread(inbox.value.filter((m) => !m.read).length);
       setLoading(false);
       unsub = api.onVehiclesChange(setVehicles);
       if (!flags.askedLocation) setLocPrompt(true);
@@ -67,7 +73,7 @@ export default function MapScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const center: LngLat = userPos ?? city?.center ?? [23.7275, 37.9838];
+  const center: LngLat = userPos ?? city?.center ?? OPERATING_CITY.center;
 
   const requestLocation = async () => {
     flags.setAsked('askedLocation');
@@ -156,20 +162,32 @@ export default function MapScreen() {
         focus={focus}
       />
 
-      {/* top bar */}
+      {/* Top bar — messages only. The city + "N available" pill was removed:
+          the city is obvious from the map itself and the count changed on every
+          pan, so it read as noise over the fleet rather than as information. */}
       <View style={[styles.topBar, { top: insets.top + 8 }]} pointerEvents="box-none">
-        <Card style={styles.cityPill} padded={false} elevated>
-          <Row style={{ paddingHorizontal: 12, paddingVertical: 8 }} gap={8}>
-            <Icon name="location" size={16} color={theme.color.primary} />
-            <T variant="body" style={{ fontWeight: '700' }}>{city?.name ?? 'Athens'}</T>
-            <Badge label={`${vehicles.length} ${t('map.available')}`} tone="success" />
-          </Row>
-        </Card>
         <Pressable style={styles.iconPill} onPress={() => router.push('/inbox')}>
           <Icon name="inbox" size={20} />
           {inboxUnread > 0 ? <View style={styles.dot}><T variant="caption" color={theme.color.onPrimary} style={styles.dotTxt}>{inboxUnread}</T></View> : null}
         </Pressable>
       </View>
+
+      {/* Zone legend, under the top bar and only while the zone layer is on.
+          Without it the fills were unlabelled colour and "no parking" looked
+          much like "no riding". */}
+      {showLayers && zones.length > 0 ? (
+        <View style={[styles.legendWrap, { top: insets.top + 60 }]} pointerEvents="box-none">
+          <ZoneLegend zones={zones} />
+        </View>
+      ) : null}
+
+      {/* A failed zone read is not "this city has no rules" — say so, because
+          every zone banner downstream goes quiet when the list is empty. */}
+      {zonesFailed ? (
+        <View style={[styles.legendWrap, { top: insets.top + 60 }]}>
+          <Banner tone="neutral" icon="info" title={t('ride.zoneUnknown')} body={t('ride.zoneUnknownBody')} />
+        </View>
+      ) : null}
 
       {loading ? (
         <View style={styles.loading} pointerEvents="none"><ActivityIndicator color={theme.color.primary} /></View>
@@ -285,8 +303,8 @@ function Stat({ icon, label, value }: { icon: IconName; label: string; value: st
 
 const useStyles = makeStyles((t) => ({
   fill: { flex: 1, backgroundColor: t.color.bg },
-  topBar: { position: 'absolute', left: t.space.lg, right: t.space.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cityPill: { borderRadius: t.radius.pill },
+  // Only the messages button lives up here now, so it sits flush right.
+  topBar: { position: 'absolute', left: t.space.lg, right: t.space.lg, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center' },
   iconPill: {
     width: 44, height: 44, borderRadius: 22, backgroundColor: t.color.surface,
     alignItems: 'center', justifyContent: 'center', ...t.shadow.card,
@@ -296,6 +314,7 @@ const useStyles = makeStyles((t) => ({
     backgroundColor: t.color.danger, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   dotTxt: { fontWeight: '700', fontSize: 10 },
+  legendWrap: { position: 'absolute', left: t.space.lg, right: t.space.lg },
   loading: { position: 'absolute', top: 120, alignSelf: 'center' },
   sideControls: { position: 'absolute', right: t.space.lg, gap: t.space.md },
   round: { width: 46, height: 46, borderRadius: 23, backgroundColor: t.color.surface, alignItems: 'center', justifyContent: 'center', ...t.shadow.card },

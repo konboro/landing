@@ -429,7 +429,7 @@ export function CustomerDetailPage() {
                       {data.ledger.map((l) => (
                         <tr key={l.id}>
                           <td className="mono">{l.txn_id}</td>
-                          <td>{titleCase(l.account_kind)}</td>
+                          <td>{l.account_kind ? titleCase(l.account_kind) : '—'}</td>
                           <td style={{ textAlign: 'right', color: l.delta_cents < 0 ? colors.danger : colors.success, fontWeight: 600 }}>{formatMoney(l.delta_cents)}</td>
                           <td className="muted">{l.memo}</td>
                           <td>{relativeTime(l.created_at)}</td>

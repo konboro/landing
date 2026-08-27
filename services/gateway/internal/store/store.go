@@ -45,10 +45,21 @@ type Telemetry struct {
 
 // VehicleState is the hot per-vehicle row (UPSERT target).
 type VehicleState struct {
-	VehicleID        string
-	Lat              float64
-	Lng              float64
-	SoCPct           int
+	VehicleID string
+	Lat       float64
+	Lng       float64
+	// HasFix is false when the record carries no GPS fix. Such a record reports
+	// 0,0 — the Atlantic off West Africa — and writing that overwrote the last
+	// known position, so the vehicle left its operating zone and vanished from the
+	// rider map. About one frame in forty arrives this way (10 of 390 measured),
+	// and any scooter parked under cover produces them.
+	HasFix bool
+	// Nil when the device reports no state of charge. The FMB930 is a generic
+	// tracker fed from a 5 V rail — it never sees the traction pack — so this is
+	// nil for the current fleet. It must not be a plain int: the zero value would
+	// be written as a real 0 %, which overwrites whatever the operator set and
+	// makes every vehicle fail the min-SoC check in trips-start.
+	SoCPct           *int
 	SpeedKmh         int
 	Ignition         bool
 	Locked           bool
@@ -94,12 +105,23 @@ type Store interface {
 	DeviceByIMEI(ctx context.Context, imei string) (Device, error)
 	InsertTelemetry(ctx context.Context, batch []Telemetry) error
 	UpsertVehicleState(ctx context.Context, st VehicleState) error
+	// MarkVehicleOffline clears session_online when a device's TCP session ends.
+	// Without it nothing ever unsets the flag — it is only ever written true — so
+	// a vehicle whose modem is gone stays "online" forever: it keeps showing on
+	// the rider map (v_public_vehicles requires session_online) and can never
+	// appear as disconnected in the panel.
+	MarkVehicleOffline(ctx context.Context, vehicleID string) error
 	InsertAlert(ctx context.Context, a Alert) error
 	// NextCommand pops the next queued command (pgmq read). ok=false if none.
 	NextCommand(ctx context.Context) (cmd Command, ok bool, err error)
 	// MarkCommand records terminal/intermediate status transitions. It must be
 	// idempotent-safe: setting a status no lower than the current one.
 	MarkCommand(ctx context.Context, id, status, channel, errText string) error
+	// ConfirmTripUnlock starts the trip an acknowledged unlock belongs to. Without
+	// it nothing moved a trip out of `unlocking`: the scooter opened, the rider
+	// held an unlocked vehicle, and the app still reported failure. Safe to call
+	// more than once — the RPC only acts on a trip still in `unlocking`.
+	ConfirmTripUnlock(ctx context.Context, tripID string) error
 }
 
 // ---- FakeStore: in-memory implementation for tests and DB-less runs ----
@@ -114,6 +136,7 @@ type FakeStore struct {
 	States       map[string]VehicleState
 	Alerts       []Alert
 	CmdStatus    map[string]string // command id -> latest status
+	StartedTrips []string          // trip ids confirmed by an acknowledged unlock
 }
 
 // NewFake returns an empty FakeStore.
@@ -199,6 +222,23 @@ func (f *FakeStore) UpsertVehicleState(_ context.Context, st VehicleState) error
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.States[st.VehicleID] = st
+	return nil
+}
+
+func (f *FakeStore) ConfirmTripUnlock(_ context.Context, tripID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.StartedTrips = append(f.StartedTrips, tripID)
+	return nil
+}
+
+func (f *FakeStore) MarkVehicleOffline(_ context.Context, vehicleID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if st, ok := f.States[vehicleID]; ok {
+		st.SessionOnline = false
+		f.States[vehicleID] = st
+	}
 	return nil
 }
 

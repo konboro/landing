@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { OPERATING_CITY } from '@penny/geo';
 import { useBrand, useTheme, makeStyles } from '../brand';
 import { Haptics, Notifications } from '../lib/native';
 import { getApi } from '../services';
@@ -44,7 +45,7 @@ export default function UnlockScreen() {
           {
             vehicle_code: params.code,
             client_command_id: params.cmd ?? uuid(),
-            pos: [23.7275, 37.9838],
+            pos: OPERATING_CITY.center,
             addon_insurance: params.insurance === '1',
             promo_code: params.promo || undefined,
           },

@@ -12,6 +12,7 @@ import { handlePreflight } from '../../_shared/cors.ts';
 import { json, withErrors, EdgeError } from '../../_shared/responses.ts';
 import { adminClient, requireUser, requireStaff } from '../../_shared/admin.ts';
 import { readJson, str, num } from '../../_shared/validate.ts';
+import { signRidePhoto } from '../../_shared/photos.ts';
 
 interface ViewSpec {
   /** Permission the caller must hold. */
@@ -55,10 +56,192 @@ const VIEWS: Record<string, ViewSpec> = {
     search: ['iccid', 'imsi', 'msisdn', 'provider_sim_id', 'device_imei', 'vehicle_code', 'label', 'plan_name'],
     defaultSort: { field: 'data_pct_used', asc: false },
   },
+  // Both are built on the same service_role-only SIM tables as v_sim_inventory
+  // (migration 00210 revokes them from anon/authenticated), so they have to come
+  // through here rather than straight from the panel's anon client.
+  v_sim_alerts: {
+    permission: 'sims.read',
+    search: ['iccid', 'msisdn', 'label', 'vehicle_code', 'device_imei'],
+    defaultSort: { field: 'severity_rank', asc: true },
+  },
+  v_sim_cost_summary: {
+    permission: 'sims.read',
+    search: [],
+    defaultSort: { field: 'month', asc: false },
+  },
+  // Broadcast history. Gated on the send permission rather than a read one:
+  // the rows spell out who was targeted with what, which is not something a
+  // support agent needs in order to answer one rider.
+  v_admin_broadcasts: {
+    permission: 'notifications.send',
+    search: ['title', 'body', 'audience_label', 'created_by_name'],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  v_admin_customer_groups: {
+    permission: 'customers.read',
+    search: ['name'],
+    defaultSort: { field: 'name', asc: true },
+  },
+  // Digital lines per telemetry frame. Polled by the vehicle IO monitor, so
+  // keep the default sort newest-first — the panel asks for limit 1 to get
+  // "now" and a larger limit for the recent trace.
+  v_vehicle_io: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'at', asc: false },
+  },
+  /* Config catalogues the panel edits through admin-write. Read here so the
+     same permission gates both directions. */
+  pricing_plans: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  packages: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  subscriptions: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  addons: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  penalties: {
+    permission: 'pricing.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  promo_codes: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  loyalty_tiers: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  // Neither table has created_at: FAQ entries carry an explicit display order,
+  // and app_content rows are updated in place rather than appended.
+  faq_items: {
+    permission: 'settings.edit',
+    search: ['question', 'answer'],
+    defaultSort: { field: 'sort', asc: true },
+  },
+  app_content: {
+    permission: 'settings.edit',
+    search: ['key'],
+    defaultSort: { field: 'updated_at', asc: false },
+  },
+  // The raw table, not v_admin_customer_groups — the panel edits these rows,
+  // and the view aggregates member counts onto them.
+  customer_groups: {
+    permission: 'settings.edit',
+    search: ['name'],
+    defaultSort: { field: 'name', asc: true },
+  },
+  pois: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  corporate_accounts: {
+    permission: 'team.manage',
+    search: ['name', 'billing_email'],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  staff: {
+    permission: 'team.manage',
+    search: ['role'],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  notification_rules: {
+    permission: 'settings.edit',
+    search: ['event_kind'],
+    defaultSort: { field: 'event_kind', asc: true },
+  },
+  translations: {
+    permission: 'settings.edit',
+    search: ['key', 'value'],
+    defaultSort: { field: 'key', asc: true },
+  },
+  customer_forms: {
+    permission: 'settings.edit',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
   audit_log: {
     permission: 'audit.read',
     search: ['action', 'entity', 'entity_id', 'reason'],
     defaultSort: { field: 'at', asc: false },
+  },
+
+  /* ---- Detail pages ----
+     Ride / vehicle / customer detail read these filtered by a single parent id.
+     They are service_role-only tables, so the panel cannot query them directly;
+     each still demands the same permission as the list it hangs off. */
+  trip_events: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'at', asc: true },
+  },
+  // One row per trip holding the whole path as a LineString — not one row per
+  // GPS point, which is why this sorts on updated_at and not a timestamp.
+  trip_routes: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'updated_at', asc: false },
+  },
+  payments: {
+    permission: 'rides.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  commands: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  vehicle_alerts: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  damage_reports: {
+    permission: 'vehicles.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  devices: {
+    permission: 'vehicles.read',
+    search: ['imei', 'iccid', 'phone_number'],
+    defaultSort: { field: 'imei', asc: true },
+  },
+  ledger_accounts: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  ledger_entries: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  debts: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
+  },
+  referrals: {
+    permission: 'customers.read',
+    search: [],
+    defaultSort: { field: 'created_at', asc: false },
   },
 };
 
@@ -113,8 +296,22 @@ const handler = withErrors(async (req: Request): Promise<Response> => {
   const { data, error, count } = await q.range(offset, offset + limit - 1);
   if (error) throw new EdgeError('db_error', error.message, 500);
 
+  let rows = data ?? [];
+
+  // The verification queue stores end_photo_url as a private-bucket object path
+  // (migration 00570). Turn each into a short-TTL signed url so the panel can render
+  // the real photo instead of a placeholder — the bucket is never public.
+  if (view === 'v_ride_verification_queue') {
+    rows = await Promise.all(
+      rows.map(async (r: Record<string, unknown>) => ({
+        ...r,
+        end_photo_url: await signRidePhoto(admin, r.end_photo_url as string | null, 600),
+      })),
+    );
+  }
+
   return json({
-    rows: data ?? [],
+    rows,
     total: count ?? (data ?? []).length,
     limit,
     offset,

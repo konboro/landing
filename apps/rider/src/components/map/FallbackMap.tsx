@@ -7,27 +7,29 @@
 import React, { useState } from 'react';
 import { View, Pressable, StyleSheet, type LayoutChangeEvent } from 'react-native';
 import Svg, { Polygon as SvgPolygon, Circle, Line, Polyline } from 'react-native-svg';
+import { haversine, polygonBBox } from '@penny/geo';
 import { useTheme, makeStyles } from '../../brand';
-import type { RiderTheme } from '../../brand';
 import { Badge } from '../ui';
 import { Icon } from '../ui/Icon';
 import { boundsOf, makeProjector } from './projection';
+import { sortForDrawing, zoneStyle } from './zoneStyle';
 import type { FleetMapProps, LngLat } from './types';
 
-function zoneStyle(theme: RiderTheme, kind: string): { fill: string; stroke: string } {
-  const c = theme.color;
-  switch (kind) {
-    case 'operating': return { fill: 'transparent', stroke: c.primary };
-    case 'parking':
-    case 'parking_station': return { fill: c.zoneParking, stroke: c.success };
-    case 'no_parking': return { fill: c.zoneNoParking, stroke: c.danger };
-    case 'no_go': return { fill: c.zoneNoGo, stroke: c.text };
-    case 'bonus': return { fill: c.zoneBonus, stroke: c.success };
-    case 'paid_parking': return { fill: c.zonePaidParking, stroke: c.warning };
-    case 'speed_limit': return { fill: c.zoneSpeedLimit, stroke: c.warning };
-    default: return { fill: c.zoneParking, stroke: c.success };
-  }
-}
+/**
+ * How far from the map centre a zone may sit and still be allowed to stretch
+ * the auto-fit bounds.
+ *
+ * This map frames itself around everything it draws, which meant ONE mis-filed
+ * polygon set the scale for the whole screen: the live database currently holds
+ * a 202 km² test zone centred on Wrocław, Poland, filed against the
+ * Thessaloniki city id, and it collapsed the entire Greek fleet into a couple of
+ * pixels. 150 km is far wider than any real operating area and far narrower than
+ * another country.
+ *
+ * FRAMING ONLY. A far-away zone is still drawn and still evaluated — this
+ * decides what the camera fits, never what the rider is subject to.
+ */
+const FRAME_RADIUS_M = 150_000;
 
 export function FallbackMap(props: FleetMapProps) {
   const { vehicles, zones, pois, userPos, selectedCode, showZones = true, showPois = true } = props;
@@ -43,16 +45,25 @@ export function FallbackMap(props: FleetMapProps) {
   const route = props.route ?? [];
   // Bounds from everything visible so the whole city (or the whole route) fits.
   // A route on its own gets tighter padding so the trip fills the card.
+  // Zones only get a vote if they are plausibly in the same city — see
+  // FRAME_RADIUS_M for why that guard exists.
+  const framingZones = zones.filter((z) => {
+    const bb = polygonBBox(z.geom);
+    const centre: LngLat = [(bb.minLng + bb.maxLng) / 2, (bb.minLat + bb.maxLat) / 2];
+    return haversine(props.center, centre) <= FRAME_RADIUS_M;
+  });
   const pts: LngLat[] =
     route.length > 1
       ? route
       : [
           props.center,
           ...vehicles.map((v) => [v.lng, v.lat] as LngLat),
-          ...zones.flatMap((z) => z.geom.coordinates.flat() as LngLat[]),
+          ...framingZones.flatMap((z) => z.geom.coordinates.flat() as LngLat[]),
         ];
   const b = boundsOf(pts, route.length > 1 ? 0.15 : 0.08);
   const project = makeProjector(b, size.w, size.h);
+  // Restrictions last so a no-go area inside the operating zone stays on top.
+  const drawnZones = sortForDrawing(theme, zones);
 
   const ready = size.w > 0 && size.h > 0;
   const night = props.night ?? theme.mode === 'dark';
@@ -93,21 +104,21 @@ export function FallbackMap(props: FleetMapProps) {
       {/* zones */}
       {ready && showZones ? (
         <Svg width={size.w} height={size.h} style={StyleSheet.absoluteFill} pointerEvents="none">
-          {zones.map((z) => {
+          {drawnZones.flatMap((z) => {
             const style = zoneStyle(theme, z.kind);
-            const ring = z.geom.coordinates[0] ?? [];
-            const pointsStr = ring.map((c) => { const p = project(c as LngLat); return `${p.x},${p.y}`; }).join(' ');
-            return (
+            // Every ring, not just `coordinates[0]`: a zone with a hole in it
+            // (a square around a pedestrian precinct, say) was drawn solid.
+            return z.geom.coordinates.map((ring, ri) => (
               <SvgPolygon
-                key={z.id}
-                points={pointsStr}
-                fill={style.fill}
+                key={`${z.id}-${ri}`}
+                points={ring.map((c) => { const p = project(c as LngLat); return `${p.x},${p.y}`; }).join(' ')}
+                fill={ri === 0 ? style.fill : theme.color.bg}
                 stroke={style.stroke}
-                strokeWidth={z.kind === 'operating' ? 2 : 1.5}
-                strokeDasharray={z.kind === 'operating' ? '8 6' : undefined}
+                strokeWidth={style.strokeWidth}
+                strokeDasharray={style.dashed ? '8 6' : undefined}
                 opacity={0.9}
               />
-            );
+            ));
           })}
         </Svg>
       ) : null}

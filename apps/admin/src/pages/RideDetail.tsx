@@ -1,3 +1,4 @@
+import { OPERATING_TZ } from '@penny/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -43,7 +44,7 @@ export function RideDetailPage() {
     onSuccess: () => { toast.push('Refund issued', 'success'); qc.invalidateQueries({ queryKey: ['ride', id] }); setRefundOpen(false); },
   });
 
-  const telemetryData = useMemo(() => (data?.telemetry ?? []).map((s, i) => ({ i, t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), speed: s.speed_kmh, soc: s.soc_pct })), [data]);
+  const telemetryData = useMemo(() => (data?.telemetry ?? []).map((s, i) => ({ i, t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: OPERATING_TZ }), speed: s.speed_kmh, soc: s.soc_pct })), [data]);
 
   if (isLoading) return <div><PageHeader title="Ride" back={{ to: '/rides', label: 'Rides' }} /><Card pad>Loading…</Card></div>;
   if (!data) return <div><PageHeader title="Ride not found" back={{ to: '/rides', label: 'Rides' }} /><Card><EmptyState emoji="🔍" title="No such ride" /></Card></div>;

@@ -5,6 +5,7 @@ import { handlePreflight } from '../../_shared/cors.ts';
 import { json, withErrors, EdgeError } from '../../_shared/responses.ts';
 import { adminClient } from '../../_shared/admin.ts';
 import { readJson, str } from '../../_shared/validate.ts';
+import { signRidePhoto } from '../../_shared/photos.ts';
 
 const MODEL = 'claude-sonnet-4-6'; // per docs/04 (Claude vision parking classifier)
 
@@ -25,6 +26,13 @@ const handler = withErrors(async (req: Request) => {
   if (!apiKey) {
     // Graceful degradation: leave in the human queue.
     return json({ trip_id: tripId, photo_review: 'pending', reason: 'ai_unavailable' });
+  }
+
+  // The bucket is private (migration 00570): end_photo_url is an object path, so mint
+  // a short-TTL signed url for Anthropic to fetch. A legacy full URL passes through.
+  const imageUrl = await signRidePhoto(admin, trip.end_photo_url, 300);
+  if (!imageUrl) {
+    return json({ trip_id: tripId, photo_review: 'pending', reason: 'photo_unreadable' });
   }
 
   const threshold = await configNum(admin, 'photo_ai_threshold', 0.85);
@@ -52,7 +60,7 @@ const handler = withErrors(async (req: Request) => {
         messages: [{
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'url', url: trip.end_photo_url } },
+            { type: 'image', source: { type: 'url', url: imageUrl } },
             { type: 'text', text: prompt },
           ],
         }],

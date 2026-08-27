@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { formatMoney } from '@penny/ui';
 import { useBrand, useTheme } from '../../brand';
-import { Haptics } from '../../lib/native';
+import { Haptics, StripeSvc } from '../../lib/native';
 import { getApi } from '../../services';
 import type { Wallet, Card as CardType, PackageProduct, SubscriptionProduct, AddonProduct, DebtView } from '../../services/types';
 import { useT } from '../../i18n';
@@ -29,27 +29,60 @@ export default function WalletScreen() {
   const [debts, setDebts] = useState<DebtView[]>([]);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const [w, c, p, s, a, d] = await Promise.all([
-      api.getWallet(), api.getCards(), api.getPackages(), api.getSubscriptions(), api.getAddons(), api.getDebts(),
-    ]);
-    setWallet(w); setCards(c); setPackages(p); setSubs(s); setAddons(a); setDebts(d);
-  }, [api]);
+    try {
+      const [w, c, p, s, a, d] = await Promise.all([
+        api.getWallet(), api.getCards(), api.getPackages(), api.getSubscriptions(), api.getAddons(), api.getDebts(),
+      ]);
+      setWallet(w); setCards(c); setPackages(p); setSubs(s); setAddons(a); setDebts(d);
+    } catch (e) {
+      // A failed load left `wallet` null, which renders as a balance of 0 — the
+      // same silent zero this screen already told a rider once while their money
+      // sat in the ledger. Say what went wrong instead.
+      setError((e as { message?: string })?.message ?? t('common.error'));
+    }
+  }, [api, t]);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
+
+  // Initialise the native Stripe SDK while the rider is still reading the screen.
+  // It used to happen on the first tap, inside the path between choosing an amount
+  // and the sheet appearing, which is exactly where the delay was felt.
+  useEffect(() => { void StripeSvc.init(); }, []);
 
   const money = (c: number) => formatMoney(c, wallet?.currency ?? brand.currency);
   const debtTotal = debts.reduce((a, d) => a + d.amount_cents, 0);
 
   const run = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
-    try { await fn(); await reload(); Haptics.success(); } finally { setBusy(null); }
+    setError(null);
+    try {
+      await fn();
+      await reload();
+      Haptics.success();
+    } catch (e) {
+      // Dismissing PaymentSheet is a normal outcome, not a failure — say nothing.
+      // Anything else has to be visible: these actions move money, and a silent
+      // no-op looks identical to success.
+      const err = e as { code?: string; message?: string };
+      if (err?.code !== 'canceled') {
+        setError(err?.message ?? t('common.error'));
+        Haptics.error();
+      }
+    } finally {
+      setBusy(null);
+    }
   };
 
   return (
     <Screen edges={['top']} scroll>
       <T variant="title" style={{ marginBottom: theme.space.md }}>{t('wallet.title')}</T>
+
+      {error ? (
+        <Banner tone="danger" icon="warning" title={error} style={{ marginBottom: theme.space.md }} />
+      ) : null}
 
       {debtTotal > 0 ? (
         <Banner
@@ -164,7 +197,16 @@ export default function WalletScreen() {
         <Sheet visible={topUpOpen} onClose={() => setTopUpOpen(false)} title={t('wallet.topUp')}>
           <Row wrap gap={theme.space.sm}>
             {[500, 1000, 2000, 5000].map((amt) => (
-              <Button key={amt} title={money(amt)} variant="secondary" full={false} onPress={() => run('topup', async () => { await api.topUp(amt); setTopUpOpen(false); })} />
+              <Button
+                key={amt}
+                title={money(amt)}
+                variant="secondary"
+                full={false}
+                // Close the amount sheet on the tap, not after the payment. It used
+                // to stay up for the whole round-trip, so the rider watched a dead
+                // sheet until Stripe's appeared and read the whole thing as a hang.
+                onPress={() => { setTopUpOpen(false); void run('topup', () => api.topUp(amt)); }}
+              />
             ))}
           </Row>
         </Sheet>

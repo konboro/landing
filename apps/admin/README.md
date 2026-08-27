@@ -2,7 +2,39 @@
 
 Vite + React 18 + TypeScript (strict) + React Router + Mapbox GL JS + Recharts.
 Full Atom-parity admin panel (+ upgrades) for the Penny e-scooter platform, Athens.
-Targets **Cloudflare Pages** (SPA).
+
+## Deployment — Vercel
+
+Live: **https://penny-admin-live.vercel.app** — Vercel project
+`penny-admin-live`, scope `konrads-projects-7e53c7e8`.
+
+**There is exactly one project for this panel, and the deploy script pins it.**
+Do not run a bare `vercel deploy`: without `--project` the CLI names the new
+project after the directory, which is how this account ended up with
+`penny-admin`, `penny-admin-live` and `dist` all serving the same app while
+each session verified its own copy and believed the other one was wrong. The
+duplicates are deleted; `admin` in the same scope is a DIFFERENT product
+(Tycoon) — leave it alone.
+
+```bash
+pnpm --filter @penny/admin deploy      # build + push to production
+```
+
+The build is done **locally and uploaded**, not built on Vercel. That is on
+purpose: Vite inlines `VITE_*` at build time, so a remote build would need the
+whole pnpm workspace (the app consumes `@penny/*` as TS source via aliases) plus
+a second copy of every secret in the Vercel project. Building here means the
+artefact is exactly what was tested locally.
+
+Consequence: **`.env.local` is the deployment config.** Change a `VITE_*` value
+→ redeploy, or production keeps the old one. If you later connect the Git repo
+for CI builds, every `VITE_*` has to be added to the Vercel project's
+environment variables first.
+
+`public/vercel.json` (copied into `dist/` by Vite, alongside the Cloudflare
+`_redirects`) carries the SPA rewrite, immutable caching for `/assets/*` and the
+security headers. The Cloudflare Pages target still works — both config files
+ship, each host ignores the other's.
 
 ## Run
 

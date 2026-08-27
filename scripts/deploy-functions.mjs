@@ -12,7 +12,7 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,21 +33,28 @@ if (!TOKEN) { console.error('SUPABASE_ACCESS_TOKEN is required'); process.exit(1
 if (!REF) { console.error('--project-ref is required'); process.exit(1); }
 
 /** Provider webhooks and public feeds must be reachable without a Supabase JWT. */
-const NO_JWT = new Set(['payments-webhook', 'sumsub-webhook', 'gbfs']);
+// mydata-shadow is a Stripe webhook endpoint: Stripe cannot present a Supabase
+// JWT, so it must be reachable without one. It verifies the Stripe signature
+// itself and ignores any delivery it cannot authenticate.
+const NO_JWT = new Set(['payments-webhook', 'sumsub-webhook', 'gbfs', 'mydata-shadow']);
 
 function walk(dir) {
   const out = [];
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
     if (statSync(p).isDirectory()) out.push(...walk(p));
-    else if (p.endsWith('.ts')) out.push(p);
+    // Unit tests live next to the code they cover (invoicing/*.test.ts) and
+    // import node:test — they have no business in a Deno bundle.
+    else if (p.endsWith('.ts') && !p.endsWith('.test.ts')) out.push(p);
   }
   return out;
 }
 
 // Every function shares _shared/*, so upload it alongside each one. Paths are
 // kept relative to services/edge/ so `../../_shared/x.ts` still resolves.
-const sharedFiles = walk(join(EDGE, '_shared'));
+// invoicing/* is the same deal — mydata-submit imports it as ../../invoicing/x.ts,
+// and a function that deploys without it fails at first request, not at deploy.
+const sharedFiles = [...walk(join(EDGE, '_shared')), ...walk(join(EDGE, 'invoicing'))];
 
 async function deploy(slug) {
   const dir = join(FUNCS, slug);
@@ -68,7 +75,10 @@ async function deploy(slug) {
     ),
   );
   for (const f of files) {
-    const rel = relative(EDGE, f);
+    // POSIX separators always: on Windows relative() yields `functions\slug\index.ts`,
+    // which the API stores verbatim and then cannot match against the forward-slash
+    // entrypoint_path above ("Entrypoint path does not exist").
+    const rel = relative(EDGE, f).split(sep).join('/');
     form.append('file', new Blob([readFileSync(f)], { type: 'text/typescript' }), rel);
   }
 

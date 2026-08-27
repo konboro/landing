@@ -1,0 +1,55 @@
+# Penny IoT gateway — systemd unit.
+#
+# The gateway is stateless: sessions live in memory, commands are durable in
+# pgmq, telemetry goes straight to Postgres. So a restart costs nothing beyond
+# the devices reconnecting, which they do constantly anyway on 2G — that is why
+# Restart=always is safe here rather than reckless.
+#
+# Install:
+#   cp penny-gateway.service /etc/systemd/system/
+#   cp penny-gateway.env     /etc/penny/gateway.env     # 0600, root-owned
+#   systemctl daemon-reload && systemctl enable --now penny-gateway
+
+[Unit]
+Description=Penny IoT gateway (Teltonika FMB930)
+Documentation=https://github.com/konboro/landing/blob/main/docs/03-iot-gateway.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=penny
+Group=penny
+
+# DB_URL and friends live here, not in the unit: the unit is committed to the
+# repo, the env file holds the database password.
+EnvironmentFile=/etc/penny/gateway.env
+ExecStart=/usr/local/bin/penny-gateway
+
+Restart=always
+RestartSec=3
+# A crash loop must not spin forever without being visible.
+StartLimitIntervalSec=60
+StartLimitBurst=10
+
+# Devices talk on 5027, which is above 1024, so the service never needs root.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Nothing is written to disk; logs go to the journal.
+ReadOnlyPaths=/
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=penny-gateway
+
+[Install]
+WantedBy=multi-user.target

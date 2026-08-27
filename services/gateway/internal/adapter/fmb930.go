@@ -20,14 +20,28 @@ const (
 	ioBattVoltage uint16 = 67  // internal battery voltage, mV
 	ioGSMSignal   uint16 = 21  // GSM signal strength (1..5)
 
-	// Need bench confirmation:
-	ioDout1     uint16 = 179 // TODO(verify wiki): FMB930 Digital Output 1 AVL id (lock relay)
-	ioDout2     uint16 = 180 // TODO(verify wiki): FMB930 Digital Output 2 AVL id (siren)
-	ioAxisX     uint16 = 17  // TODO(verify wiki): accelerometer axis X (fall detection)
-	ioAxisY     uint16 = 18  // TODO(verify wiki): accelerometer axis Y
-	ioAxisZ     uint16 = 19  // TODO(verify wiki): accelerometer axis Z
-	ioSleepMode uint16 = 200 // TODO(verify wiki): sleep mode state
-	ioOdometer  uint16 = 16  // TODO(verify wiki): total odometer (virtual), meters
+	// Confirmed against live frames from a real FMB930 on fw 03.29.00 Rev:932
+	// (IMEI 354002392604318, 2026-08-10). The device sent ids
+	// 1, 16, 21, 24, 66, 67, 68, 69, 113, 180, 181, 182, 200, 239, 240, 241.
+	ioSleepMode uint16 = 200 // CONFIRMED — present, 0 = awake (required for Codec 12)
+	ioOdometer  uint16 = 16  // CONFIRMED — total odometer, metres
+	ioDout2     uint16 = 180 // CONFIRMED — present in the stream
+
+	// DOUT1 (179) is NOT in the default IO set of this firmware profile: the
+	// device reports 180 but never 179. Consequence for the unlock flow: the
+	// "next AVL record shows the expected DOUT state" ACK path (docs/03) cannot
+	// fire, so an unlock is only ever confirmed by the Codec 12 reply. Enable
+	// element 179 in Configurator -> I/O to get the second, stronger ACK source.
+	ioDout1 uint16 = 179
+
+	// The accelerometer axes are NOT reported either — no 17/18/19 in the
+	// stream. Fall detection is therefore inert until those elements are
+	// enabled in Configurator -> I/O; the rule is implemented and simply never
+	// sees data. Ids kept as the wiki values so enabling them needs no code
+	// change, but do re-check them against a frame once enabled.
+	ioAxisX uint16 = 17
+	ioAxisY uint16 = 18
+	ioAxisZ uint16 = 19
 )
 
 // DoutProfile makes DOUT semantics data, not code. Only this struct decides
@@ -58,8 +72,14 @@ func DefaultFMB930Profile() DoutProfile {
 		SirenDoutIO:  ioDout2,
 		RingPulseMs:  300, // 3x 300ms pulse pattern, see docs/03
 		AlarmSeconds: 30,
-		// TODO(verify wiki): confirm relay polarity on bench. Assumed: energising
-		// DOUT1 releases the lock (unlock), de-energised = locked.
+		// CONFIRMED against the fleet's own wiring (2026-08-09):
+		//   DOUT1 = 1 -> scooter powered ON   ("unlock")
+		//   DOUT1 = 0 -> scooter powered OFF  ("lock")
+		//   DOUT2     -> siren
+		// The lock is therefore NOT held by an energised relay, so `false` here
+		// is correct and makes unlock send '1'. Do not flip this without
+		// re-checking the harness: inverted, "unlock" cuts power to a scooter
+		// that may be moving.
 		LockedWhenDoutHigh: false,
 	}
 }
@@ -154,6 +174,12 @@ func (d *FMB930) BuildCommand(kind CommandKind, args Args) ([]byte, string, erro
 			return nil, "", fmt.Errorf("setparam requires id and value")
 		}
 		ascii = fmt.Sprintf("setparam %s:%s", id, val)
+	case CmdCustom:
+		text, ok := args["text"]
+		if !ok || text == "" {
+			return nil, "", fmt.Errorf("custom requires text")
+		}
+		ascii = text
 	default:
 		return nil, "", fmt.Errorf("unknown command kind %q", kind)
 	}

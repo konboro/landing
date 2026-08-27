@@ -4,6 +4,7 @@ import { OpsTaskKind, OpsTaskStatus, VehicleStatus, DamageSeverity, DamageStatus
 import type { OpsTask, DamageReport } from '@penny/db-types';
 import type {
   Bootstrap,
+  OpsDamageReport,
   OpsVehicle,
   RebalanceZone,
   StatusLogEntry,
@@ -11,9 +12,10 @@ import type {
   MaintenanceEntry,
   HeatCell,
   VehicleError,
+  VehicleNote,
   VehicleRide,
 } from '../lib/types';
-import { buildChecklist } from '../lib/checklists';
+import { buildChecklist, DAMAGE_PARTS } from '../lib/checklists';
 
 // --- tiny seeded PRNG (mulberry32) -----------------------------------------
 function mulberry32(seed: number) {
@@ -191,7 +193,7 @@ function makeZones(vehicles: OpsVehicle[]): RebalanceZone[] {
   });
 }
 
-function makeDamage(vehicles: OpsVehicle[]): DamageReport[] {
+function makeDamage(vehicles: OpsVehicle[]): OpsDamageReport[] {
   const descs = [
     'Bent handlebar after fall',
     'Front brake lever cracked',
@@ -202,7 +204,7 @@ function makeDamage(vehicles: OpsVehicle[]): DamageReport[] {
     'Throttle sticky',
     'Missing bell',
   ];
-  const out: DamageReport[] = [];
+  const out: OpsDamageReport[] = [];
   for (let i = 0; i < 12; i++) {
     const v = pick(vehicles);
     const st = pick([DamageStatus.new, DamageStatus.new, DamageStatus.confirmed, DamageStatus.fixed]);
@@ -218,8 +220,37 @@ function makeDamage(vehicles: OpsVehicle[]): DamageReport[] {
       status: st,
       linked_task_id: null,
       penalty_payment_id: null,
+      // Older reports predate the part catalogue — leave some null so the UI
+      // is exercised with both shapes.
+      part: rnd() > 0.25 ? pick([...DAMAGE_PARTS]) : null,
       created_at: iso(-Math.round(between(60, 4000))),
     });
+  }
+  return out;
+}
+
+function makeNotes(vehicles: OpsVehicle[]): VehicleNote[] {
+  const bodies = [
+    'Left in the courtyard behind the kiosk, gate code 4412.',
+    'Rattle from the deck when riding over cobbles — worth a look next visit.',
+    'Charger port cover missing, taped for now.',
+    'Rider reported it cutting out above 20 km/h. Could not reproduce.',
+    'Parked badly twice this week in this spot — consider a no-park zone.',
+  ];
+  const out: VehicleNote[] = [];
+  for (const v of vehicles.slice(0, 24)) {
+    const n = Math.round(between(1, 3));
+    for (let i = 0; i < n; i++) {
+      out.push({
+        id: id('note'),
+        vehicle_id: v.id,
+        staff_id: 'staff000-0000-4000-8000-000000000001',
+        staff_name: pick(['Nikos (Ops)', 'Eleni (Ops)', 'Dimitris (Ops)']),
+        body: pick(bodies),
+        photos: [],
+        created_at: iso(-Math.round(between(60, 20000))),
+      });
+    }
   }
   return out;
 }
@@ -333,5 +364,8 @@ export function generateBootstrap(): Bootstrap {
     maintenance,
     rides,
     heat: makeHeat(vehicles),
+    vehicleNotes: makeNotes(vehicles),
+    // No shift is open on a fresh boot: the crew clocks in from the app.
+    shifts: [],
   };
 }

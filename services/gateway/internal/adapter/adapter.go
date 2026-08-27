@@ -19,6 +19,12 @@ const (
 	CmdAlarmOn  CommandKind = "alarm_on"  // continuous siren
 	CmdAlarmOff CommandKind = "alarm_off" // stop siren
 	CmdSetParam CommandKind = "setparam"
+	// CmdCustom sends the ASCII in args["text"] verbatim over Codec 12. It exists
+	// for commands the device supports but the product does not model — above all
+	// `getparam <id>`, which is the only way to read the modem's own configuration
+	// remotely instead of asking somebody to open Configurator next to the
+	// scooter. It actuates nothing by itself: whatever is in `text` is what runs.
+	CmdCustom CommandKind = "custom"
 )
 
 // Args carries command parameters (e.g. setparam id/value, ring duration).

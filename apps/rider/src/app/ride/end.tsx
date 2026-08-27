@@ -1,12 +1,13 @@
 import React, { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
-import { evaluateZones, canEndHere, type ZoneLike } from '@penny/geo';
-import { formatMoney, formatDuration, formatDistance, co2SavedKg } from '@penny/ui';
+import { evaluateZones, canEndHere, haversine, OPERATING_CITY, type ZoneLike } from '@penny/geo';
+import { formatMoney, formatDuration, formatDistance, co2SavedKg, formatDateTime } from '@penny/ui';
 import { useBrand, useTheme, makeStyles } from '../../brand';
 import { Haptics } from '../../lib/native';
 import { getApi } from '../../services';
-import type { MapZone, TripView } from '../../services/types';
+import type { TripView } from '../../services/types';
+import { useZoneWatch } from '../../lib/useZoneWatch';
 import { useT } from '../../i18n';
 import { useTrip } from '../../store/trip';
 import {
@@ -15,6 +16,25 @@ import {
 import { PhotoCamera } from '../../components/camera/PhotoCamera';
 
 const TAGS = ['smooth', 'fast', 'clean', 'comfy', 'dirty', 'damaged'];
+
+/** `canEndHere` reason → the i18n key that explains THAT reason. */
+const END_REASON_KEY: Record<string, string> = {
+  outside_operating_zone: 'ride.outside',
+  no_parking_zone: 'endRide.reasonNoParking',
+  must_park_in_station: 'endRide.reasonStation',
+};
+
+/** Credits worth mentioning on a good parking spot, in one line. */
+function endBonusLine(
+  ev: { bonusCents: number; inParkingStation: boolean; inParking: boolean },
+  money: (c: number) => string,
+  t: (k: string) => string,
+): string | undefined {
+  if (ev.bonusCents > 0) return `${t('endRide.bonus')}: ${money(ev.bonusCents)}`;
+  if (ev.inParkingStation) return t('endRide.inStation');
+  if (ev.inParking) return t('endRide.inParking');
+  return undefined;
+}
 
 export default function EndRideScreen() {
   const router = useRouter();
@@ -27,17 +47,50 @@ export default function EndRideScreen() {
 
   const [phase, setPhase] = useState<'photo' | 'form' | 'receipt'>('photo');
   const [photo, setPhoto] = useState<string | null>(null);
-  const [zones, setZones] = useState<MapZone[]>([]);
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
   const [ended, setEnded] = useState<TripView | null>(null);
   const [busy, setBusy] = useState(false);
 
-  React.useEffect(() => { api.getZones().then(setZones); /* eslint-disable-next-line */ }, []);
+  // The trip's own coordinates are the LAST resort. `TripView.route` is empty in
+  // live mode, so this used to resolve to `start_pos` — the parking verdict, and
+  // the position posted to `trips-end`, described where the ride began.
+  const { zones, pos, ev, status: zoneStatus, stationMode } = useZoneWatch(
+    trip?.start_pos ?? null,
+  );
+  const endPos: [number, number] = pos ?? OPERATING_CITY.center;
+  const zoneCheck = canEndHere(ev, stationMode);
 
-  const endPos: [number, number] = trip?.route[trip.route.length - 1] ?? trip?.start_pos ?? [23.7275, 37.9838];
-  const ev = useMemo(() => evaluateZones(endPos, zones as unknown as ZoneLike[]), [endPos, zones]);
-  const zoneCheck = canEndHere(ev);
+  // No-parking (P2): the rider reached the end screen inside a no-parking zone.
+  // Alert operators once (the edge fn counts attempts and flags repeats > 3).
+  const reportedNoParking = React.useRef(false);
+  React.useEffect(() => {
+    if (phase === 'form' && !zoneCheck.ok && ev.inNoParking && trip && !reportedNoParking.current) {
+      reportedNoParking.current = true;
+      api.reportZoneIncident(trip.id, 'no_parking', endPos);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, zoneCheck.ok, ev.inNoParking]);
+
+  // Direct the rider to the nearest allowed parking (centroid of the closest
+  // parking / parking_station zone) via the device maps app.
+  const openNearestParking = () => {
+    let best: [number, number] | null = null;
+    let bestD = Infinity;
+    for (const z of zones as unknown as ZoneLike[]) {
+      if (z.kind !== 'parking' && z.kind !== 'parking_station') continue;
+      const ring = (z.geom.coordinates?.[0] ?? []) as [number, number][];
+      if (!ring.length) continue;
+      const c: [number, number] = [
+        ring.reduce((s, p) => s + p[0], 0) / ring.length,
+        ring.reduce((s, p) => s + p[1], 0) / ring.length,
+      ];
+      const d = haversine(endPos, c);
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    if (!best) return;
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${best[1]},${best[0]}`).catch(() => undefined);
+  };
 
   if (!trip) {
     return <Screen><Header title={t('endRide.title')} /><View style={styles.center}><T variant="body">{t('common.loading')}</T></View></Screen>;
@@ -51,6 +104,7 @@ export default function EndRideScreen() {
 
   const confirmEnd = async () => {
     if (!photo) return;
+    if (!zoneCheck.ok) { Haptics.warning(); return; } // blocked: can't end here (P2)
     setBusy(true);
     try {
       const result = await api.endTrip({ trip_id: trip.id, pos: endPos, end_photo_url: photo, rating: rating || undefined, tags });
@@ -88,17 +142,54 @@ export default function EndRideScreen() {
             </Row>
           </Card>
 
-          {zoneCheck.ok ? (
-            <Banner tone="success" icon="check" title={t('endRide.zoneOk')} body={ev.bonusCents > 0 ? `${t('endRide.bonus')}: ${money(ev.bonusCents)}` : undefined} />
+          {/* Three states, not two. `canEndHere` reports `outside_operating_zone`
+              whenever the zone list is empty — which is also what a failed fetch
+              and a not-yet-resolved fetch look like — so a rider parked perfectly
+              was shown a red "You can't end here". The check is UX anyway: the
+              `trips-end` edge function is what actually validates (Hard Rule #3),
+              so an unknown answer must not read as a refusal. */}
+          {zoneStatus !== 'ready' ? (
+            <Banner
+              tone="neutral"
+              icon="info"
+              title={zoneStatus === 'checking' ? t('endRide.checking') : t('endRide.zoneUnknown')}
+              body={t('endRide.zoneUnknownBody')}
+            />
+          ) : zoneCheck.ok ? (
+            <Banner
+              tone="success"
+              icon="check"
+              title={t('endRide.zoneOk')}
+              body={endBonusLine(ev, money, t)}
+            />
           ) : (
             <Banner
               tone="danger"
               icon="warning"
               title={t('endRide.zoneBad')}
-              body={t(`ride.${zoneCheck.reason === 'no_parking_zone' ? 'noGo' : 'outside'}`)}
-              action={isEnabled('parkingSchool') ? <Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} /> : undefined}
+              // Was `ride.${reason === 'no_parking_zone' ? 'noGo' : 'outside'}`:
+              // a no-parking area was described as a no-RIDING zone, and
+              // `must_park_in_station` (station-mode cities) fell through to
+              // "outside the service area". Each reason now says its own thing.
+              body={t(END_REASON_KEY[zoneCheck.reason ?? ''] ?? 'ride.outside')}
+              // No-parking is the one case the rider can act on immediately, so it
+              // gets the route to the nearest bay; everything else keeps the school.
+              action={zoneCheck.reason === 'no_parking_zone'
+                ? <Button title={t('endRide.navigateParking')} size="sm" full={false} variant="ghost" onPress={openNearestParking} />
+                : (isEnabled('parkingSchool') ? <Button title={t('endRide.parkingSchool')} size="sm" full={false} variant="ghost" onPress={() => router.push('/parking-school')} /> : undefined)}
             />
           )}
+
+          {/* docs/04: `paid_parking` adds a fee at the end of the ride. The
+              rider was never told before they committed to it. */}
+          {zoneStatus === 'ready' && ev.paidParkingFeeCents > 0 ? (
+            <Banner
+              tone="warning"
+              icon="station"
+              title={t('endRide.paidParking')}
+              body={t('endRide.paidParkingBody', { amount: money(ev.paidParkingFeeCents) })}
+            />
+          ) : null}
 
           <Card>
             <T variant="label" style={{ marginBottom: 8 }}>{t('endRide.rate_us')}</T>
@@ -120,7 +211,7 @@ export default function EndRideScreen() {
           <Button title={t('endRide.reportDamage')} icon="flag" variant="ghost" onPress={() => router.push({ pathname: '/report/[code]', params: { code: trip.vehicle_code } })} />
         </ScrollView>
         <View style={styles.footer}>
-          <Button title={t('endRide.finish')} icon="check" size="lg" onPress={confirmEnd} loading={busy} />
+          <Button title={zoneCheck.ok ? t('endRide.finish') : t('endRide.zoneBad')} icon="check" size="lg" onPress={confirmEnd} loading={busy} disabled={!zoneCheck.ok} />
         </View>
       </Screen>
     );
@@ -137,7 +228,7 @@ export default function EndRideScreen() {
             <View style={styles.okCircle}><Icon name="check" size={36} color={theme.color.onPrimary} /></View>
           </Row>
           <T variant="title" center>{money(r.cost_cents)}</T>
-          <T variant="caption" center>{r.vehicle_code} · {new Date(r.ended_at ?? Date.now()).toLocaleString()}</T>
+          <T variant="caption" center>{r.vehicle_code} · {formatDateTime(new Date(r.ended_at ?? Date.now()).toISOString())}</T>
 
           <Divider />
           <View style={{ gap: 8 }}>

@@ -1,3 +1,4 @@
+import { OPERATING_TZ } from '@penny/ui';
 import { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { MapView, type MapMarker } from '@/components/map/MapView';
 import { LineTrend, chartPalette } from '@/components/charts/Charts';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { IoMonitor } from '@/components/vehicle/IoMonitor';
 import { Modal, ConfirmModal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/feedback';
 import { Qr } from '@/components/ui/Qr';
@@ -89,7 +91,7 @@ export function VehicleDetailPage() {
   });
 
   const telemetry = useMemo(() => (data?.telemetry ?? []).map((s) => ({
-    t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    t: new Date(s.device_ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: OPERATING_TZ }),
     speed: s.speed_kmh, soc: s.soc_pct, volts: +(s.batt_voltage_mv / 1000).toFixed(2), gsm: s.gsm_signal,
   })), [data]);
 
@@ -182,9 +184,12 @@ export function VehicleDetailPage() {
       ) : null}
 
       {tab === 'telemetry' ? (
+        <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+          <IoMonitor vehicleId={id!} />
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <Card><CardHeader title="Speed & battery" /><div className="card-pad"><LineTrend data={telemetry} xKey="t" series={[{ key: 'speed', name: 'Speed km/h', color: chartPalette[0]! }, { key: 'soc', name: 'Battery %', color: chartPalette[1]! }]} /></div></Card>
           <Card><CardHeader title="Voltage & GSM" /><div className="card-pad"><LineTrend data={telemetry} xKey="t" series={[{ key: 'volts', name: 'Batt V', color: chartPalette[4]! }, { key: 'gsm', name: 'GSM signal', color: chartPalette[2]! }]} /></div></Card>
+        </div>
         </div>
       ) : null}
 
@@ -214,10 +219,14 @@ export function VehicleDetailPage() {
       ) : null}
 
       {tab === 'iot' ? (
+        <div className="stack" style={{ gap: 'var(--space-lg)' }}>
+          {/* io-iot */}
+          <IoMonitor vehicleId={id!} />
         <Card>
           <CardHeader title="IoT data log" sub="Merged command + telemetry timeline" actions={<Link className="btn btn-sm" to="/fleet">Full IoT log</Link>} />
           <CommandTable commands={data.commands} />
         </Card>
+        </div>
       ) : null}
 
       {tab === 'rides' ? (

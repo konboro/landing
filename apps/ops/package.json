@@ -8,6 +8,7 @@
     "start": "expo start --dev-client",
     "start:go": "expo start",
     "android": "expo run:android",
+    "apk": "node ./scripts/build-apk.mjs",
     "ios": "expo run:ios",
     "prebuild": "expo prebuild",
     "typecheck": "tsc --noEmit",
@@ -32,10 +33,11 @@
     "expo-sqlite": "~16.0.8",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
-    "react-native": "0.81.4",
+    "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

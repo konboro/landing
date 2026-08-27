@@ -61,7 +61,7 @@ function Wizard({ v }: { v: OpsVehicle }) {
       <Row gap={space.sm}>
         {[0, 1, 2].map((s) => (
           <View key={s} style={[st.step, step >= s && st.stepOn]}>
-            <Text style={[st.stepText, step >= s && { color: '#fff' }]}>{s + 1}</Text>
+            <Text style={[st.stepText, step >= s && { color: c.onPrimary }]}>{s + 1}</Text>
           </View>
         ))}
       </Row>
@@ -88,7 +88,7 @@ function Wizard({ v }: { v: OpsVehicle }) {
                   <Muted>{t.hint}</Muted>
                 </View>
                 {tests[t.key] ? (
-                  <Badge label="pass ✓" color={c.success} textColor="#fff" />
+                  <Badge label="pass ✓" color={c.success} textColor={c.onSuccess} />
                 ) : running === t.key ? (
                   <ActivityIndicator color={c.primary} />
                 ) : (
@@ -109,9 +109,9 @@ function Wizard({ v }: { v: OpsVehicle }) {
           <H2>3 · Confirm re-link</H2>
           <Body>Link IMEI {newImei} to {v.code}.</Body>
           <Row gap={6}>
-            <Badge label="online ✓" color={c.success} textColor="#fff" />
-            <Badge label="gps ✓" color={c.success} textColor="#fff" />
-            <Badge label="unlock ✓" color={c.success} textColor="#fff" />
+            <Badge label="online ✓" color={c.success} textColor={c.onSuccess} />
+            <Badge label="gps ✓" color={c.success} textColor={c.onSuccess} />
+            <Badge label="unlock ✓" color={c.success} textColor={c.onSuccess} />
           </Row>
           <Muted>Queued offline-safe; the old device is unlinked and this is audit-logged on sync.</Muted>
           <Button title="Link device" variant="success" onPress={finish} loading={saving} />

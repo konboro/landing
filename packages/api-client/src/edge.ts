@@ -11,6 +11,15 @@ export interface EdgeError {
   status: number;
 }
 
+/** A saved card as `payments-cards` returns it. */
+export interface SavedCard {
+  id: UUID;
+  brand: string | null;
+  last4: string | null;
+  exp: string | null;
+  is_default: boolean;
+}
+
 export class PennyEdgeError extends Error {
   code: string;
   status: number;
@@ -79,12 +88,23 @@ export interface EndTripResult {
   receipt_url?: string;
 }
 
+/** Signed upload target for a trip's end-of-ride parking photo (photos-sign-upload). */
+export interface SignPhotoUploadResult {
+  path: string;       // storage object path — pass back to endTrip as end_photo_url
+  token: string;      // one-shot token for storage.uploadToSignedUrl
+  signed_url: string;
+}
+
 export function createEdgeApi(client: SupabaseClient) {
   return {
     startTrip: (input: StartTripInput) =>
       invoke<StartTripResult>(client, 'trips-start', input),
     endTrip: (input: EndTripInput) =>
       invoke<EndTripResult>(client, 'trips-end', input),
+    signPhotoUpload: (input: { trip_id: UUID }) =>
+      invoke<SignPhotoUploadResult>(client, 'photos-sign-upload', input),
+    zoneIncident: (input: { trip_id: UUID; kind: 'no_go' | 'no_parking'; pos: LngLat }) =>
+      invoke<{ alerted: boolean; kind: string; attempts: number; flagged: boolean }>(client, 'zone-incident', input),
     pauseTrip: (trip_id: UUID) =>
       invoke<{ trip_id: UUID; status: string }>(client, 'trips-pause', { trip_id, action: 'pause' }),
     resumeTrip: (trip_id: UUID) =>
@@ -101,6 +121,16 @@ export function createEdgeApi(client: SupabaseClient) {
       invoke<{ status: string }>(client, 'payments-pay-debt', { debt_id }),
     buyPackage: (package_id: UUID) =>
       invoke<{ client_secret: string }>(client, 'payments-buy-package', { package_id }),
+    topUp: (amount_cents: number) =>
+      invoke<{ client_secret: string; payment_id: UUID }>(
+        client, 'payments-topup', { amount_cents },
+      ),
+    // Saved cards. Every action answers with the resulting list, so the caller
+    // never has to refetch to find out what changed.
+    cards: (
+      input: { action: 'sync' } | { action: 'set_default' | 'remove'; card_id: UUID },
+    ) =>
+      invoke<{ cards: SavedCard[] }>(client, 'payments-cards', input),
     reportDamage: (input: { vehicle_code: string; description: string; photos: string[]; pos?: LngLat }) =>
       invoke<{ id: UUID }>(client, 'damage-report', input),
     // Admin
@@ -117,6 +147,29 @@ export function createEdgeApi(client: SupabaseClient) {
       invoke<{ command_id: UUID }>(client, 'vehicle-command', input),
     saveZoneVersion: (input: { city_id: UUID; zones: unknown[]; reason: string }) =>
       invoke<{ version: number }>(client, 'zones-save', input),
+    /** `imei` links an already-provisioned device (Hard Rule #7) — it is never
+     *  stored on the vehicle row itself. */
+    adminCreateVehicle: (input: {
+      code: string;
+      model_id: UUID;
+      city_id?: UUID | null;
+      plate?: string | null;
+      vin?: string | null;
+      notes?: string | null;
+      imei?: string | null;
+      status?: string;
+      reason?: string;
+    }) => invoke<{ vehicle: { id: UUID; code: string; status: string }; device_linked: string | null }>(
+      client, 'admin-vehicle-create', input,
+    ),
+    /** `decommission` keeps the row (and every trip that points at it);
+     *  `purge` really deletes, and is refused once the vehicle has history. */
+    adminDeleteVehicle: (input: { vehicle_id: UUID; reason: string; mode?: 'decommission' | 'purge' }) =>
+      invoke<{ vehicle_id: UUID; mode: string; devices_unlinked: string[] }>(client, 'admin-vehicle-delete', input),
+    /** Compose once → inbox / pop-up / push. `preview: true` resolves the
+     *  audience and reports reach without sending anything. */
+    adminBroadcast: (input: BroadcastInput) =>
+      invoke<BroadcastResult>(client, 'admin-broadcast', input),
 
     // Admin — profiles, KYC, history.
     // Response shapes are declared locally (see below) so this package stays
@@ -134,6 +187,44 @@ export function createEdgeApi(client: SupabaseClient) {
     sumsubApplicant: (input: { user_id: UUID; refresh?: boolean }) =>
       invoke<SumsubApplicantResult>(client, 'sumsub-applicant', input),
   };
+}
+
+/* ---------- Broadcast contracts (docs/12) ---------- */
+
+export type BroadcastChannel = 'inbox' | 'popup' | 'push';
+
+export type BroadcastAudience =
+  | { kind: 'all' }
+  | { kind: 'group'; group_id: UUID }
+  | { kind: 'users'; user_ids: UUID[] };
+
+export interface BroadcastInput {
+  title?: string;
+  body: string;
+  deep_link?: string | null;
+  channels: BroadcastChannel[];
+  /** 'marketing' is consent-filtered per recipient; 'transactional' is not. */
+  category?: 'transactional' | 'marketing';
+  audience: BroadcastAudience;
+  /** Pop-ups only: stop interrupting after this instant. */
+  expires_at?: string | null;
+  /** Mandatory once the send reaches more than one person. */
+  reason?: string;
+  preview?: boolean;
+}
+
+export interface BroadcastResult {
+  /** Present only on a real send. */
+  broadcast_id?: UUID;
+  preview?: boolean;
+  status?: string;
+  recipients: number;
+  reach?: Record<BroadcastChannel, number>;
+  delivered?: number;
+  push_sent?: number;
+  push_failed?: number;
+  push_devices?: number;
+  errors?: string[];
 }
 
 /* ---------- Admin profile / history contracts ---------- */

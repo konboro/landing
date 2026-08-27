@@ -1,3 +1,4 @@
+import { OPERATING_TZ } from '@penny/ui';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Chip } from './primitives';
@@ -35,11 +36,11 @@ const TONE_COLOR: Record<NonNullable<TimelineEvent['tone']>, string> = {
 };
 
 function dayKey(iso: string): string {
-  return new Date(iso).toLocaleDateString('el-GR', { weekday: 'short', year: 'numeric', month: 'short', day: '2-digit' });
+  return new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', year: 'numeric', month: 'short', day: '2-digit', timeZone: OPERATING_TZ });
 }
 
 function timeOf(iso: string): string {
-  return new Date(iso).toLocaleTimeString('el-GR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: OPERATING_TZ });
 }
 
 /**

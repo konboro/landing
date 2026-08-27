@@ -94,6 +94,15 @@ button { font-family: inherit; }
 .card-title-sub { color: var(--color-text-muted); font-size: var(--fs-sm); }
 
 .grid { display: grid; gap: var(--space-lg); }
+
+/* Grid presets live here as CLASSES, not as inline styles on the page.
+   An inline `gridTemplateColumns` beats a media query, so the dashboard's
+   hardcoded `1.4fr 1fr 1fr` stayed three columns on a 360 px phone and the
+   whole page was unusable. Anything that must respond to width belongs here. */
+.grid-kpi { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.grid-main { grid-template-columns: 1.4fr 1fr 1fr; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
 .row { display: flex; gap: var(--space-md); }
 .row-wrap { display: flex; gap: var(--space-md); flex-wrap: wrap; }
 .between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
@@ -385,8 +394,67 @@ table.data tr:last-child td { border-bottom: none; }
 }
 .warn-row:last-child { border-bottom: none; }
 
+/* Hamburger: hidden on desktop, the only way into the nav on mobile.
+   The drawer markup and the off-canvas CSS already existed, but the button was
+   inline-styled `display:none`, so on a phone there was no way to open it. */
+.menu-btn { display: none; }
+
+/* Tap-anywhere-to-close backdrop behind the open drawer. Without it the only
+   way out is picking a link. */
+.sidebar-scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(0, 0, 0, .45);
+  border: 0; padding: 0; cursor: pointer;
+}
+
 @media (max-width: 900px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; z-index: 50; width: 248px; transform: translateX(-100%); transition: transform .2s; }
+  .sidebar {
+    position: fixed; z-index: 50; width: 248px; height: 100vh; top: 0; left: 0;
+    overflow-y: auto;
+    transform: translateX(-100%); transition: transform .2s;
+  }
   .sidebar.open { transform: none; }
+  .menu-btn { display: inline-flex; }
+
+  /* EVERY grid collapses to one column, and `!important` is deliberate here:
+     eighteen pages set `gridTemplateColumns` as an inline style, and an inline
+     style cannot be beaten any other way. Doing it once catches all of them —
+     and stops a new page from reintroducing the bug. */
+  .grid { grid-template-columns: 1fr !important; }
+
+  /* …except the KPI row, which stays TILES. Two up is what makes the dashboard
+     scannable on a phone; one per row turns it into a long stack of bars. */
+  .grid-kpi { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: var(--space-md); }
+
+  .topbar { height: auto; min-height: 56px; padding: 0 var(--space-md); gap: var(--space-sm); }
+  .topbar h1 { font-size: var(--fs-md); }
+  /* The search box, brand switcher and role picker eat the whole bar on a
+     phone; cmd-k is a desktop affordance anyway. */
+  .cmdk-trigger,
+  .topbar .hide-sm { display: none; }
+
+  /* The content well is `.app-content`, not `.page` — the desktop padding of
+     var(--space-xl) on each side costs ~48 px of a 360 px screen. */
+  .app-content { padding: var(--space-md); }
+  .card-pad { padding: var(--space-md); }
+
+  /* KPI tiles: smaller number, tighter box, so two fit side by side without
+     the value wrapping. */
+  .stat-card { padding: var(--space-md); gap: 4px; }
+  .stat-value { font-size: var(--fs-xl); }
+  .stat-label { font-size: 12px; }
+
+  /* Tables scroll sideways instead of squashing columns into unreadable
+     slivers. */
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+  table.data { min-width: 640px; }
+}
+
+/* Tiles stay two-up all the way down to the narrowest phones in use.
+   An earlier 420 px breakpoint dropped to a single column on a normal
+   iPhone — the tiles became full-width bars and the section needed twice the
+   scrolling. Only below ~340 px is one column genuinely better. */
+@media (max-width: 340px) {
+  .grid-kpi { grid-template-columns: 1fr !important; }
 }

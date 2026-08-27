@@ -11,9 +11,11 @@ import {
   type StyleProp,
   type ScrollViewProps,
 } from 'react-native';
-import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context';
+import { useKeyboardOverlap } from '../../lib/useKeyboardOverlap';
 import { useTheme, makeStyles } from '../../brand';
 import type { RiderTheme } from '../../brand';
+import { Backdrop } from './Backdrop';
 
 type TVariant = 'display' | 'title' | 'heading' | 'subtitle' | 'body' | 'caption' | 'label' | 'mono';
 
@@ -86,19 +88,38 @@ export function Screen({
   const theme = useTheme();
   const styles = useStyles(theme);
   const paddedStyle = padded ? { paddingHorizontal: theme.space.lg } : null;
+
+  // Every screen gets keyboard avoidance from here rather than each one wiring
+  // its own. Screens put their primary action last (Continue / Save / Accept),
+  // so without this the keyboard sat straight on top of it.
+  const overlap = useKeyboardOverlap();
+  // With `edges` including 'bottom', SafeAreaView already pads past the home
+  // indicator; the keyboard covers that area too, so only the difference is
+  // still needed and adding the full overlap would leave a visible gap.
+  const insets = useSafeAreaInsets();
+  const keyboardPad = overlap > 0
+    ? Math.max(0, overlap - (edges.includes('bottom') ? insets.bottom : 0))
+    : 0;
+
   return (
-    <SafeAreaView edges={edges} style={[styles.screen, { backgroundColor: bg ?? theme.color.bg }]}>
+    <SafeAreaView edges={edges} style={[styles.screen, bg ? { backgroundColor: bg } : null]}>
+      {/* The sky backdrop is the default ground for every screen. A screen that
+          owns its own surface (camera, QR scanner, the full-bleed map) passes an
+          explicit `bg` and opts out. */}
+      {bg ? null : <Backdrop />}
       {scroll ? (
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: theme.space.xxxl }}
+          contentContainerStyle={{ paddingBottom: theme.space.xxxl + keyboardPad }}
           showsVerticalScrollIndicator={false}
           {...rest}
         >
           <View style={[paddedStyle, contentStyle]}>{children}</View>
         </ScrollView>
       ) : (
-        <View style={[styles.flex, paddedStyle, contentStyle]}>{children}</View>
+        <View style={[styles.flex, paddedStyle, contentStyle, { paddingBottom: keyboardPad }]}>
+          {children}
+        </View>
       )}
     </SafeAreaView>
   );
@@ -191,8 +212,8 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   card: {
     backgroundColor: t.color.surface,
-    borderRadius: t.radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: t.color.border,
+    // Rounder than the old `radius.lg`, and borderless: over the sky backdrop a
+    // hairline border read as a seam, so the shadow alone lifts the card.
+    borderRadius: t.radius.xl,
   },
 }));

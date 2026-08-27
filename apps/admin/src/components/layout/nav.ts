@@ -12,6 +12,8 @@ export const NAV: NavItem[] = [
   { to: '/rides', label: 'Rides', icon: '🛴', group: 'Operate' },
   { to: '/vehicles', label: 'Vehicles', icon: '🔋', group: 'Operate' },
   { to: '/customers', label: 'Customers', icon: '👤', group: 'Operate' },
+  { to: '/messages', label: 'Message centre', icon: '💬', group: 'Operate' },
+  { to: '/notifications', label: 'Notifications', icon: '🔔', group: 'Operate' },
 
   { to: '/analytics', label: 'Analytics', icon: '📈', group: 'Insight' },
 
@@ -23,6 +25,7 @@ export const NAV: NavItem[] = [
   { to: '/connectivity', label: 'Connectivity', icon: '📶', group: 'Fleet' },
 
   { to: '/finance', label: 'Finance', icon: '🧾', group: 'Money' },
+  { to: '/mydata', label: 'myDATA (AADE)', icon: '🏛️', group: 'Money' },
 
   { to: '/content', label: 'Subscriptions & Add-ons', icon: '🎫', group: 'Content' },
 

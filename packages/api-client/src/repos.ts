@@ -108,14 +108,33 @@ export function createRepos(sb: SupabaseClient) {
       return (data ?? []) as Debt[];
     },
 
+    /** The message-centre list: notifications and chat turns, newest first.
+     *  Pop-ups are excluded — they are the same content delivered as a modal,
+     *  so including them would show every broadcast twice. */
     async inbox(userId: UUID): Promise<InboxMessage[]> {
       const { data } = await sb
         .from('inbox_messages')
         .select('*')
         .eq('user_id', userId)
+        .neq('kind', 'popup')
         .order('created_at', { ascending: false })
         .limit(100);
       return (data ?? []) as InboxMessage[];
+    },
+
+    /** The oldest pop-up this rider has not dismissed and that has not expired,
+     *  or null. Oldest first so a queue is worked through in order. */
+    async livePopup(userId: UUID): Promise<InboxMessage | null> {
+      const { data } = await sb
+        .from('inbox_messages')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('kind', 'popup')
+        .is('read_at', null)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      return (data?.[0] as InboxMessage | undefined) ?? null;
     },
 
     async faq(lang: string): Promise<FaqItem[]> {

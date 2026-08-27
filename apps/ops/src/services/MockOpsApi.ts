@@ -8,19 +8,25 @@ import type {
   OutboxRow,
   SyncItemResult,
   StaffSession,
+  OpsDamageReport,
+  OpsShift,
   OpsVehicle,
   StatusChangePayload,
   TaskCompletePayload,
   TaskClaimPayload,
+  TaskReleasePayload,
   DamageCreatePayload,
   DamageUpdatePayload,
   BatterySwapPayload,
   DeployDropPayload,
+  ShiftEndPayload,
+  ShiftStartPayload,
   VisibilityTogglePayload,
   CommandPayload,
+  VehicleNote,
   VehicleNotePayload,
 } from '../lib/types';
-import type { OpsTask, DamageReport } from '@penny/db-types';
+import type { OpsTask } from '@penny/db-types';
 import { OpsTaskStatus, VehicleStatus, DamageStatus } from '@penny/db-types';
 import { generateBootstrap } from './mockData';
 
@@ -28,11 +34,15 @@ interface ServerState {
   bootstrap: Bootstrap;
   vehicles: Map<string, OpsVehicle>;
   tasks: Map<string, OpsTask>;
-  damage: Map<string, DamageReport>;
+  damage: Map<string, OpsDamageReport>;
+  notes: Map<string, VehicleNote>;
+  shifts: Map<string, OpsShift>;
   applied: Set<string>; // idempotency ledger
   changedVehicles: Map<string, string>; // id -> changed_at
   changedTasks: Map<string, string>;
   changedDamage: Map<string, string>;
+  changedNotes: Map<string, string>;
+  changedShifts: Map<string, string>;
 }
 
 let state: ServerState | null = null;
@@ -45,10 +55,14 @@ function ensureState(): ServerState {
     vehicles: new Map(bootstrap.vehicles.map((v) => [v.id, v])),
     tasks: new Map(bootstrap.tasks.map((t) => [t.id, t])),
     damage: new Map(bootstrap.damageReports.map((d) => [d.id, d])),
+    notes: new Map((bootstrap.vehicleNotes ?? []).map((n) => [n.id, n])),
+    shifts: new Map((bootstrap.shifts ?? []).map((s) => [s.id, s])),
     applied: new Set(),
     changedVehicles: new Map(),
     changedTasks: new Map(),
     changedDamage: new Map(),
+    changedNotes: new Map(),
+    changedShifts: new Map(),
   };
   return state;
 }
@@ -80,6 +94,8 @@ export class MockOpsApi implements OpsApi {
       vehicles: [...s.vehicles.values()],
       tasks: [...s.tasks.values()],
       damageReports: [...s.damage.values()],
+      vehicleNotes: [...s.notes.values()],
+      shifts: [...s.shifts.values()],
     };
   }
 
@@ -123,7 +139,15 @@ export class MockOpsApi implements OpsApi {
       .filter(([, t]) => Date.parse(t) > sinceT)
       .map(([id]) => s.damage.get(id)!)
       .filter(Boolean);
-    return { server_time: new Date().toISOString(), vehicles, tasks, damageReports };
+    const vehicleNotes = [...s.changedNotes.entries()]
+      .filter(([, t]) => Date.parse(t) > sinceT)
+      .map(([id]) => s.notes.get(id)!)
+      .filter(Boolean);
+    const shifts = [...s.changedShifts.entries()]
+      .filter(([, t]) => Date.parse(t) > sinceT)
+      .map(([id]) => s.shifts.get(id)!)
+      .filter(Boolean);
+    return { server_time: new Date().toISOString(), vehicles, tasks, damageReports, vehicleNotes, shifts };
   }
 
   // --- apply a single outbox row to server state ---------------------------
@@ -158,6 +182,18 @@ export class MockOpsApi implements OpsApi {
         if (t.assignee && t.assignee !== p.assignee) throw new Error('task already claimed');
         t.assignee = p.assignee;
         t.status = OpsTaskStatus.assigned;
+        s.changedTasks.set(t.id, now);
+        return undefined;
+      }
+      case 'task_release': {
+        const p = item.payload as unknown as TaskReleasePayload;
+        const t = s.tasks.get(p.task_id);
+        if (!t) throw new Error('task not found');
+        // Someone else has since claimed it — the queued release is stale, so
+        // drop it silently rather than stealing the task from its new owner.
+        if (t.assignee && p.assignee && t.assignee !== p.assignee) return undefined;
+        t.assignee = null;
+        t.status = OpsTaskStatus.open;
         s.changedTasks.set(t.id, now);
         return undefined;
       }
@@ -210,7 +246,7 @@ export class MockOpsApi implements OpsApi {
       }
       case 'damage_create': {
         const p = item.payload as unknown as DamageCreatePayload;
-        const report: DamageReport = {
+        const report: OpsDamageReport = {
           id: p.damage_id,
           vehicle_id: p.vehicle_id,
           reporter: 'ops',
@@ -218,10 +254,11 @@ export class MockOpsApi implements OpsApi {
           trip_id: null,
           description: p.description,
           photos: p.photos,
-          severity: p.severity as DamageReport['severity'],
+          severity: p.severity as OpsDamageReport['severity'],
           status: DamageStatus.new,
           linked_task_id: p.linked_task_id,
           penalty_payment_id: null,
+          part: p.part ?? null,
           created_at: now,
         };
         s.damage.set(report.id, report);
@@ -254,11 +291,52 @@ export class MockOpsApi implements OpsApi {
       }
       case 'vehicle_note': {
         const p = item.payload as unknown as VehicleNotePayload;
+        // Append to the thread, keyed by the client's note id so a retry is a
+        // no-op instead of a second copy of the same observation.
+        const noteId = p.note_id ?? item.id;
+        s.notes.set(noteId, {
+          id: noteId,
+          vehicle_id: p.vehicle_id,
+          staff_id: p.staff_id ?? 'staff000-0000-4000-8000-000000000001',
+          staff_name: 'Nikos (Ops)',
+          body: p.note,
+          photos: p.photos,
+          created_at: now,
+        });
+        s.changedNotes.set(noteId, now);
         const v = s.vehicles.get(p.vehicle_id);
         if (v) {
-          v.notes = p.note;
+          v.notes = p.note; // the sheet's "latest word" summary field
           s.changedVehicles.set(v.id, now);
         }
+        return undefined;
+      }
+      case 'shift_start': {
+        const p = item.payload as unknown as ShiftStartPayload;
+        // Mirrors the server's partial unique index: one open shift per staff.
+        const alreadyOpen = [...s.shifts.values()].some(
+          (sh) => sh.staff_id === p.staff_id && !sh.ended_at && sh.id !== p.shift_id,
+        );
+        if (alreadyOpen) throw new Error('a shift is already open');
+        s.shifts.set(p.shift_id, {
+          id: p.shift_id,
+          staff_id: p.staff_id,
+          started_at: p.started_at,
+          ended_at: null,
+          tasks_completed: 0,
+          note: null,
+        });
+        s.changedShifts.set(p.shift_id, now);
+        return undefined;
+      }
+      case 'shift_end': {
+        const p = item.payload as unknown as ShiftEndPayload;
+        const sh = s.shifts.get(p.shift_id);
+        if (!sh) throw new Error('shift not found');
+        sh.ended_at = p.ended_at;
+        sh.tasks_completed = p.tasks_completed;
+        sh.note = p.note;
+        s.changedShifts.set(sh.id, now);
         return undefined;
       }
       case 'device_swap':
@@ -278,6 +356,11 @@ export class MockOpsApi implements OpsApi {
       default:
         throw new Error(`unknown outbox kind ${item.kind}`);
     }
+  }
+
+  // No real storage in the mock — the last-ride screen just shows its placeholder.
+  async getRidePhotoUrl(_tripId: string): Promise<string | null> {
+    return null;
   }
 }
 

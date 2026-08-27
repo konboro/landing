@@ -13,9 +13,11 @@ import type {
   PricingSnapshot,
   KycStatus,
 } from '@penny/db-types';
-import { estimateRangeM } from '@penny/geo';
+import { estimateRangeM, haversine, OPERATING_CITY, OPERATING_BBOX } from '@penny/geo';
 import type { Lang } from '../../i18n';
+import { ZONE_COLUMNS, normalizeZoneRows, type RawZoneRow } from '../zones';
 import { uuid } from '../../lib/ids';
+import { StripeSvc } from '../../lib/native';
 import {
   RiderApiError,
   type RiderApi,
@@ -43,6 +45,7 @@ import {
   type NotifPrefs,
   type FaqEntry,
   type InboxItem,
+  type ChatMessage,
   type LngLat,
   type TripDetail,
   type CostBreakdown,
@@ -57,6 +60,23 @@ import {
 
 const NI = (what: string) =>
   new RiderApiError('not_implemented', `${what} is not wired to the live backend yet.`);
+
+/** Card rows allow null brand/last4/exp (a PM Stripe has not expanded yet); the UI type does not. */
+function toCard(p: {
+  id: string;
+  brand: string | null;
+  last4: string | null;
+  exp: string | null;
+  is_default: boolean;
+}): Card {
+  return {
+    id: p.id,
+    brand: p.brand ?? 'card',
+    last4: p.last4 ?? '••••',
+    exp: p.exp ?? '',
+    is_default: p.is_default,
+  };
+}
 
 const DEFAULT_PRICING: PricingSnapshot = {
   unlock_cents: 100,
@@ -88,7 +108,9 @@ function makeClient(): PennyClient {
 }
 
 function vehicleToMap(v: PublicVehicle, model_name = 'Penny'): MapVehicle {
-  const [lng, lat] = v.pos.coordinates;
+  // v_public_vehicles projects the position as plain lng/lat columns, not a
+  // GeoJSON point — reading v.pos.coordinates here crashed the map.
+  const { lng, lat } = v;
   return {
     vehicle_id: v.vehicle_id,
     code: v.code,
@@ -215,6 +237,10 @@ function monthLabel(key: string, short = false): string {
 export class SupabaseRiderApi implements RiderApi {
   readonly source = 'supabase' as const;
   private _client: PennyClient | null = null;
+  private _cities: Promise<City[]> | null = null;
+  /** Last position a screen resolved a city against — lets `getZones()` pick the
+   *  right city without every caller having to thread a position through. */
+  private lastKnownPos: LngLat | null = null;
 
   private get client(): PennyClient {
     if (!this._client) this._client = makeClient();
@@ -369,6 +395,8 @@ export class SupabaseRiderApi implements RiderApi {
   async logout(): Promise<void> {
     await this.client.supabase.auth.signOut();
     this._client = null;
+    this._cities = null;
+    this.lastKnownPos = null;
   }
 
   async deleteAccount(): Promise<void> {
@@ -378,47 +406,95 @@ export class SupabaseRiderApi implements RiderApi {
 
   /* --------------------------------- fleet -------------------------------- */
 
-  async getCity(): Promise<City> {
-    const { data } = await this.client.supabase.from('cities').select('*').limit(1).maybeSingle();
-    if (!data) return { id: '', name: 'Athens', center: [23.7275, 37.9838], default_zoom: 14, station_mode: false };
-    const d = data as any;
-    return {
-      id: d.id,
-      name: d.name,
-      center: d.center?.coordinates ?? [23.7275, 37.9838],
-      default_zoom: d.default_zoom ?? 14,
-      station_mode: !!d.station_mode,
-    };
+  async getCity(pos?: LngLat): Promise<City> {
+    if (pos) this.lastKnownPos = pos;
+    const cities = await this.cities();
+    if (cities.length === 0) {
+      return {
+        id: '',
+        // The fallback is the operating city, not a hard-coded 'Athens' — that
+        // literal outlived the move to Thessaloniki and mislabelled the map.
+        name: OPERATING_CITY.name,
+        center: OPERATING_CITY.center,
+        default_zoom: 14,
+        station_mode: false,
+      };
+    }
+    // `.limit(1)` with no ordering picked whichever row Postgres happened to
+    // return, which is the wrong city the moment there is more than one. When
+    // we know where the rider is, the nearest centre is the answer; otherwise
+    // fall back to a stable, ordered pick rather than an arbitrary one.
+    const anchor = pos ?? this.lastKnownPos;
+    if (!anchor) return cities[0]!;
+    return cities.reduce((best, c) =>
+      haversine(anchor, c.center) < haversine(anchor, best.center) ? c : best,
+    );
+  }
+
+  /** `cities` is tiny and effectively static for a session — read it once. */
+  private async cities(): Promise<City[]> {
+    if (!this._cities) {
+      this._cities = (async () => {
+        const { data, error } = await this.client.supabase
+          .from('cities')
+          .select('id,name,center,default_zoom')
+          .order('name');
+        if (error) return [];
+        return ((data ?? []) as Record<string, unknown>[]).map((d) => {
+          const centre = (d.center as { coordinates?: LngLat } | null)?.coordinates;
+          return {
+            id: String(d.id ?? ''),
+            name: String(d.name ?? OPERATING_CITY.name),
+            center: Array.isArray(centre) ? centre : OPERATING_CITY.center,
+            default_zoom: typeof d.default_zoom === 'number' ? d.default_zoom : 14,
+            // No `cities.station_mode` column exists yet (docs/04 describes
+            // station-mode cities; the schema has not caught up). Reading a
+            // missing column would fail the whole read, so it stays false here
+            // and the server remains the only thing that enforces it.
+            station_mode: false,
+          };
+        });
+      })();
+    }
+    return this._cities;
+  }
+
+  /**
+   * Zones for the rider's city that are in force right now.
+   *
+   * Was `select(...).eq('active', true)` and nothing else: every zone of every
+   * city, whatever its validity window, downloaded to every rider. Both filters
+   * are pushed into the query so the rows never travel, and re-applied in
+   * `normalizeZoneRows` so a source that skips one cannot leak past it.
+   *
+   * UX only. The trip-end and unlock decisions stay in the edge functions
+   * (Hard Rule #3) — nothing here is allowed to overrule the server's answer.
+   */
+  async getZones(): Promise<MapZone[]> {
+    const city = await this.getCity();
+    const nowIso = new Date().toISOString();
+    let q = this.client.supabase.from('zones').select(ZONE_COLUMNS).eq('active', true);
+    if (city.id) q = q.eq('city_id', city.id);
+    // Two `.or(...)` groups: PostgREST ANDs them, so this is
+    // (valid_from IS NULL OR valid_from <= now) AND (valid_to IS NULL OR valid_to >= now).
+    const { data, error } = await q
+      .or(`valid_from.is.null,valid_from.lte.${nowIso}`)
+      .or(`valid_to.is.null,valid_to.gte.${nowIso}`);
+    if (error) throw new RiderApiError('zones_unavailable', error.message);
+    return normalizeZoneRows((data ?? []) as RawZoneRow[], { cityId: city.id || null });
   }
 
   async getVehicles(): Promise<MapVehicle[]> {
-    // Whole-city bbox; screens refine by viewport. Athens default.
-    const rows = await this.client.repos.publicVehiclesInBBox({
-      minLng: 23.6,
-      minLat: 37.9,
-      maxLng: 23.85,
-      maxLat: 38.05,
-    });
+    // Whole-city bbox; screens refine by viewport. Bounds come from
+    // OPERATING_BBOX, not literals: these stayed on Athens after the move to
+    // Thessaloniki, so the query matched nothing and the map came up empty.
+    const rows = await this.client.repos.publicVehiclesInBBox(OPERATING_BBOX);
     return rows.map((r) => vehicleToMap(r));
   }
 
   async getVehicle(code: string): Promise<MapVehicle | null> {
     const all = await this.getVehicles();
     return all.find((v) => v.code.toUpperCase() === code.toUpperCase()) ?? null;
-  }
-
-  async getZones(): Promise<MapZone[]> {
-    const { data } = await this.client.supabase
-      .from('zones')
-      .select('id,kind,name,geom,rules')
-      .eq('active', true);
-    return ((data ?? []) as any[]).map((z) => ({
-      id: z.id,
-      kind: z.kind,
-      name: z.name ?? null,
-      geom: z.geom,
-      rules: z.rules ?? {},
-    }));
   }
 
   async getPois(): Promise<MapPoi[]> {
@@ -533,14 +609,54 @@ export class SupabaseRiderApi implements RiderApi {
   }
 
   async endTrip(input: EndTripInput): Promise<TripView> {
+    // The mandatory parking photo arrives as a LOCAL device uri (file://… from the
+    // camera). Upload it to the private ride-photos bucket first, and send the edge
+    // fn the storage object PATH instead — a file:// uri means nothing server-side and
+    // would leave ops/admin with no image (the exact gap this milestone closes).
+    const photoPath = await this.uploadEndPhoto(input.trip_id, input.end_photo_url);
     await this.client.edge.endTrip({
       trip_id: input.trip_id,
       pos: input.pos,
-      end_photo_url: input.end_photo_url,
+      end_photo_url: photoPath,
       rating: input.rating,
       tags: input.tags,
     });
     return this.refreshTrip(input.trip_id);
+  }
+
+  /**
+   * Upload a local parking-photo uri to ride-photos via a one-shot signed url and
+   * return the stored object path. An already-remote value (storage path or https
+   * url) passes straight through. Upload failures do not trap the rider at an
+   * unlocked scooter: the path is still reserved and returned, and the photo simply
+   * shows as pending/missing for manual review (docs/04 grace policy).
+   */
+  private async uploadEndPhoto(tripId: string, localUri: string): Promise<string> {
+    if (!localUri || localUri.startsWith('ride-photos/') || /^https?:\/\//i.test(localUri)) {
+      return localUri;
+    }
+    const { path, token } = await this.client.edge.signPhotoUpload({ trip_id: tripId });
+    try {
+      const res = await fetch(localUri);
+      const blob = await res.blob();
+      const { error } = await this.client.supabase.storage
+        .from('ride-photos')
+        .uploadToSignedUrl(path, token, blob, { contentType: 'image/jpeg' });
+      if (error) throw error;
+    } catch (e) {
+      // Log, but let the ride end — see the doc comment above.
+      console.warn('end-photo upload failed, ending with photo pending:', (e as Error).message);
+    }
+    return path;
+  }
+
+  async reportZoneIncident(trip_id: string, kind: 'no_go' | 'no_parking', pos: [number, number]): Promise<void> {
+    // Best-effort operator alert; never let it block or throw into the ride UI.
+    try {
+      await this.client.edge.zoneIncident({ trip_id, kind, pos });
+    } catch (e) {
+      console.warn('zone incident report failed:', (e as Error).message);
+    }
   }
 
   async shareRide(trip_id: string): Promise<ShareLink> {
@@ -558,43 +674,78 @@ export class SupabaseRiderApi implements RiderApi {
   /* --------------------------------- wallet ------------------------------- */
 
   async getWallet(): Promise<Wallet> {
-    const id = await this.userId();
-    const { data } = await this.client.supabase
-      .from('v_wallet_balance')
+    // `v_my_wallet_balance`, not `v_wallet_balance` — the latter does not exist.
+    // PostgREST answered with an error, the error was discarded, and the balance
+    // rendered as 0 forever: a rider could top up successfully, watch the money
+    // reach the ledger, and still be told they had nothing. The view scopes itself
+    // to auth.uid(), so no user filter is needed here.
+    const { data, error } = await this.client.supabase
+      .from('v_my_wallet_balance')
       .select('balance_cents,currency')
-      .eq('user_id', id)
       .maybeSingle();
-    const d = data as any;
+    if (error) throw new RiderApiError('wallet_unavailable', error.message);
+    const d = data as { balance_cents?: number; currency?: string } | null;
     return { balance_cents: d?.balance_cents ?? 0, currency: d?.currency ?? 'EUR' };
   }
 
-  async topUp(_cents: number): Promise<Wallet> {
-    throw NI('Wallet top-up');
+  async topUp(cents: number): Promise<Wallet> {
+    // Both round-trips at once. Reading the balance first only to know what to
+    // compare against later added a whole request between the rider's tap and the
+    // payment sheet, for information not needed until after it closes.
+    const [before, intent] = await Promise.all([
+      this.getWallet(),
+      this.client.edge.topUp(cents),
+    ]);
+    const outcome = await StripeSvc.presentSheet({ kind: 'payment', clientSecret: intent.client_secret });
+    if (outcome === 'canceled') throw new RiderApiError('canceled', 'Top-up cancelled.');
+    return await this.walletAfterCredit(before.balance_cents);
+  }
+
+  /**
+   * The wallet is credited by payments-webhook on payment_intent.succeeded, which
+   * lands shortly *after* the sheet closes. Reading the balance straight away would
+   * show the old number and read as a failed top-up, so wait briefly for it to move.
+   * Falls through with whatever the balance is after ~4 s rather than blocking: the
+   * credit is not lost, it is just late, and the next refresh will show it.
+   */
+  private async walletAfterCredit(previousCents: number): Promise<Wallet> {
+    let w = await this.getWallet();
+    for (let i = 0; i < 8 && w.balance_cents === previousCents; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      w = await this.getWallet();
+    }
+    return w;
   }
 
   async getCards(): Promise<Card[]> {
     const id = await this.userId();
     const pms = await this.client.repos.paymentMethods(id);
-    return pms.map((p) => ({
-      id: p.id,
-      brand: p.brand,
-      last4: p.last4,
-      exp: p.exp,
-      is_default: p.is_default,
-    }));
+    // Removed cards keep their row so past payments stay readable — they must not
+    // show up as something the rider can still pay with.
+    return pms.filter((p) => p.status === 'active').map(toCard);
   }
 
   async addCard(): Promise<Card> {
-    // Would present Stripe PaymentSheet with a SetupIntent client_secret.
-    await this.client.edge.createSetupIntent();
-    throw NI('Card add (present PaymentSheet with the returned client_secret)');
+    const { client_secret } = await this.client.edge.createSetupIntent();
+    const outcome = await StripeSvc.presentSheet({ kind: 'setup', clientSecret: client_secret });
+    if (outcome === 'canceled') throw new RiderApiError('canceled', 'Card setup cancelled.');
+
+    // Reconcile with Stripe rather than waiting on setup_intent.succeeded, so the
+    // new card is there the moment the sheet closes instead of a webhook later.
+    const { cards } = await this.client.edge.cards({ action: 'sync' });
+    const added = cards[cards.length - 1];
+    if (!added) throw new RiderApiError('card_not_saved', 'The card was not saved. Please try again.');
+    return toCard(added);
   }
 
-  async setDefaultCard(): Promise<Card[]> {
-    throw NI('Set default card');
+  async setDefaultCard(id: string): Promise<Card[]> {
+    const { cards } = await this.client.edge.cards({ action: 'set_default', card_id: id });
+    return cards.map(toCard);
   }
-  async removeCard(): Promise<Card[]> {
-    throw NI('Remove card');
+
+  async removeCard(id: string): Promise<Card[]> {
+    const { cards } = await this.client.edge.cards({ action: 'remove', card_id: id });
+    return cards.map(toCard);
   }
 
   async getPackages(): Promise<PackageProduct[]> {
@@ -922,6 +1073,82 @@ export class SupabaseRiderApi implements RiderApi {
 
   async markInboxRead(id: string): Promise<void> {
     await this.client.supabase.from('inbox_messages').update({ read_at: new Date().toISOString() }).eq('id', id);
+  }
+
+  /* ---- Pop-ups + push (docs/12) ---- */
+
+  async getLivePopup(): Promise<InboxItem | null> {
+    const id = await this.userId();
+    const m = await this.client.repos.livePopup(id);
+    if (!m) return null;
+    return { id: m.id, title: m.title, body: m.body, deep_link: m.deep_link, read: false, created_at: m.created_at };
+  }
+
+  async dismissPopup(id: string): Promise<void> {
+    await this.markInboxRead(id);
+  }
+
+  async registerPushToken(token: string, platform: string): Promise<void> {
+    const userId = await this.userId();
+    // `token` is unique: the same device re-registering must refresh the row,
+    // not pile up duplicates that would each get their own copy of a broadcast.
+    const { error } = await this.client.supabase
+      .from('push_tokens')
+      .upsert({ user_id: userId, token, platform, last_seen: new Date().toISOString() }, { onConflict: 'token' });
+    if (error) throw new RiderApiError('push_register_failed', error.message);
+  }
+
+  /* ---- Live chat (message centre, kind = 'chat') ---- */
+
+  async getChat(): Promise<ChatMessage[]> {
+    const id = await this.userId();
+    const { data, error } = await this.client.supabase
+      .from('inbox_messages')
+      .select('id, sender, body, created_at')
+      .eq('user_id', id)
+      .eq('kind', 'chat')
+      .order('created_at', { ascending: true }) // oldest first — a transcript
+      .limit(200);
+    if (error) throw new RiderApiError('chat_failed', error.message);
+    return (data ?? []) as ChatMessage[];
+  }
+
+  async sendChatMessage(body: string): Promise<ChatMessage> {
+    const id = await this.userId();
+    // sender/kind are pinned here AND enforced by the RLS WITH CHECK, so a
+    // rider cannot post a turn that looks like it came from support.
+    const { data, error } = await this.client.supabase
+      .from('inbox_messages')
+      .insert({ user_id: id, body, kind: 'chat', sender: 'rider', title: '' })
+      .select('id, sender, body, created_at')
+      .single();
+    if (error) throw new RiderApiError('chat_send_failed', error.message);
+    return data as ChatMessage;
+  }
+
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void {
+    // Filtering server-side on user_id keeps other riders' traffic off this
+    // socket entirely rather than discarding it on the device.
+    const channel = this.client.supabase
+      .channel('rider-chat')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'inbox_messages' },
+        (payload: { new?: Record<string, unknown> }) => {
+          const row = payload.new;
+          if (!row || row.kind !== 'chat') return;
+          onMessage({
+            id: String(row.id),
+            sender: row.sender as ChatMessage['sender'],
+            body: String(row.body ?? ''),
+            created_at: String(row.created_at),
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void this.client.supabase.removeChannel(channel);
+    };
   }
 
   async recordReaction(ms: number, passed: boolean): Promise<void> {

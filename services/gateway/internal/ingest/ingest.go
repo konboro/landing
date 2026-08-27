@@ -130,9 +130,12 @@ func (in *Ingestor) Process(ctx context.Context, dev store.Device, recs []adapte
 	if last != nil && dev.VehicleID != "" {
 		m := in.memFor(dev.VehicleID)
 		vs := store.VehicleState{
-			VehicleID:        dev.VehicleID,
-			Lat:              last.Lat,
-			Lng:              last.Lng,
+			VehicleID: dev.VehicleID,
+			Lat:       last.Lat,
+			Lng:       last.Lng,
+			// A record with no satellites reports 0,0. Treating that as a position
+			// teleported the vehicle out of its operating zone and off the map.
+			HasFix:           last.Sats > 0 && (last.Lat != 0 || last.Lng != 0),
 			SpeedKmh:         last.SpeedKmh,
 			Ignition:        lastState.Ignition,
 			Locked:           lastState.Locked,

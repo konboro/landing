@@ -32,6 +32,7 @@ import {
   type NotifPrefs,
   type FaqEntry,
   type InboxItem,
+  type ChatMessage,
   type LngLat,
   type TripDetail,
   type CostBreakdown,
@@ -438,6 +439,10 @@ export class MockRiderApi implements RiderApi {
 
   async ring(code: string): Promise<void> {
     await wait(600); // DOUT2 siren pulse
+  }
+
+  async reportZoneIncident(_trip_id: string, _kind: 'no_go' | 'no_parking', _pos: [number, number]): Promise<void> {
+    await wait(50); // no backend in the mock
   }
 
   /* ---------------------------- trip lifecycle ---------------------------- */
@@ -1029,6 +1034,78 @@ export class MockRiderApi implements RiderApi {
   async markInboxRead(id: string): Promise<void> {
     await wait(60);
     this.s.inbox = this.s.inbox.map((m) => (m.id === id ? { ...m, read: true } : m));
+  }
+
+  /* -------------------------- pop-ups + push (docs/12) --------------------- */
+
+  /** Mock mode has no server to broadcast from, so the pop-up queue is
+   *  whatever this session pushed into it (see `__queuePopup`). */
+  private popups: InboxItem[] = [];
+
+  async getLivePopup(): Promise<InboxItem | null> {
+    await wait(60);
+    return this.popups.find((p) => !p.read) ?? null;
+  }
+
+  async dismissPopup(id: string): Promise<void> {
+    await wait(60);
+    this.popups = this.popups.map((p) => (p.id === id ? { ...p, read: true } : p));
+  }
+
+  async registerPushToken(_token: string, _platform: string): Promise<void> {
+    await wait(40);
+  }
+
+  /** Test hook: drop a pop-up into the queue without a backend. */
+  __queuePopup(title: string, body: string): void {
+    this.popups.unshift({
+      id: `popup-${this.popups.length + 1}`,
+      title, body, deep_link: null, read: false, created_at: new Date().toISOString(),
+    });
+  }
+
+  /* -------------------------------- live chat ----------------------------- */
+
+  private chat: ChatMessage[] = [];
+  private chatListeners = new Set<(m: ChatMessage) => void>();
+
+  async getChat(): Promise<ChatMessage[]> {
+    await wait(120);
+    return this.chat.map((m) => ({ ...m }));
+  }
+
+  async sendChatMessage(body: string): Promise<ChatMessage> {
+    await wait(150);
+    const mine: ChatMessage = {
+      id: `chat-${this.chat.length + 1}`,
+      sender: 'rider',
+      body,
+      created_at: new Date().toISOString(),
+    };
+    this.chat.push(mine);
+
+    // Demo mode answers itself after a beat so the screen can be shown without
+    // a backend and still look alive. Never runs in supabase mode.
+    setTimeout(() => {
+      const reply: ChatMessage = {
+        id: `chat-${this.chat.length + 1}`,
+        sender: 'staff',
+        agent_name: 'Penny Support',
+        body: 'Thanks for the message — an agent will be with you shortly.',
+        created_at: new Date().toISOString(),
+      };
+      this.chat.push(reply);
+      this.chatListeners.forEach((fn) => fn(reply));
+    }, 1400);
+
+    return mine;
+  }
+
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void {
+    this.chatListeners.add(onMessage);
+    return () => {
+      this.chatListeners.delete(onMessage);
+    };
   }
 
   /* ------------------------------ reaction test --------------------------- */

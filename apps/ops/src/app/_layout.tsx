@@ -80,6 +80,12 @@ function AppShell() {
           <Stack.Screen name="vehicle/[id]/index" options={{ title: 'Vehicle' }} />
           <Stack.Screen name="vehicle/[id]/status" options={{ title: 'Change status', presentation: 'modal' }} />
           <Stack.Screen name="vehicle/[id]/swap-device" options={{ title: 'Swap device' }} />
+          {/* These four render their own headers (full-bleed map, chat thread,
+              inverted note list), so the stack must not draw a second one. */}
+          <Stack.Screen name="chat" options={{ headerShown: false }} />
+          <Stack.Screen name="vehicle/[id]/notes" options={{ headerShown: false }} />
+          <Stack.Screen name="vehicle/[id]/last-ride" options={{ headerShown: false }} />
+          <Stack.Screen name="vehicle/[id]/history" options={{ title: 'History' }} />
           <Stack.Screen name="damage/new" options={{ title: 'New damage report', presentation: 'modal' }} />
           <Stack.Screen name="damage/index" options={{ title: 'Damage reports' }} />
           <Stack.Screen name="damage/[id]" options={{ title: 'Damage report' }} />

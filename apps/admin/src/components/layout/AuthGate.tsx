@@ -4,15 +4,15 @@ import { LoginPage } from '@/pages/Login';
 import { Spinner } from '@/components/ui/primitives';
 
 /**
- * Blocks the panel until a staff session exists.
+ * Blocks the panel until a staff session exists: the login screen stays up until
+ * `admin-me` confirms an active staff row.
  *
- * No-op in mock mode (the demo panel is always "signed in"); in live mode it
- * shows the login screen until `admin-me` confirms an active staff row.
+ * This used to short-circuit whenever the panel was not in "live mode" — a mode
+ * chosen by an env var — so a deploy missing that variable served the whole panel
+ * with no login at all.
  */
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { live, loading, isAuthenticated } = useAuth();
-
-  if (!live) return <>{children}</>;
+  const { loading, isAuthenticated } = useAuth();
 
   if (loading && !isAuthenticated) {
     return (

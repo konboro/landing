@@ -157,11 +157,13 @@ export function deriveTheme(brand: Brand, mode: ThemeMode = 'light'): RiderTheme
     font,
     shadow: {
       card: {
+        // Wide and soft rather than tight and dark. Cards now sit on the sky
+        // backdrop, where the old 3 px shadow read as a cut-out edge.
         shadowColor,
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: mode === 'dark' ? 0.4 : 0.1,
-        shadowRadius: 3,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: mode === 'dark' ? 0.4 : 0.09,
+        shadowRadius: 16,
+        elevation: 3,
       },
       pop: {
         shadowColor,

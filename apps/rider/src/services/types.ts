@@ -447,6 +447,21 @@ export interface InboxItem {
   created_at: string;
 }
 
+/**
+ * One turn of the rider ↔ support conversation. Stored in the same message
+ * centre as the inbox (`inbox_messages`, kind `chat`) so a conversation is
+ * never split across two systems.
+ */
+export interface ChatMessage {
+  id: string;
+  /** `rider` = written here, `staff` = a human replied, `system` = automated. */
+  sender: 'rider' | 'staff' | 'system';
+  body: string;
+  created_at: string;
+  /** Display name of the agent who replied, when the backend supplies one. */
+  agent_name?: string | null;
+}
+
 /* --------------------------------- The API --------------------------------- */
 
 export interface RiderApi {
@@ -497,6 +512,9 @@ export interface RiderApi {
   endTrip(input: EndTripInput): Promise<TripView>;
   shareRide(trip_id: string): Promise<ShareLink>;
   triggerCrashAlert(trip_id: string): Promise<void>;
+  /** Report a zone incident (no-go entry, or a blocked no-parking end attempt) so
+   *  operators are alerted. Best-effort — callers ignore failures. */
+  reportZoneIncident(trip_id: string, kind: 'no_go' | 'no_parking', pos: [number, number]): Promise<void>;
 
   /* wallet */
   getWallet(): Promise<Wallet>;
@@ -545,6 +563,23 @@ export interface RiderApi {
   ): Promise<{ id: string }>;
   getInbox(): Promise<InboxItem[]>;
   markInboxRead(id: string): Promise<void>;
+
+  /* pop-ups + push (docs/12) */
+  /** The oldest undismissed, unexpired pop-up, or null. */
+  getLivePopup(): Promise<InboxItem | null>;
+  /** Dismissing a pop-up is the same act as reading it. */
+  dismissPopup(id: string): Promise<void>;
+  /** Store this device's Expo push token so broadcasts can reach it. */
+  registerPushToken(token: string, platform: string): Promise<void>;
+
+  /* live chat — the same message centre as the inbox, filtered to `chat` */
+  getChat(): Promise<ChatMessage[]>;
+  sendChatMessage(body: string): Promise<ChatMessage>;
+  /**
+   * Push new turns as they arrive. Returns an unsubscribe function that the
+   * caller MUST run on unmount, or the realtime channel leaks between screens.
+   */
+  subscribeChat(onMessage: (m: ChatMessage) => void): () => void;
 
   /* reaction test */
   recordReaction(ms: number, passed: boolean): Promise<void>;

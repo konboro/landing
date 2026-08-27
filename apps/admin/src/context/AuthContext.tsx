@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { StaffRole } from '@penny/db-types';
-import { getSupabaseAuth, isLiveMode } from '@/data/authClient';
+import { getSupabaseAuth } from '@/data/authClient';
 
 export type Permission =
   | 'payments.charge'
@@ -10,27 +10,30 @@ export type Permission =
   | 'zones.edit'
   | 'vehicles.command'
   | 'vehicles.status'
+  // Adding a vehicle or retiring one changes what the fleet *is*, so it is a
+  // separate grant from `vehicles.status` (migration 00300).
+  | 'vehicles.manage'
   | 'debts.writeoff'
   | 'tasks.manage'
   | 'settings.edit'
+  // Rates, packages, add-ons and the penalty catalogue. Granted server-side
+  // since migration 00160 and returned by `admin-me`; it was simply missing
+  // from this union, so every pricing screen had to cast around it.
+  | 'pricing.edit'
   | 'team.manage'
-  | 'verification.review';
+  | 'verification.review'
+  // Message centre. Reading a conversation and answering it are separate:
+  // a reply goes out under the operator's name, so it is a narrower grant.
+  | 'messages.read'
+  | 'messages.reply'
+  // Broadcasting to the whole user base is its own blast radius — not implied
+  // by answering one rider (migration 00310).
+  | 'notifications.send';
 
-const ALL: Permission[] = [
-  'payments.charge', 'payments.refund', 'users.block', 'users.credit', 'zones.edit',
-  'vehicles.command', 'vehicles.status', 'debts.writeoff', 'tasks.manage', 'settings.edit',
-  'team.manage', 'verification.review',
-];
-
-const ROLE_PERMS: Record<StaffRole, Permission[]> = {
-  owner: ALL,
-  admin: ALL,
-  support: ['users.block', 'users.credit', 'payments.refund', 'verification.review', 'debts.writeoff'],
-  ops_manager: ['vehicles.command', 'vehicles.status', 'tasks.manage', 'zones.edit'],
-  ops: ['vehicles.command', 'vehicles.status', 'tasks.manage'],
-  accountant: ['payments.charge', 'payments.refund', 'debts.writeoff'],
-  readonly: [],
-};
+// The role → permission table that used to live here was only ever read by the
+// mock provider. The real list arrives per session from `admin-me`, sourced from
+// `role_permissions`, so a second copy in the client could only ever drift from
+// the check that actually enforces anything.
 
 export interface CurrentStaff {
   id: string;
@@ -41,41 +44,27 @@ export interface CurrentStaff {
 
 interface AuthCtx {
   staff: CurrentStaff;
-  setRole: (role: StaffRole) => void;
   can: (p: Permission) => boolean;
-  /** Live mode only: true while the session is being resolved. */
+  /** Cities this deployment operates in (from `admin-me`). */
+  cities: Array<{ id: string; name: string }>;
+  /** True while the session is being resolved. */
   loading: boolean;
-  /** Live mode only: null when signed out, a message when sign-in failed. */
+  /** Null when signed out, a message when sign-in failed. */
   authError: string | null;
-  /** Live mode only. In mock mode these are no-ops. */
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** False in live mode until a staff session is established. */
+  /** False until a staff session is established. */
   isAuthenticated: boolean;
-  live: boolean;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
 
+// There is one auth mode: a real Supabase staff session. The former mock
+// provider signed everyone in as an owner called "Konstantinos" with no
+// credentials, and it was selected by an ENV VAR — so an unset variable in a
+// deploy meant the panel let anyone straight in and showed them a role switcher.
 export function AuthProvider({ children }: { children: ReactNode }) {
-  return isLiveMode() ? <LiveAuthProvider>{children}</LiveAuthProvider> : <MockAuthProvider>{children}</MockAuthProvider>;
-}
-
-/** Demo/offline mode: always signed in as owner, with a role switcher for gating. */
-function MockAuthProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<StaffRole>('owner');
-  const value = useMemo<AuthCtx>(() => ({
-    staff: { id: 'staff-owner', name: 'Konstantinos', role, cityScope: [] },
-    setRole,
-    can: (p: Permission) => ROLE_PERMS[role].includes(p),
-    loading: false,
-    authError: null,
-    signIn: async () => {},
-    signOut: async () => {},
-    isAuthenticated: true,
-    live: false,
-  }), [role]);
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <LiveAuthProvider>{children}</LiveAuthProvider>;
 }
 
 /**
@@ -86,6 +75,7 @@ function MockAuthProvider({ children }: { children: ReactNode }) {
 function LiveAuthProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState<CurrentStaff | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [cities, setCities] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -109,6 +99,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
         cityScope: me.staff.city_scope ?? [],
       });
       setPermissions(me.permissions ?? []);
+      setCities(me.cities ?? []);
       setAuthError(null);
     } catch (e) {
       // A valid Supabase user who is not staff must not get in.
@@ -124,12 +115,11 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthCtx>(() => ({
     staff: staff ?? { id: '', name: '', role: 'readonly', cityScope: [] },
-    setRole: () => {},           // role is server-assigned in live mode
     can: (p: Permission) => permissions.includes('*') || permissions.includes(p),
+    cities,
     loading,
     authError,
     isAuthenticated: staff !== null,
-    live: true,
     signIn: async (email: string, password: string) => {
       setAuthError(null);
       setLoading(true);
@@ -149,7 +139,7 @@ function LiveAuthProvider({ children }: { children: ReactNode }) {
       setStaff(null);
       setPermissions([]);
     },
-  }), [staff, permissions, loading, authError, resolve]);
+  }), [staff, permissions, cities, loading, authError, resolve]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

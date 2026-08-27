@@ -83,7 +83,7 @@ export function RideVerificationPage() {
           <Card>
             <CardHeader title={`Photo review — ${current.trip.id}`} sub={`${idx + 1} of ${queue.length}`} />
             <div className="card-pad">
-              <PhotoPlaceholder id={current.trip.id} />
+              <ParkingPhoto id={current.trip.id} url={current.trip.end_photo_url} />
               <div className="between" style={{ marginTop: 12 }}>
                 <div>
                   <div className="muted" style={{ fontSize: 12 }}>AI confidence</div>
@@ -126,12 +126,29 @@ export function RideVerificationPage() {
   );
 }
 
-function PhotoPlaceholder({ id }: { id: string }) {
+function ParkingPhoto({ id, url }: { id: string; url: string | null }) {
+  const [failed, setFailed] = useState(false);
+  // The real end-of-ride photo (a short-TTL signed url from the private bucket,
+  // minted by admin-list). Falls back to the placeholder when there is no photo
+  // yet or the signed url has expired / failed to load.
+  if (url && !failed) {
+    return (
+      <div style={{ height: 300, borderRadius: 12, overflow: 'hidden', position: 'relative', background: '#000' }}>
+        <img
+          src={url}
+          alt={`Parking photo for trip ${id}`}
+          onError={() => setFailed(true)}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
+        <div style={{ position: 'absolute', bottom: 10, left: 12, background: 'rgba(0,0,0,.5)', color: '#fff', fontSize: 11, padding: '3px 8px', borderRadius: 6 }}>end-photo · {id}</div>
+      </div>
+    );
+  }
   const hue = (id.split('').reduce((s, c) => s + c.charCodeAt(0), 0) % 60) + 190;
   return (
     <div style={{ height: 300, borderRadius: 12, background: `linear-gradient(135deg, hsl(${hue} 40% 82%), hsl(${hue} 30% 68%))`, display: 'grid', placeItems: 'center', position: 'relative' }}>
       <div style={{ fontSize: 72, opacity: 0.85 }}>🛴</div>
-      <div style={{ position: 'absolute', bottom: 10, left: 12, background: 'rgba(0,0,0,.5)', color: '#fff', fontSize: 11, padding: '3px 8px', borderRadius: 6 }}>end-photo · {id}</div>
+      <div style={{ position: 'absolute', bottom: 10, left: 12, background: 'rgba(0,0,0,.5)', color: '#fff', fontSize: 11, padding: '3px 8px', borderRadius: 6 }}>{failed ? 'photo unavailable' : 'no photo'} · {id}</div>
     </div>
   );
 }

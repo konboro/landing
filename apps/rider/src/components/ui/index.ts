@@ -1,4 +1,7 @@
 export * from './primitives';
+export * from './Backdrop';
+export * from './Wordmark';
+export * from './StatTile';
 export * from './Button';
 export * from './controls';
 export * from './feedback';
